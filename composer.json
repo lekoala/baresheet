@@ -20,14 +20,14 @@
         }
     ],
     "require": {
-        "php": "^8.1",
+        "php": "^8.1.2",
         "ext-zip": "*",
         "ext-simplexml": "*"
     },
     "require-dev": {
         "league/csv": "^9.28",
         "maennchen/zipstream-php": "^3.1",
-        "openspout/openspout": "^5.3",
+        "openspout/openspout": "^4.24 || ^5.0",
         "phpstan/phpstan": "^2",
         "phpunit/phpunit": "^10|^11",
         "shuchkin/simplexlsx": "^1.1",
