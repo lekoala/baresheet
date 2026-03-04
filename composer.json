@@ -1,0 +1,67 @@
+{
+    "name": "lekoala/baresheet",
+    "description": "Fast, zero-dependency CSV, XLSX and ODS reader/writer for PHP",
+    "keywords": [
+        "php",
+        "spreadsheet",
+        "excel",
+        "csv",
+        "xlsx",
+        "ods",
+        "reader",
+        "writer",
+        "lightweight"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Thomas",
+            "email": "thomas@lekoala.be"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "ext-zip": "*",
+        "ext-simplexml": "*"
+    },
+    "require-dev": {
+        "league/csv": "^9.28",
+        "maennchen/zipstream-php": "^3.1",
+        "openspout/openspout": "^5.3",
+        "phpstan/phpstan": "^2",
+        "phpunit/phpunit": "^10|^11",
+        "shuchkin/simplexlsx": "^1.1",
+        "shuchkin/simplexlsxgen": "^1.5",
+        "squizlabs/php_codesniffer": "^3.6"
+    },
+    "suggest": {
+        "maennchen/zipstream-php": "Required for streaming XLSX and ODS output"
+    },
+    "autoload": {
+        "psr-4": {
+            "LeKoala\\Baresheet\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "LeKoala\\Baresheet\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "preferred-install": "dist"
+    },
+    "scripts": {
+        "test": [
+            "@phpunit",
+            "@phpcs",
+            "@phpstan"
+        ],
+        "phpunit": "phpunit",
+        "phpcs": "phpcs",
+        "phpcbf": "phpcbf",
+        "phpstan": "phpstan analyse src/ --memory-limit=-1"
+    }
+}
