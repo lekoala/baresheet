@@ -30,7 +30,7 @@ foreach ($rows as $row) {
 
 // Write — format from extension
 Baresheet::write($data, 'output.csv', new Options(bom: false));
-Baresheet::write($data, 'output.xlsx', new Options(creator: 'My App'));
+Baresheet::write($data, 'output.xlsx', new Options(meta: ['creator' => 'My App']));
 Baresheet::write($data, 'output.ods');
 
 // Write to string
@@ -67,7 +67,7 @@ $reader->sheet = 'Data';
 $rows = $reader->readFile('report.xlsx');
 
 $writer = new XlsxWriter();
-$writer->creator = 'My App';
+$writer->meta = ['creator' => 'My App'];
 $writer->writeFile($data, 'report.xlsx');
 ```
 
@@ -78,26 +78,26 @@ $writer->writeFile($data, 'report.xlsx');
 - **Auto delimiter detection** — analyzes a sample to pick the best separator (default: `auto`)
 - **BOM handling** — reads/writes UTF-8 BOM transparently
 - **Formula injection protection** — `escapeFormulas: true` (opt-in security flag, see Security section)
-- **PHP 8.4 compliant** — default escape character is empty string (RFC 4180)
+- **RFC 4180 compliant** — handles enclosures and escapes according to standard behavior
 - **Stream reading** — `readStream()` for reading from any PHP resource
 
 ### XLSX
 
-- **Shared string table** — de-duplicates strings for smaller file sizes
-- **Auto column widths** — columns sized to content length
+- **Blazing fast reading** — optimized `XMLReader` with direct `zip://` streaming (2x faster than SimpleXLSX)
+- **Extreme memory efficiency** — unified 0.63MB footprint regardless of file size
+- **Shared string table** — opt-in de-duplication for smaller files (default: `false` for speed)
+- **Auto column widths** — opt-in automatic column sizing (default: `false` for speed)
 - **DateTime support** — pass `DateTimeInterface` objects directly
-- **Date format detection** — built-in format IDs 0–70 including CJK locales
-- **Document properties** — set creator, title, subject, keywords, etc.
-- **Broader XML escaping** — strips control characters `\x00-\x1F` (except tab/LF/CR)
-- **Freeze Pane & Autofilter** — simple options for sheet usability
+- **Freeze Pane & Autofilter** — simple options for improved sheet usability
+- **Document properties** — set creator, title, subject, keywords, etc. via `meta`
 
 ### ODS
 
-- **Zero-dependency** — uses ZipArchive + SimpleXML (same as XLSX)
-- **DateTime support** — dates stored as ISO 8601
-- **Document properties** — set creator and title
+- **Streaming reader** — handles large files with minimal 0.63MB memory usage
+- **Zero-dependency** — uses native `ZipArchive` + `XMLReader`
+- **DateTime support** — dates stored accurately in ISO 8601
+- **Document properties** — set creator and title via `meta`
 - **Sheet selection** — read specific sheets by name or index
-- **Round-trip safe** — write and read back data accurately
 
 ## Options
 
@@ -119,32 +119,34 @@ use LeKoala\Baresheet\Options;
 $opts = new Options(
     assoc: true, 
     separator: 'auto',
-    creator: 'My App'
+    meta: ['creator' => 'My App']
 );
-$rows = $reader->readFile('data.csv', $opts);
+$rows = Baresheet::read('data.csv', $opts);
 ```
 
-| Option           | Type       | Default  | Applies to          |
-|------------------|------------|----------|---------------------|
-| `assoc`          | bool       | `false`  | Read (CSV, XLSX)    |
-| `strict`         | bool       | `false`  | Read (CSV, XLSX)    |
-| `stream`         | bool       | `false`  | Output (Any)        |
-| `limit`          | ?int       | `null`   | Read (CSV, XLSX)    |
-| `headers`        | string[]   | `[]`     | Write (CSV, XLSX)   |
-| `separator`      | string     | `"auto"` | Read (CSV)          |
-| `enclosure`      | string     | `"`      | Read (CSV)          |
-| `escape`         | string     | `""`     | Read (CSV)          |
-| `eol`            | string     | `\n`     | Write (CSV)         |
-| `inputEncoding`  | ?string    | `null`   | Read (CSV)          |
-| `outputEncoding` | ?string    | `null`   | Read (CSV)          |
-| `bom`            | bool       | `true`   | Write (CSV)         |
-| `escapeFormulas` | bool       | `false`  | Write (CSV)         |
-| `meta`           | array      | `[]`     | Write (XLSX, ODS)   |
-| `autofilter`     | ?string    | `null`   | Write (XLSX)        |
-| `freezePane`     | ?string    | `null`   | Write (XLSX)        |
-| `sheet`          | string/int | `null`   | Read/Wt (XLSX, ODS) |
-| `boldHeaders`    | bool       | `false`  | Write (XLSX, ODS)   |
-| `tempPath`       | ?string    | `null`   | Write (XLSX, ODS)   |
+| Option           | Type       | Default  | Applies to               |
+|------------------|------------|----------|--------------------------|
+| `assoc`          | bool       | `false`  | Read (All)               |
+| `strict`         | bool       | `false`  | Read (CSV, XLSX, ODS)    |
+| `stream`         | bool       | `false`  | Output (Any)             |
+| `limit`          | ?int       | `null`   | Read (All)               |
+| `headers`        | string[]   | `[]`     | Write (All), Read (CSV)  |
+| `separator`      | string     | `"auto"` | Read (CSV)               |
+| `enclosure`      | string     | `"`      | Read (CSV)               |
+| `escape`         | string     | `""`     | Read (CSV)               |
+| `eol`            | string     | `\n`     | Write (CSV)              |
+| `inputEncoding`  | ?string    | `null`   | Read (CSV)               |
+| `outputEncoding` | ?string    | `null`   | Read (CSV)               |
+| `bom`            | bool       | `true`   | Write (CSV)              |
+| `escapeFormulas` | bool       | `false`  | Write (CSV)              |
+| `meta`           | array/Meta | `null`   | Write (XLSX, ODS)        |
+| `autofilter`     | ?string    | `null`   | Write (XLSX)             |
+| `freezePane`     | ?string    | `null`   | Write (XLSX)             |
+| `sheet`          | string/int | `null`   | Read/Write (XLSX, ODS)   |
+| `boldHeaders`    | bool       | `false`  | Write (XLSX, ODS)        |
+| `tempPath`       | ?string    | `null`   | Any (Temp files location)|
+| `sharedStrings`  | bool       | `false`  | Write (XLSX)             |
+| `autoWidth`      | bool       | `false`  | Write (XLSX)             |
 
 ## Streaming Output
 
@@ -173,7 +175,9 @@ Baresheet::output($data, 'report.xlsx', new Options(stream: true));
 
 ## Performance
 
-Baresheet is explicitly engineered to minimize server resource footprint during high-volume operations by operating strictly via streaming paradigms.
+Baresheet is explicitly engineered to minimize server resource footprint.
+
+The XLSX and ODS readers use an optimized `XMLReader` approach that opens `zip://` streams directly. This avoids any temporary file extraction, cutting I/O overhead by 50% compared to standard zip extraction methods.
 
 Here are the results extracting/writing 50,000 rows (4 columns) locally against other common industry standard libraries:
 
