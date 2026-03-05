@@ -21,8 +21,12 @@
     ],
     "require": {
         "php": "^8.1.2",
-        "ext-zip": "*",
-        "ext-simplexml": "*"
+        "ext-filter": "*",
+        "ext-libxml": "*",
+        "ext-mbstring": "*",
+        "ext-simplexml": "*",
+        "ext-xmlreader": "*",
+        "ext-zip": "*"
     },
     "require-dev": {
         "league/csv": "^9.28",
