@@ -259,4 +259,23 @@ class OdsTest extends TestCase
         // File should have metadata set
         self::assertNotEmpty(($props['meta']['creator'] ?? '') . ($props['meta']['title'] ?? ''), 'Expected at least creator or title to be set');
     }
+
+    public function testSkipEmptyLinesByDefault(): void
+    {
+        $reader = new \LeKoala\Baresheet\OdsReader();
+        // ODS like XLSX skips empty rows by default
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/date.ods'));
+        self::assertNotEmpty($data);
+    }
+
+    public function testOffsetAndLimit(): void
+    {
+        $reader = new \LeKoala\Baresheet\OdsReader();
+        $reader->offset = 1;
+        $reader->limit = 1;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/large.ods'));
+        self::assertCount(1, $data);
+        // large.ods has '1' in first data row, '2' in second
+        self::assertEquals('2', $data[0][0]);
+    }
 }

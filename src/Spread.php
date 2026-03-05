@@ -156,7 +156,7 @@ class Spread
      *
      * @link https://docs.sheetjs.com/docs/csf/features/dates/#1904-and-1900-date-systems
      */
-    public static function excelDateToString(float|string $value, ?string $format = null): string
+    public static function excelDateToString(float|string $value, ?string $format = null, bool $is1904 = false): string
     {
         if (!is_numeric($value)) {
             return $value;
@@ -173,8 +173,12 @@ class Spread
             }
         }
 
-        // Excel day 60 = Feb 29 1900 (non-existent) — Lotus 1-2-3 bug compensation
-        $baseDate = $floatValue < 60 && $floatValue > 0 ? '1899-12-31' : '1899-12-30';
+        if ($is1904) {
+            $baseDate = '1904-01-01';
+        } else {
+            // Excel day 60 = Feb 29 1900 (non-existent) — Lotus 1-2-3 bug compensation
+            $baseDate = $floatValue < 60 && $floatValue > 0 ? '1899-12-31' : '1899-12-30';
+        }
 
         $days = (int) floor($floatValue);
         $partDay = fmod($floatValue, 1);

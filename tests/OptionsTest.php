@@ -23,7 +23,9 @@ class OptionsTest extends TestCase
             escape: '\\',
             eol: "\r\n",
             bom: false,
-            escapeFormulas: true
+            escapeFormulas: true,
+            skipEmptyLines: true,
+            offset: 5
         );
 
         $reader = new CsvReader();
@@ -35,6 +37,8 @@ class OptionsTest extends TestCase
         self::assertEquals(';', $reader->separator);
         self::assertEquals('\'', $reader->enclosure);
         self::assertEquals('\\', $reader->escape);
+        self::assertTrue($reader->skipEmptyLines);
+        self::assertEquals(5, $reader->offset);
 
         $writer = new CsvWriter();
         $opts->applyTo($writer);
@@ -98,6 +102,22 @@ class OptionsTest extends TestCase
         self::assertTrue($writer->boldHeaders);
         self::assertTrue($writer->sharedStrings);
         self::assertTrue($writer->autoWidth);
+    }
+
+    public function testConstructorOptions(): void
+    {
+        $opts = new Options(
+            assoc: true,
+            separator: ';',
+            boldHeaders: true
+        );
+
+        $reader = new CsvReader($opts);
+        self::assertTrue($reader->assoc);
+        self::assertEquals(';', $reader->separator);
+
+        $writer = new XlsxWriter($opts);
+        self::assertTrue($writer->boldHeaders);
     }
 
     public function testTempPathOption(): void

@@ -19,6 +19,177 @@ class XlsxTest extends TestCase
         self::assertCount(3, $data[0]);
     }
 
+    public function testReadDateXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/date.xlsx'));
+
+        $arr = array_values($data);
+        $firstRow = $arr[0];
+        self::assertEquals('2016-10-14', $firstRow['BirthDate']);
+        self::assertEquals('2025-01-01 10:00:00', $firstRow['Created']);
+        self::assertEquals('10:00:00', $firstRow['BestTime']);
+
+        // Test that it works even for silly dates
+        self::assertEquals('1545-01-15', $arr[1]['BirthDate']);
+        self::assertEquals('2955-12-10', $arr[2]['BirthDate']);
+        self::assertEquals('1242-09-16', $arr[3]['BirthDate']);
+        self::assertEquals('1742-09-16', $arr[4]['BirthDate']);
+        self::assertEquals('1900-09-16', $arr[5]['BirthDate']);
+        self::assertEquals('1899-09-16', $arr[6]['BirthDate']);
+        self::assertEquals('4111-09-16', $arr[7]['BirthDate']);
+        self::assertTrue('' === $arr[8]['BirthDate']); // it has no t attribute so it is simply a string
+
+        // Invalid dates are treated as strings
+        self::assertEquals('00/00/0000', $arr[9]['BirthDate']);
+    }
+
+    public function testReadDurationXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/duration.xlsx'));
+
+        self::assertCount(3, $data);
+
+        $row1 = [
+            "Title" => "My title",
+            "Date" => "2020-09-24",
+            "Start" => "08:00",
+            "Duration" => "610",
+            "Names" => null,
+            "Boolean" => "1",
+            "Extra column" => "",
+        ];
+        self::assertEquals($row1, $data[0]);
+
+        $row3 = [
+            "Title" => "",
+            "Date" => "2020-10-07",
+            "Start" => "16:20",
+            "Duration" => "40",
+            "Names" => 'smith, john',
+            "Boolean" => "0",
+            "Extra column" => "My title",
+        ];
+        self::assertEquals($row3, $data[2]);
+    }
+
+    public function testReadDurationZeroXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/duration-zero.xlsx'));
+
+        self::assertCount(2, $data);
+
+        $row1 = [
+            "Title" => "My Title",
+            "Date" => "2020-09-24",
+            "Start" => "08:00",
+            "Duration" => "610",
+            "Names" => null,
+            "Boolean" => "1",
+            "Extra Title" => null,
+        ];
+        self::assertEquals($row1, $data[0]);
+    }
+
+    public function testReadEmptyColXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/empty-col.xlsx'));
+
+        self::assertEquals([
+            [
+                'col1' => "v1",
+                'col2' => "v2",
+                'col3' => null,
+                'col4' => "v4",
+            ],
+            [
+                'col1' => "v1",
+                'col2' => null,
+                'col3' => null,
+                'col4' => "v4",
+            ],
+            [
+                'col1' => null,
+                'col2' => "v2",
+                'col3' => "v3",
+                'col4' => null,
+            ]
+        ], $data);
+    }
+
+    public function testReadEmptyCol2Xlsx(): void
+    {
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/empty-col-2.xlsx'));
+
+        self::assertEquals([
+            [
+                'col1' => "v1",
+                'col2' => "v2",
+                'col3' => null,
+                'col4' => "v4",
+                'col5' => null,
+                'col6' => null,
+                'col7' => null,
+            ],
+            [
+                'col1' => "v1",
+                'col2' => null,
+                'col3' => null,
+                'col4' => "v4",
+                'col5' => null,
+                'col6' => null,
+                'col7' => null,
+            ],
+            [
+                'col1' => null,
+                'col2' => "v2",
+                'col3' => "v3",
+                'col4' => null,
+                'col5' => null,
+                'col6' => null,
+                'col7' => null,
+            ]
+        ], $data);
+    }
+
+    public function testReadEmptyXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/empty.xlsx'));
+        self::assertCount(0, $data);
+    }
+
+    public function testReadLargeXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/large.xlsx'));
+        self::assertGreaterThan(100, count($data));
+    }
+
+    public function testReadMultisheetXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/multisheet.xlsx'));
+        self::assertNotEmpty($data);
+    }
+
+    public function testReadDemoTmpFileXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/demo-tmp-file.xlsx'));
+        $decodedString = json_encode($data);
+        self::assertStringContainsString('john.doe@example.com', $decodedString);
+    }
+
     public function testReadXlsxAssoc(): void
     {
         $reader = new XlsxReader();
@@ -341,5 +512,49 @@ class XlsxTest extends TestCase
         self::assertEquals('OptsCreator', $props['meta']['creator']);
 
         unlink($tempFile);
+    }
+
+    public function testSkipEmptyLinesByDefault(): void
+    {
+        $reader = new \LeKoala\Baresheet\XlsxReader();
+        // In XLSX, empty lines are usually not stored or handled by reader
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/basic.xlsx'));
+        self::assertCount(1, $data);
+    }
+
+    public function testOffsetAndLimit(): void
+    {
+        $reader = new \LeKoala\Baresheet\XlsxReader();
+        $reader->offset = 1;
+        $reader->limit = 1;
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/large.xlsx'));
+        self::assertCount(1, $data);
+        // large.xlsx has '1' in first data row, '2' in second (which is our first after offset 1)
+        self::assertEquals('2', $data[0][0]);
+    }
+
+    public function testRead1904DateXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/date-1904.xlsx'));
+
+        self::assertCount(2, $data);
+        self::assertEquals('2019-09-02', $data[0][0]);
+        self::assertEquals('2019-09-03', $data[0][1]);
+        self::assertEquals('2019-09-02 22:23:00', $data[0][2]);
+        self::assertEquals('1904-02-29 23:59:59', $data[1][0]);
+        // Note: 1904-03-02 and 1904-03-01 11:00:00
+        self::assertEquals('1904-03-02', $data[1][1]);
+        self::assertEquals('1904-03-01 11:00:00', $data[1][2]);
+    }
+
+    public function testReadMultiNodeInlineStringsXlsx(): void
+    {
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/inline-strings-multi-node.xlsx'));
+
+        self::assertCount(1, $data);
+        self::assertEquals('VALUE 1 VALUE 2 VALUE 3 VALUE 4', $data[0][0]);
+        self::assertEquals('s1 - B1', $data[0][1]);
     }
 }

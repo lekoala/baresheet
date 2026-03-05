@@ -30,6 +30,11 @@ class XlsxWriter implements WriterInterface
      */
     public array $headers = [];
 
+    public function __construct(?Options $options = null)
+    {
+        $options?->applyTo($this);
+    }
+
     // -- Write API --
 
     /**

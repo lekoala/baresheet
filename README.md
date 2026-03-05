@@ -44,30 +44,35 @@ Baresheet::output($data, 'report.xlsx');
 
 ## Direct Reader/Writer Usage
 
-Concrete classes allow setting properties directly:
+Concrete classes allow setting properties directly or passing an `Options` object to the constructor:
 
 ```php
+use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
-// CSV
+// CSV - Manual pattern
 $reader = new CsvReader();
 $reader->assoc = true;
 $rows = $reader->readFile('data.csv');
 
-$writer = new CsvWriter();
-$writer->escapeFormulas = true;
+// CSV - Options pattern
+$writer = new CsvWriter(new Options(
+    escapeFormulas: true,
+));
 $writer->writeFile($data, 'safe-export.csv');
 
-// XLSX
+// XLSX - Manual pattern
 $reader = new XlsxReader();
 $reader->sheet = 'Data';
 $rows = $reader->readFile('report.xlsx');
 
-$writer = new XlsxWriter();
-$writer->meta = ['creator' => 'My App'];
+// XLSX - Options pattern
+$writer = new XlsxWriter(new Options(
+    meta: ['creator' => 'My App'],
+));
 $writer->writeFile($data, 'report.xlsx');
 ```
 
@@ -76,7 +81,7 @@ $writer->writeFile($data, 'report.xlsx');
 ### CSV
 
 - **Auto delimiter detection** — analyzes a sample to pick the best separator (default: `auto`)
-- **BOM handling** — reads/writes UTF-8 BOM transparently
+- **BOM handling** — detects and natively transcodes UTF-8/16/32 BOM sequences on the fly via stream filters
 - **Formula injection protection** — `escapeFormulas: true` (opt-in security flag, see Security section)
 - **RFC 4180 compliant** — handles enclosures and escapes according to standard behavior
 - **Stream reading** — `readStream()` for reading from any PHP resource
@@ -84,16 +89,18 @@ $writer->writeFile($data, 'report.xlsx');
 ### XLSX
 
 - **Blazing fast reading** — optimized `XMLReader` with direct `zip://` streaming (2x faster than SimpleXLSX)
+- **Data offset** & **Empty line skipping** — safely skip arbitrary leading rows or completely empty lines
 - **Extreme memory efficiency** — unified 0.63MB footprint regardless of file size
 - **Shared string table** — opt-in de-duplication for smaller files (default: `false` for speed)
 - **Auto column widths** — opt-in automatic column sizing (default: `false` for speed)
-- **DateTime support** — pass `DateTimeInterface` objects directly
+- **DateTime support** — pass `DateTimeInterface` objects directly, seamlessly handles 1900/1904 calendar systems
 - **Freeze Pane & Autofilter** — simple options for improved sheet usability
 - **Document properties** — set creator, title, subject, keywords, etc. via `meta`
 
 ### ODS
 
 - **Streaming reader** — handles large files with minimal 0.63MB memory usage
+- **Data offset** & **Empty line skipping** — safely skip arbitrary leading rows or completely empty lines
 - **Zero-dependency** — uses native `ZipArchive` + `XMLReader`
 - **DateTime support** — dates stored accurately in ISO 8601
 - **Document properties** — set creator and title via `meta`
@@ -109,6 +116,9 @@ There are two ways to pass options:
 $reader = new CsvReader();
 $reader->assoc = true;
 $reader->separator = ";";
+
+// Or directly in the constructor
+$reader = new CsvReader(new Options(assoc: true, separator: ";"));
 ```
 
 **2. Options object** (works on any method, including the `Baresheet` facade). The constructor provides **full IDE autocomplete**:
@@ -124,29 +134,31 @@ $opts = new Options(
 $rows = Baresheet::read('data.csv', $opts);
 ```
 
-| Option           | Type       | Default  | Applies to               |
-|------------------|------------|----------|--------------------------|
-| `assoc`          | bool       | `false`  | Read (All)               |
-| `strict`         | bool       | `false`  | Read (CSV, XLSX, ODS)    |
-| `stream`         | bool       | `false`  | Output (Any)             |
-| `limit`          | ?int       | `null`   | Read (All)               |
-| `headers`        | string[]   | `[]`     | Write (All), Read (CSV)  |
-| `separator`      | string     | `"auto"` | Read (CSV)               |
-| `enclosure`      | string     | `"`      | Read (CSV)               |
-| `escape`         | string     | `""`     | Read (CSV)               |
-| `eol`            | string     | `\n`     | Write (CSV)              |
-| `inputEncoding`  | ?string    | `null`   | Read (CSV)               |
-| `outputEncoding` | ?string    | `null`   | Read (CSV)               |
-| `bom`            | bool       | `true`   | Write (CSV)              |
-| `escapeFormulas` | bool       | `false`  | Write (CSV)              |
-| `meta`           | array/Meta | `null`   | Write (XLSX, ODS)        |
-| `autofilter`     | ?string    | `null`   | Write (XLSX)             |
-| `freezePane`     | ?string    | `null`   | Write (XLSX)             |
-| `sheet`          | string/int | `null`   | Read/Write (XLSX, ODS)   |
-| `boldHeaders`    | bool       | `false`  | Write (XLSX, ODS)        |
-| `tempPath`       | ?string    | `null`   | Any (Temp files location)|
-| `sharedStrings`  | bool       | `false`  | Write (XLSX)             |
-| `autoWidth`      | bool       | `false`  | Write (XLSX)             |
+| Option           | Type             | Default  | Applies to               |
+|------------------|------------------|----------|--------------------------|
+| `assoc`          | bool             | `false`  | Read (All)               |
+| `strict`         | bool             | `false`  | Read (CSV, XLSX, ODS)    |
+| `stream`         | bool             | `false`  | Output (Any)             |
+| `limit`          | ?int             | `null`   | Read (All)               |
+| `offset`         | int              | `0`      | Read (All)               |
+| `skipEmptyLines` | bool             | `true`   | Read (All)               |
+| `headers`        | string[]         | `[]`     | Write (All), Read (CSV)  |
+| `separator`      | string           | `"auto"` | Read (CSV)               |
+| `enclosure`      | string           | `"`      | Read (CSV)               |
+| `escape`         | string           | `""`     | Read (CSV)               |
+| `eol`            | string           | `\n`     | Write (CSV)              |
+| `inputEncoding`  | ?string          | `null`   | Read (CSV)               |
+| `outputEncoding` | ?string          | `null`   | Read (CSV)               |
+| `bom`            | bool\|string\|Bom| `true`   | Write (CSV)              |
+| `escapeFormulas` | bool             | `false`  | Write (CSV)              |
+| `meta`           | array/Meta       | `null`   | Write (XLSX, ODS)        |
+| `autofilter`     | ?string          | `null`   | Write (XLSX)             |
+| `freezePane`     | ?string          | `null`   | Write (XLSX)             |
+| `sheet`          | string/int       | `null`   | Read/Write (XLSX, ODS)   |
+| `boldHeaders`    | bool             | `false`  | Write (XLSX, ODS)        |
+| `tempPath`       | ?string          | `null`   | Any (Temp files location)|
+| `sharedStrings`  | bool             | `false`  | Write (XLSX)             |
+| `autoWidth`      | bool             | `false`  | Write (XLSX)             |
 
 ## Streaming Output
 

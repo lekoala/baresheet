@@ -16,7 +16,14 @@ class OdsReader implements ReaderInterface
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
+    public int $offset = 0;
+    public bool $skipEmptyLines = true;
     public string|int|null $sheet = null;
+
+    public function __construct(?Options $options = null)
+    {
+        $options?->applyTo($this);
+    }
 
     private const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
@@ -159,9 +166,7 @@ class OdsReader implements ReaderInterface
                                         }
                                     }
 
-                                    if ($isEmpty) {
-                                        // In memory loop for repeating empty rows, if one cell repeated empty is skipped, break.
-                                        // Note: The external ri loop should continue if first wasn't empty
+                                    if ($isEmpty && $this->skipEmptyLines) {
                                         break;
                                     }
 
@@ -184,9 +189,14 @@ class OdsReader implements ReaderInterface
                                         }
                                     }
 
+                                    if ($yieldCount < $this->offset) {
+                                        $yieldCount++;
+                                        continue;
+                                    }
+
                                     yield $rowData;
                                     $yieldCount++;
-                                    if ($this->limit !== null && $yieldCount >= $this->limit) {
+                                    if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
                                         $reader->close();
                                         return;
                                     }

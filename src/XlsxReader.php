@@ -16,7 +16,14 @@ class XlsxReader implements ReaderInterface
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
+    public int $offset = 0;
+    public bool $skipEmptyLines = true;
     public string|int|null $sheet = null;
+
+    public function __construct(?Options $options = null)
+    {
+        $options?->applyTo($this);
+    }
 
     /**
      * @return Generator<mixed>
@@ -93,6 +100,17 @@ class XlsxReader implements ReaderInterface
             }
         }
 
+        // Check 1904 date system
+        $is1904 = false;
+        $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
+        if ($wbData) {
+            $wbXml = Spread::safeXml($wbData);
+            if (isset($wbXml->workbookPr)) {
+                $date1904 = (string)$wbXml->workbookPr['date1904'];
+                $is1904 = ($date1904 === '1' || strtolower($date1904) === 'true');
+            }
+        }
+
         // Resolve worksheet path from sheet name/index
         $wsPath = $this->resolveSheetPath($zip);
         $wsIdx = $zip->locateName($wsPath);
@@ -151,9 +169,10 @@ class XlsxReader implements ReaderInterface
                                             $v = $reader->readString();
                                         } elseif ($reader->name === 'is') {
                                             $isDepth = $reader->depth;
+                                            $v = '';
                                             while ($reader->read() && $reader->depth > $isDepth) {
                                                 if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 't') {
-                                                    $v = $reader->readString();
+                                                    $v .= $reader->readString();
                                                 }
                                             }
                                         }
@@ -202,7 +221,7 @@ class XlsxReader implements ReaderInterface
                             }
 
                             if ($format === 'date') {
-                                $v = Spread::excelDateToString($v);
+                                $v = Spread::excelDateToString($v, null, $is1904);
                             }
 
                             if ($v !== '') {
@@ -220,7 +239,7 @@ class XlsxReader implements ReaderInterface
                     $col++;
                 }
 
-                if ($isEmpty) {
+                if ($isEmpty && $this->skipEmptyLines) {
                     continue;
                 }
                 if ($this->assoc) {
@@ -235,9 +254,15 @@ class XlsxReader implements ReaderInterface
                         $totalColumns = count($rowData);
                     }
                 }
+
+                if ($yieldCount < $this->offset) {
+                    $yieldCount++;
+                    continue;
+                }
+
                 yield $rowData;
                 $yieldCount++;
-                if ($this->limit !== null && $yieldCount >= $this->limit) {
+                if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
                     $reader->close();
                     return;
                 }

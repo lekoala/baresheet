@@ -17,11 +17,32 @@ class BaresheetTest extends TestCase
         self::assertCount(3, $data[0]);
     }
 
+    public function testReadWithoutExtension(): void
+    {
+        $data = iterator_to_array(Baresheet::read(__DIR__ . '/data/basic'));
+        self::assertCount(1, $data);
+        self::assertCount(3, $data[0]);
+    }
+
     public function testReadXlsxByExtension(): void
     {
         $data = iterator_to_array(Baresheet::read(__DIR__ . '/data/basic.xlsx'));
         self::assertCount(1, $data);
         self::assertCount(3, $data[0]);
+    }
+
+    public function testReadUnsupportedExtensionXls(): void
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Unsupported format: xls');
+        iterator_to_array(Baresheet::read(__DIR__ . '/data/basic.xls'));
+    }
+
+    public function testReadUnsupportedExtensionZip(): void
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Unsupported format: zip');
+        iterator_to_array(Baresheet::read(__DIR__ . '/data/test_write.zip'));
     }
 
     public function testReadWithOptions(): void

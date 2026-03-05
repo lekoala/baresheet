@@ -26,6 +26,11 @@ class OdsWriter implements WriterInterface
      */
     public array $headers = [];
 
+    public function __construct(?Options $options = null)
+    {
+        $options?->applyTo($this);
+    }
+
     private const MIMETYPE = 'application/vnd.oasis.opendocument.spreadsheet';
 
     // -- Write API --

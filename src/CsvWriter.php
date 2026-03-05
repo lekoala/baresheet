@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use RuntimeException;
+use LeKoala\Baresheet\Bom;
 
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
  */
 class CsvWriter implements WriterInterface
 {
-    public const BOM = "\xef\xbb\xbf";
-
     public string $separator = ",";
     public string $enclosure = "\"";
     public string $escape = "";
     public string $eol = "\n";
-    public bool $bom = true;
+    public bool|Bom|string $bom = true;
     public bool $stream = false;
     public bool $escapeFormulas = false;
     public ?string $outputEncoding = null;
@@ -25,6 +24,11 @@ class CsvWriter implements WriterInterface
      * @var string[]
      */
     public array $headers = [];
+
+    public function __construct(?Options $options = null)
+    {
+        $options?->applyTo($this);
+    }
 
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
@@ -86,8 +90,25 @@ class CsvWriter implements WriterInterface
      */
     private function writeInternal($stream, iterable $data): void
     {
-        if ($this->bom) {
-            fputs($stream, self::BOM);
+        $bomToWrite = null;
+        if ($this->bom === true) {
+            $bomToWrite = Bom::Utf8;
+        } elseif ($this->bom instanceof Bom) {
+            $bomToWrite = $this->bom;
+        } elseif (is_string($this->bom) && $this->bom !== '') {
+            fputs($stream, $this->bom);
+        }
+
+        if ($bomToWrite !== null) {
+            fputs($stream, $bomToWrite->value);
+
+            // If we are writing a non-UTF-8 BOM, we assume the user intends
+            // the entire file to be encoded as such. We apply a stream filter
+            // so fputcsv (which expects single-byte ASCII compatible sequences)
+            // writes UTF-8 internally, but the filter transcodes it before it hits the stream.
+            if (!$bomToWrite->isUtf8()) {
+                stream_filter_append($stream, 'convert.iconv.UTF-8/' . $bomToWrite->encoding(), STREAM_FILTER_WRITE);
+            }
         }
 
         $separator = $this->separator === 'auto' ? ',' : $this->separator;

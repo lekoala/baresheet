@@ -27,6 +27,12 @@ class Options
          * @var string[] Predefined headers to use for reading or writing.
          */
         public array $headers = [],
+        /** @var bool If true, empty lines are skipped during reading. */
+        public bool $skipEmptyLines = true,
+        /** @var int Number of rows to skip at the beginning. */
+        public int $offset = 0,
+        /** @var ?int Maximum number of rows to read. */
+        public ?int $limit = null,
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = "auto",
@@ -40,10 +46,8 @@ class Options
         public ?string $inputEncoding = null,
         /** @var ?string Target encoding for writing CSV files. */
         public ?string $outputEncoding = null,
-        /** @var ?int Maximum number of rows to read. */
-        public ?int $limit = null,
-        /** @var bool If true, writes a BOM at the beginning of the CSV file. */
-        public bool $bom = true,
+        /** @var bool|\LeKoala\Baresheet\Bom|string If true, writes a UTF-8 BOM, otherwise accepts a specific Bom enum or sequence string. */
+        public bool|\LeKoala\Baresheet\Bom|string $bom = true,
         /** @var bool If true, escapes formulas starting with `=`, `+`, `-`, or `@` to prevent injection. */
         public bool $escapeFormulas = false,
         // ─── XLSX & ODS ──────────────────────────
