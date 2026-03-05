@@ -401,28 +401,39 @@ class XlsxReader implements ReaderInterface
 
     public static function isDateTimeFormatCode(string $excelFormatCode): bool
     {
-        if (strtolower($excelFormatCode) === 'general') {
-            return false;
-        }
-        if (str_starts_with($excelFormatCode, '_') || str_starts_with($excelFormatCode, '0 ')) {
-            return false;
-        }
-        if (str_contains($excelFormatCode, '-00000')) {
+        $lowerCode = strtolower($excelFormatCode);
+        if ($lowerCode === 'general') {
             return false;
         }
 
-        $cleanCode = str_replace(['[', ']', '.000'], '', $excelFormatCode);
+        // Remove locale/bucket identifiers [$-409] or duration brackets [h]
+        $cleanCode = str_replace(['[', ']', '.000', '\\'], '', $lowerCode);
 
-        if ($cleanCode === 'WW') {
+        // Standard markers
+        if (
+            str_contains($cleanCode, 'yy') ||
+            str_contains($cleanCode, 'dd') ||
+            str_contains($cleanCode, 'mm') ||
+            str_contains($cleanCode, 'hh') ||
+            str_contains($cleanCode, 'ss')
+        ) {
             return true;
         }
-        if (str_contains($cleanCode, 'h:m')) {
+
+        // Single letter markers with separators
+        if (
+            str_contains($cleanCode, 'd/m') ||
+            str_contains($cleanCode, 'm/d') ||
+            str_contains($cleanCode, 'h:m') ||
+            str_contains($cleanCode, 'm:s') ||
+            str_contains($cleanCode, 'am/pm') ||
+            str_contains($cleanCode, 'a/p')
+        ) {
             return true;
         }
-        if (str_contains($cleanCode, 'yy') || str_contains($cleanCode, 'dd') || str_contains($cleanCode, 'mm')) {
-            return true;
-        }
-        if (str_contains($cleanCode, 'e/m/d') || str_contains($cleanCode, 'e/m')) {
+
+        // Special codes
+        if (str_contains($cleanCode, 'e/m/d') || $cleanCode === 'ww') {
             return true;
         }
 

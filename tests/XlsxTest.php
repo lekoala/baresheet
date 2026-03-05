@@ -557,4 +557,42 @@ class XlsxTest extends TestCase
         self::assertEquals('VALUE 1 VALUE 2 VALUE 3 VALUE 4', $data[0][0]);
         self::assertEquals('s1 - B1', $data[0][1]);
     }
+
+    public function testIsDateTimeFormatCode(): void
+    {
+        // Positive cases: Standard
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('yyyy-mm-dd'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('dd/mm/yyyy'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('m/d/yy'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('d-mmm-yy'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('mmmm d, yyyy'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('mm/dd'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('d/m/y'));
+
+        // Case variations
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('YYYY-MM-DD'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('M/D/YY'));
+
+        // Time and Duration
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('h:mm'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('hh:mm:ss'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('h:mm AM/PM'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('[h]:mm:ss'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('[mm]:ss'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('h:mm:ss.000'));
+
+        // Special patterns
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('e/m/d'));
+        self::assertTrue(XlsxReader::isDateTimeFormatCode('[$-409]yyyy-mm-dd'));
+
+        // Negative cases
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('General'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('0'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('0.00'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('#,##0'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('#,##0.00'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('0%'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('0.00E+00'));
+        self::assertFalse(XlsxReader::isDateTimeFormatCode('"$"#,##0.00'));
+    }
 }
