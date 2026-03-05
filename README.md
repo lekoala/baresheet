@@ -224,18 +224,18 @@ Here are the results extracting/writing 50,000 rows (4 columns) locally against 
 
 | Library         | Avg Time (s) | Peak Memory (MB) |
 |-----------------|--------------|------------------|
-| Baresheet (CSV) | 0.1082       | 0.46             |
-| League (CSV)    | 0.1388       | 0.55             |
-| OpenSpout (CSV) | 0.2817       | 0.47             |
+| Baresheet (CSV) | 0.0995       | 0.48             |
+| League (CSV)    | 0.1390       | 0.55             |
+| OpenSpout (CSV) | 0.2824       | 0.47             |
 
 #### Writing XLSX
 
 | Library                           | Avg Time (s) | Peak Memory (MB) |
 |-----------------------------------|--------------|------------------|
-| Baresheet (XLSX)                  | 0.6015       | 1.39             |
-| SimpleXLSXGen (XLSX)              | 0.6915       | 109.77           |
-| OpenSpout (XLSX)                  | 0.9215       | 1.01             |
-| Baresheet (XLSX - Shared Strings) | 1.0462       | 34.23            |
+| Baresheet (XLSX)                  | 0.4739       | 0.76             |
+| SimpleXLSXGen (XLSX)              | 0.6714       | 109.77           |
+| OpenSpout (XLSX)                  | 0.9841       | 1.01             |
+| Baresheet (XLSX - Shared Strings) | 0.9969       | 34.23            |
 
 > Note: By default, Baresheet uses the fastest mode (shared strings and auto column width disabled). You can re-enable them via Options.
 
@@ -243,8 +243,8 @@ Here are the results extracting/writing 50,000 rows (4 columns) locally against 
 
 | Library         | Avg Time (s) | Peak Memory (MB) |
 |-----------------|--------------|------------------|
-| OpenSpout (ODS) | 1.2388       | 0.88             |
-| Baresheet (ODS) | 1.4021       | 0.78             |
+| Baresheet (ODS) | 0.9208       | 0.85             |
+| OpenSpout (ODS) | 1.3569       | 0.88             |
 
 ## Security Considerations
 

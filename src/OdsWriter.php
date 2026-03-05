@@ -31,6 +31,7 @@ class OdsWriter implements WriterInterface
         $options?->applyTo($this);
     }
 
+    private const BUFFER_SIZE = 1000;
     private const MIMETYPE = 'application/vnd.oasis.opendocument.spreadsheet';
 
     // -- Write API --
@@ -131,13 +132,14 @@ class OdsWriter implements WriterInterface
             throw new Exception("Directory '$destinationDir' is not writable");
         }
 
+        // Use tempPath when the destination filesystem doesn't support ZipArchive well
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'ods_native');
             if (!$baseName) {
                 throw new Exception("Failed to create temp file in " . $this->tempPath);
             }
         } else {
-            $baseName = Spread::getTempFilename();
+            $baseName = $filename;
         }
 
         $zip = new ZipArchive();
@@ -166,11 +168,14 @@ class OdsWriter implements WriterInterface
             throw new Exception("Failed to close file '$destinationFile'");
         }
 
-        $contents = file_get_contents($destinationFile);
-        if ($contents !== false) {
-            file_put_contents($filename, $contents);
+        // Copy from temp location to final destination when using tempPath
+        if ($this->tempPath) {
+            $contents = file_get_contents($destinationFile);
+            if ($contents !== false) {
+                file_put_contents($filename, $contents);
+            }
+            unlink($destinationFile);
         }
-        unlink($destinationFile);
 
         return true;
     }
@@ -215,49 +220,62 @@ class OdsWriter implements WriterInterface
         $wrappedData = $this->prependHeaders($data);
         $isFirstRow = true;
 
-        foreach ($wrappedData as $row) {
-            fwrite($fd, '<table:table-row>');
-            foreach ($row as $value) {
-                $cellStyle = ($isFirstRow && $this->boldHeaders)
-                    ? ' table:style-name="bold"'
-                    : '';
+        $boldHeadersOpt = $this->boldHeaders;
+        $bufferSizeOpt = self::BUFFER_SIZE;
+        $buffer = '';
+        $r = 0;
 
+        foreach ($wrappedData as $row) {
+            $r++;
+            $buffer .= '<table:table-row>';
+
+            $rowCellStyle = ($isFirstRow && $boldHeadersOpt) ? ' table:style-name="bold"' : '';
+
+            foreach ($row as $value) {
                 if ($value instanceof DateTimeInterface) {
                     $isoDate = $value->format('Y-m-d\TH:i:s');
                     $display = $value->format('Y-m-d H:i:s');
-                    fwrite($fd, '<table:table-cell' . $cellStyle
+                    $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="date"'
                         . ' office:date-value="' . $isoDate . '">'
                         . '<text:p>' . $display . '</text:p>'
-                        . '</table:table-cell>');
+                        . '</table:table-cell>';
                 } elseif ($value === null || $value === '') {
-                    fwrite($fd, '<table:table-cell' . $cellStyle . '/>');
+                    $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
                 } elseif (is_numeric($value) && !is_string($value)) {
-                    fwrite($fd, '<table:table-cell' . $cellStyle
+                    $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="float"'
                         . ' office:value="' . $value . '">'
                         . '<text:p>' . $value . '</text:p>'
-                        . '</table:table-cell>');
+                        . '</table:table-cell>';
                 } elseif (
                     is_string($value)
                     && is_numeric($value)
                     && ($value === '0' || ($value[0] !== '0' || str_contains($value, '.')))
                 ) {
-                    fwrite($fd, '<table:table-cell' . $cellStyle
+                    $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="float"'
                         . ' office:value="' . $value . '">'
                         . '<text:p>' . $value . '</text:p>'
-                        . '</table:table-cell>');
+                        . '</table:table-cell>';
                 } else {
                     $escaped = htmlspecialchars((string)$value, ENT_XML1, 'UTF-8');
-                    fwrite($fd, '<table:table-cell' . $cellStyle
+                    $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="string">'
                         . '<text:p>' . $escaped . '</text:p>'
-                        . '</table:table-cell>');
+                        . '</table:table-cell>';
                 }
             }
-            fwrite($fd, '</table:table-row>');
             $isFirstRow = false;
+            $buffer .= '</table:table-row>';
+            if ($r % $bufferSizeOpt === 0) {
+                fwrite($fd, $buffer);
+                $buffer = '';
+            }
+        }
+
+        if ($buffer !== '') {
+            fwrite($fd, $buffer);
         }
 
         fwrite($fd, '</table:table>');
@@ -309,7 +327,7 @@ XML;
     private function genMeta(): string
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
-        $creator = htmlspecialchars($metaObj->creator ?? 'Baresheet', ENT_XML1, 'UTF-8');
+        $creator = htmlspecialchars($metaObj->creator ?? "", ENT_XML1, 'UTF-8');
         $titleVal = $metaObj?->title;
         $title = $titleVal ? '<dc:title>' . htmlspecialchars($titleVal, ENT_XML1, 'UTF-8') . '</dc:title>' : '';
         $date = date('Y-m-d\TH:i:s');

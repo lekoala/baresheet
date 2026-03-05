@@ -112,23 +112,60 @@ class CsvWriter implements WriterInterface
         }
 
         $separator = $this->separator === 'auto' ? ',' : $this->separator;
+        $escapeFormulas = $this->escapeFormulas;
+        $outputEncoding = $this->outputEncoding;
+
         if (!empty($this->headers)) {
-            $row = $this->escapeRow($this->headers);
-            if ($this->outputEncoding) {
-                $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $this->outputEncoding) : $v, $row);
+            $row = $this->headers;
+            if ($escapeFormulas) {
+                $row = $this->escapeRow($row);
+            }
+            if ($outputEncoding !== null && $outputEncoding !== '') {
+                $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
             }
             /** @var array<int|string, bool|float|int|string|null> $row */
             fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
         }
-        foreach ($data as $row) {
-            $row = $this->escapeRow($row);
-            if ($this->outputEncoding) {
-                $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $this->outputEncoding) : $v, $row);
+
+        if ($outputEncoding === null || $outputEncoding === '') {
+            if (!$escapeFormulas) {
+                foreach ($data as $row) {
+                    /** @var array<int|string, bool|float|int|string|null> $row */
+                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+                    if ($result === false) {
+                        throw new RuntimeException("Failed to write line");
+                    }
+                }
+            } else {
+                foreach ($data as $row) {
+                    $row = $this->escapeRow($row);
+                    /** @var array<int|string, bool|float|int|string|null> $row */
+                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+                    if ($result === false) {
+                        throw new RuntimeException("Failed to write line");
+                    }
+                }
             }
-            /** @var array<int|string, bool|float|int|string|null> $row */
-            $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-            if ($result === false) {
-                throw new RuntimeException("Failed to write line");
+        } else {
+            if (!$escapeFormulas) {
+                foreach ($data as $row) {
+                    $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
+                    /** @var array<int|string, bool|float|int|string|null> $row */
+                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+                    if ($result === false) {
+                        throw new RuntimeException("Failed to write line");
+                    }
+                }
+            } else {
+                foreach ($data as $row) {
+                    $row = $this->escapeRow($row);
+                    $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
+                    /** @var array<int|string, bool|float|int|string|null> $row */
+                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+                    if ($result === false) {
+                        throw new RuntimeException("Failed to write line");
+                    }
+                }
             }
         }
     }
@@ -141,9 +178,6 @@ class CsvWriter implements WriterInterface
      */
     private function escapeRow(array $row): array
     {
-        if (!$this->escapeFormulas) {
-            return $row;
-        }
         foreach ($row as &$cell) {
             if (is_string($cell) && $cell !== '') {
                 $firstChar = $cell[0];

@@ -15,10 +15,11 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 if (isset($argv[1]) && $argv[1] === '--memory') {
     $key = $argv[2];
     $file = $argv[3];
+    $rowCount = isset($argv[4]) ? (int)$argv[4] : 50000;
 
     // Generate data in-process to match main benchmark
     $data = [];
-    for ($i = 1; $i <= 50000; $i++) {
+    for ($i = 1; $i <= $rowCount; $i++) {
         $data[] = [$i, "fname $i", "sname $i", "email-$i@domain.com"];
     }
 
@@ -96,18 +97,13 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     exit;
 }
 
-$genData = [];
-foreach (range(1, 50000) as $i) {
-    $genData[] = [$i, "fname $i", "sname $i", "email-$i@domain.com"];
-}
-
 /**
  * Measure peak memory in an isolated subprocess so memory_get_peak_usage() is accurate.
  */
-function measureWriteMemory(string $key, string $format): float
+function measureWriteMemory(string $key, string $format, int $rowCount): float
 {
-    $tempFile = sys_get_temp_dir() . '/bench_mem_' . $key . '.' . $format;
-    $cmd = PHP_BINARY . ' ' . escapeshellarg(__FILE__) . ' --memory ' . $key . ' ' . escapeshellarg($tempFile);
+    $tempFile = sys_get_temp_dir() . '/bench_mem_' . $key . '_' . $rowCount . '.' . $format;
+    $cmd = PHP_BINARY . ' ' . escapeshellarg(__FILE__) . ' --memory ' . escapeshellarg($key) . ' ' . escapeshellarg($tempFile) . ' ' . escapeshellarg((string)$rowCount);
     $bytes = (int) trim((string) shell_exec($cmd));
     return $bytes / 1024 / 1024;
 }
@@ -183,43 +179,54 @@ $libraries = [
     ]
 ];
 
-foreach ($libraries as $format => $adapters) {
-    echo "## Write Benchmark: " . strtoupper($format) . PHP_EOL . PHP_EOL;
-    echo "| Library | Avg Time (s) | Peak Memory (MB) |" . PHP_EOL;
-    echo "|---|---|---|" . PHP_EOL;
+$rowCounts = [2500, 50000];
 
-    $results = [];
+foreach ($rowCounts as $rowCount) {
+    echo "# Benchmark with $rowCount rows\n\n";
 
-    foreach ($adapters as $label => $config) {
-        $times = [];
+    $genData = [];
+    for ($i = 1; $i <= $rowCount; $i++) {
+        $genData[] = [$i, "fname $i", "sname $i", "email-$i@domain.com"];
+    }
 
-        for ($i = 0; $i < $reps; $i++) {
-            $tempFile = sys_get_temp_dir() . '/bench_' . time() . '_' . $i . '.' . $format;
+    foreach ($libraries as $format => $adapters) {
+        echo "## Write Benchmark: " . strtoupper($format) . PHP_EOL . PHP_EOL;
+        echo "| Library | Avg Time (s) | Peak Memory (MB) |" . PHP_EOL;
+        echo "|---|---|---|" . PHP_EOL;
 
-            $start = microtime(true);
-            ($config['fn'])($tempFile, $genData);
-            $times[] = microtime(true) - $start;
+        $results = [];
 
-            if (file_exists($tempFile)) {
-                unlink($tempFile);
+        foreach ($adapters as $label => $config) {
+            $times = [];
+
+            for ($i = 0; $i < $reps; $i++) {
+                $tempFile = sys_get_temp_dir() . '/bench_' . time() . '_' . $i . '.' . $format;
+
+                $start = microtime(true);
+                ($config['fn'])($tempFile, $genData);
+                $times[] = microtime(true) - $start;
+
+                if (file_exists($tempFile)) {
+                    unlink($tempFile);
+                }
             }
+
+            // Memory measured in isolated subprocess
+            $memory = measureWriteMemory($config['key'], $format, $rowCount);
+
+            $results[$label] = [
+                'time' => array_sum($times) / count($times),
+                'memory' => $memory
+            ];
         }
 
-        // Memory measured in isolated subprocess
-        $memory = measureWriteMemory($config['key'], $format);
+        // Sort by time
+        uasort($results, fn($a, $b) => $a['time'] <=> $b['time']);
 
-        $results[$label] = [
-            'time' => array_sum($times) / count($times),
-            'memory' => $memory
-        ];
+        foreach ($results as $label => $stats) {
+            printf("| %s | %.4f | %.2f |" . PHP_EOL, $label, $stats['time'], $stats['memory']);
+        }
+
+        echo PHP_EOL;
     }
-
-    // Sort by time
-    uasort($results, fn($a, $b) => $a['time'] <=> $b['time']);
-
-    foreach ($results as $label => $stats) {
-        printf("| %s | %.4f | %.2f |" . PHP_EOL, $label, $stats['time'], $stats['memory']);
-    }
-
-    echo PHP_EOL;
 }

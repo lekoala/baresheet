@@ -35,6 +35,8 @@ class XlsxWriter implements WriterInterface
         $options?->applyTo($this);
     }
 
+    private const BUFFER_SIZE = 1000;
+
     // -- Write API --
 
     /**
@@ -149,13 +151,14 @@ class XlsxWriter implements WriterInterface
         }
 
         $mode = ZipArchive::CREATE | ZipArchive::OVERWRITE;
+        // Use tempPath when the destination filesystem doesn't support ZipArchive well
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'xlsx_native');
             if (!$baseName) {
                 throw new Exception("Failed to create temp file in " . $this->tempPath);
             }
         } else {
-            $baseName = Spread::getTempFilename();
+            $baseName = $filename;
         }
 
         $zip = new ZipArchive();
@@ -169,12 +172,15 @@ class XlsxWriter implements WriterInterface
         if ($closeResult === false) {
             throw new Exception("Failed to close file '$destinationFile'");
         }
-        // Move the temp zip to the final destination
-        $contents = file_get_contents($destinationFile);
-        if ($contents !== false) {
-            file_put_contents($filename, $contents);
+
+        // Copy from temp location to final destination when using tempPath
+        if ($this->tempPath) {
+            $contents = file_get_contents($destinationFile);
+            if ($contents !== false) {
+                file_put_contents($filename, $contents);
+            }
+            unlink($destinationFile);
         }
-        unlink($destinationFile);
 
         return true;
     }
@@ -283,11 +289,16 @@ class XlsxWriter implements WriterInterface
         $wrappedData = $this->prependHeaders($data);
         $isFirstRow = true;
 
+        $autoWidth = $this->autoWidth;
+        $sharedStringsOpt = $this->sharedStrings;
+        $bufferSizeOpt = self::BUFFER_SIZE;
+        $buffer = '';
+
         foreach ($wrappedData as $dataRow) {
             $c = "";
             $i = 0;
             $rowNum = $r + 1;
-            foreach ($dataRow as $k => $value) {
+            foreach ($dataRow as $value) {
                 if (!isset($colCache[$i])) {
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
@@ -296,6 +307,8 @@ class XlsxWriter implements WriterInterface
                 // Apply bold style to first row when boldHeaders is enabled
                 $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
 
+                // Cell generation logic
+                $vl = 0;
                 if ($value instanceof DateTimeInterface) {
                     $value = Spread::dateToExcel($value);
                     $c .= '<c r="' . $cn . '" t="n" s="1"><v>' . $value . '</v></c>';
@@ -310,12 +323,10 @@ class XlsxWriter implements WriterInterface
                     || preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", (string)$value)
                 ) {
                     $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $value . '</v></c>';
-                    $vl = $this->autoWidth ? mb_strlen((string)$value) : 0;
+                    $vl = mb_strlen((string)$value);
                 } else {
                     $escaped = self::escapeXml((string)$value);
-                    if (!$this->sharedStrings || mb_strlen($escaped) > 160) {
-                        $c .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
-                    } else {
+                    if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
                         $skey = '~' . $escaped;
                         if (isset($sharedStringKeys[$skey])) {
                             $ssIdx = $sharedStringKeys[$skey];
@@ -325,21 +336,33 @@ class XlsxWriter implements WriterInterface
                             $sharedStringKeys[$skey] = $ssIdx;
                         }
                         $c .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                    } else {
+                        $c .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
                     }
-                    $vl = $this->autoWidth ? mb_strlen((string)$value) : 0;
+                    $vl = mb_strlen((string)$value);
                 }
                 $c .= "\r\n";
 
-                if ($this->autoWidth && (!isset($colWidths[$i]) || $vl > $colWidths[$i])) {
-                    $colWidths[$i] = $vl;
+                if ($autoWidth) {
+                    if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
+                        $colWidths[$i] = $vl;
+                    }
                 }
 
                 $i++;
             }
-
             $r++;
-            fwrite($tempStream, "<row r=\"$r\">$c</row>\r\n");
+            $buffer .= "<row r=\"$r\">$c</row>\r\n";
+            if ($r % $bufferSizeOpt === 0) {
+                fwrite($tempStream, $buffer);
+                $buffer = '';
+            }
             $isFirstRow = false;
+        }
+
+        if ($buffer !== '') {
+            fwrite($tempStream, $buffer);
+            $buffer = '';
         }
 
         $footer = '</sheetData>';
@@ -434,7 +457,7 @@ XML;
         $created = gmdate('Y-m-d\TH:i:s\Z');
         $title = self::escapeXml($metaObj->title ?? "");
         $subject = self::escapeXml($metaObj->subject ?? "");
-        $creator = self::escapeXml($metaObj->creator ?? "LeKoala\Baresheet");
+        $creator = self::escapeXml($metaObj->creator ?? "");
         $keywords = self::escapeXml($metaObj->keywords ?? "");
         $description = self::escapeXml($metaObj->description ?? "");
         $category = self::escapeXml($metaObj->category ?? "");
