@@ -205,17 +205,18 @@ class OdsWriter implements WriterInterface
             . ' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
             . ' office:version="1.3">');
 
-        // Bold header style if needed
+        // Styles block (mandatory for some readers like OpenSpout)
+        fwrite($fd, '<office:automatic-styles>');
+        fwrite($fd, '<style:style style:name="ta1" style:family="table"/>');
         if ($this->boldHeaders) {
-            fwrite($fd, '<office:automatic-styles>'
-                . '<style:style style:name="bold" style:family="table-cell">'
+            fwrite($fd, '<style:style style:name="bold" style:family="table-cell">'
                 . '<style:text-properties fo:font-weight="bold"/>'
-                . '</style:style>'
-                . '</office:automatic-styles>');
+                . '</style:style>');
         }
+        fwrite($fd, '</office:automatic-styles>');
 
         fwrite($fd, '<office:body><office:spreadsheet>');
-        fwrite($fd, '<table:table table:name="' . $sheetName . '">');
+        fwrite($fd, '<table:table table:name="' . $sheetName . '" table:style-name="ta1">');
 
         $wrappedData = $this->prependHeaders($data);
         $isFirstRow = true;
