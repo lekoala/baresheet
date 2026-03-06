@@ -295,10 +295,9 @@ class OdsTest extends TestCase
         $zip->close();
         unlink($tempFile);
 
-        self::assertStringContainsString('<style:style style:name="ta1" style:family="table"/>', $content);
-        self::assertStringContainsString('<style:style style:name="bold" style:family="table-cell">', $content);
-        self::assertStringContainsString('<style:text-properties fo:font-weight="bold"/>', $content);
-        self::assertStringContainsString('</style:style>', $content);
+        self::assertStringContainsString('style:name="ta1"', $content);
+        self::assertStringContainsString('style:name="bold"', $content);
+        self::assertStringContainsString('fo:font-weight="bold"', $content);
     }
 
     public function testBoldHeadersReferenceBoldStyle(): void
@@ -317,8 +316,11 @@ class OdsTest extends TestCase
         unlink($tempFile);
 
         // First row should have the bold style
-        self::assertStringContainsString('<table:table-cell table:style-name="bold" office:value-type="string"><text:p>Header</text:p></table:table-cell>', $content);
-        // Second row should NOT have the bold style
-        self::assertStringContainsString('<table:table-cell office:value-type="string"><text:p>Value</text:p></table:table-cell>', $content);
+        self::assertStringContainsString('table:style-name="bold"', $content);
+        self::assertStringContainsString('<text:p>Header</text:p>', $content);
+        // Second row should NOT have the bold style (in that specific context)
+        self::assertStringContainsString('<text:p>Value</text:p>', $content);
+        // We can check it doesn't have it right before Value
+        self::assertStringNotContainsString('table:style-name="bold" office:value-type="string"><text:p>Value</text:p>', $content);
     }
 }

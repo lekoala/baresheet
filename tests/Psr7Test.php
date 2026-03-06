@@ -55,4 +55,29 @@ class Psr7Test extends TestCase
 
         $this->assertValidStream($stream, 'ods');
     }
+    public function testXlsxFallbackWriteStream(): void
+    {
+        // Force fallback by using a class that returns false for canStream
+        $writer = new class extends XlsxWriter {
+            protected function canStream(): bool { return false; }
+        };
+        $stream = $writer->writeStream([
+            ["Hello", "World"]
+        ]);
+
+        $this->assertValidStream($stream, 'xlsx');
+    }
+
+    public function testOdsFallbackWriteStream(): void
+    {
+        // Force fallback by using a class that returns false for canStream
+        $writer = new class extends OdsWriter {
+            protected function canStream(): bool { return false; }
+        };
+        $stream = $writer->writeStream([
+            ["Hello", "World"]
+        ]);
+
+        $this->assertValidStream($stream, 'ods');
+    }
 }
