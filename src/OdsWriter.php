@@ -84,6 +84,7 @@ class OdsWriter implements WriterInterface
     public function writeFile(iterable $data, string $filename, ?Options $options = null): bool
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'ods');
         return $this->buildFile($data, $filename);
     }
 
@@ -93,6 +94,7 @@ class OdsWriter implements WriterInterface
     public function output(iterable $data, string $filename, ?Options $options = null): void
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'ods');
 
         if ($this->stream && $this->canStream()) {
             $this->outputStream($data, $filename);
@@ -299,7 +301,7 @@ class OdsWriter implements WriterInterface
                 } elseif (
                     is_string($value)
                     && is_numeric($value)
-                    && ($value === '0' || ($value[0] !== '0' || str_contains($value, '.')))
+                    && ($value === '0' || (isset($value[0]) && $value[0] !== '0' || str_contains($value, '.')))
                 ) {
                     $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="float"'
@@ -307,7 +309,7 @@ class OdsWriter implements WriterInterface
                         . '<text:p>' . $value . '</text:p>'
                         . '</table:table-cell>';
                 } else {
-                    $escaped = htmlspecialchars((string)$value, ENT_XML1, 'UTF-8');
+                    $escaped = Spread::escapeXml((string)$value);
                     $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="string">'
                         . '<text:p>' . $escaped . '</text:p>'
@@ -317,13 +319,19 @@ class OdsWriter implements WriterInterface
             $isFirstRow = false;
             $buffer .= '</table:table-row>';
             if ($r % $bufferSizeOpt === 0) {
-                fwrite($fd, $buffer);
+                $res = fwrite($fd, $buffer);
+                if ($res === false) {
+                    throw new \RuntimeException("Failed to write to buffer");
+                }
                 $buffer = '';
             }
         }
 
         if ($buffer !== '') {
-            fwrite($fd, $buffer);
+            $res = fwrite($fd, $buffer);
+            if ($res === false) {
+                throw new \RuntimeException("Failed to write to buffer");
+            }
         }
 
         fwrite($fd, '</table:table>');

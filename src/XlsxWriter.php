@@ -89,6 +89,7 @@ class XlsxWriter implements WriterInterface
     public function writeFile(iterable $data, string $filename, ?Options $options = null): bool
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'xlsx');
         return $this->buildFile($data, $filename);
     }
 
@@ -98,6 +99,7 @@ class XlsxWriter implements WriterInterface
     public function output(iterable $data, string $filename, ?Options $options = null): void
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'xlsx');
 
         if ($this->stream && $this->canStream()) {
             $this->outputStream($data, $filename);
@@ -188,6 +190,9 @@ class XlsxWriter implements WriterInterface
             $zip->addFile(fileName: 'xl/sharedStrings.xml', data: $this->genSharedStrings($sharedStrings));
         }
         $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
+        if (is_resource($worksheetStream)) {
+            fclose($worksheetStream);
+        }
     }
 
     protected function canStream(): bool
@@ -376,13 +381,13 @@ class XlsxWriter implements WriterInterface
                 } elseif (
                     !is_string($value)
                     || $value === '0'
-                    || ($value[0] !== '0' && ctype_digit($value))
+                    || (isset($value[0]) && $value[0] !== '0' && ctype_digit($value))
                     || preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", (string)$value)
                 ) {
                     $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $value . '</v></c>';
                     $vl = mb_strlen((string)$value);
                 } else {
-                    $escaped = self::escapeXml((string)$value);
+                    $escaped = Spread::escapeXml((string)$value);
                     if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
                         $skey = '~' . $escaped;
                         if (isset($sharedStringKeys[$skey])) {
@@ -426,7 +431,7 @@ class XlsxWriter implements WriterInterface
 
         // Autofilter
         if ($this->autofilter) {
-            $escapedFilter = self::escapeXmlAttr($this->autofilter);
+            $escapedFilter = Spread::escapeXmlAttr($this->autofilter);
             $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
         }
 
@@ -512,13 +517,13 @@ XML;
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
         $created = gmdate('Y-m-d\TH:i:s\Z');
-        $title = self::escapeXml($metaObj->title ?? "");
-        $subject = self::escapeXml($metaObj->subject ?? "");
-        $creator = self::escapeXml($metaObj->creator ?? "");
-        $keywords = self::escapeXml($metaObj->keywords ?? "");
-        $description = self::escapeXml($metaObj->description ?? "");
-        $category = self::escapeXml($metaObj->category ?? "");
-        $language = self::escapeXml($metaObj->language ?? "en-US");
+        $title = Spread::escapeXml($metaObj->title ?? "");
+        $subject = Spread::escapeXml($metaObj->subject ?? "");
+        $creator = Spread::escapeXml($metaObj->creator ?? "");
+        $keywords = Spread::escapeXml($metaObj->keywords ?? "");
+        $description = Spread::escapeXml($metaObj->description ?? "");
+        $category = Spread::escapeXml($metaObj->category ?? "");
+        $language = Spread::escapeXml($metaObj->language ?? "en-US");
 
         return <<<XML
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -586,14 +591,14 @@ XML;
     private function genWorkbook(): string
     {
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-        $name = self::escapeXmlAttr($sheetVal);
+        $name = Spread::escapeXmlAttr($sheetVal);
         return <<<XML
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
     <fileVersion appName="LeKoala\Baresheet"/>
     <sheets>
-        <sheet name="$name" sheetId="1" state="visible" r:id="rId2"/>
+        <sheet name="$name" sheetId="1" state="visible" r:id="rId1"/>
     </sheets>
 </workbook>
 XML;
@@ -604,8 +609,8 @@ XML;
         return <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
     <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
 </Relationships>
 XML;
@@ -626,23 +631,5 @@ XML;
     <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
 </Types>
 XML;
-    }
-
-    /**
-     * Escape string for XML, stripping control chars (\x00-\x1F) except tab, LF, CR.
-     */
-    private static function escapeXml(string $str): string
-    {
-        $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
-        return str_replace(['&', '<', '>'], ['&amp;', '&lt;', '&gt;'], $str);
-    }
-
-    /**
-     * Escape string for XML attributes (includes quotes)
-     */
-    private static function escapeXmlAttr(string $str): string
-    {
-        $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
-        return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
     }
 }

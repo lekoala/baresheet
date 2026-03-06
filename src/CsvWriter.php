@@ -61,6 +61,7 @@ class CsvWriter implements WriterInterface
     public function writeFile(iterable $data, string $filename, ?Options $options = null): bool
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'csv');
 
         $stream = Spread::getOutputStream($filename);
         $this->writeInternal($stream, $data);
@@ -74,6 +75,7 @@ class CsvWriter implements WriterInterface
     public function output(iterable $data, string $filename, ?Options $options = null): void
     {
         $options?->applyTo($this);
+        $filename = Spread::ensureExtension($filename, 'csv');
 
         if ($this->stream) {
             $this->outputStream($data, $filename);
@@ -112,11 +114,17 @@ class CsvWriter implements WriterInterface
         } elseif ($this->bom instanceof Bom) {
             $bomToWrite = $this->bom;
         } elseif (is_string($this->bom) && $this->bom !== '') {
-            fputs($stream, $this->bom);
+            $result = fputs($stream, $this->bom);
+            if ($result === false) {
+                throw new RuntimeException("Failed to write BOM to stream");
+            }
         }
 
         if ($bomToWrite !== null) {
-            fputs($stream, $bomToWrite->value);
+            $result = fputs($stream, $bomToWrite->value);
+            if ($result === false) {
+                throw new RuntimeException("Failed to write BOM to stream");
+            }
 
             // If we are writing a non-UTF-8 BOM, we assume the user intends
             // the entire file to be encoded as such. We apply a stream filter
@@ -127,7 +135,10 @@ class CsvWriter implements WriterInterface
             }
         }
 
-        $separator = $this->separator === 'auto' ? ',' : $this->separator;
+        $separator = $this->separator;
+        if ($separator === "auto") {
+            $separator = ",";
+        }
         $escapeFormulas = $this->escapeFormulas;
         $outputEncoding = $this->outputEncoding;
 
@@ -140,7 +151,10 @@ class CsvWriter implements WriterInterface
                 $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
             }
             /** @var array<int|string, bool|float|int|string|null> $row */
-            fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+            $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+            if ($result === false) {
+                throw new RuntimeException("Failed to write headers to stream");
+            }
         }
 
         if ($outputEncoding === null || $outputEncoding === '') {

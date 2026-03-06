@@ -125,12 +125,13 @@ class Baresheet
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if (!$ext) {
             if (is_file($filename)) {
-                $header = file_get_contents($filename, false, null, 0, 8192);
+                $header = @file_get_contents($filename, false, null, 0, 8192);
                 if ($header !== false) {
                     return Spread::getExtensionForContent($header);
                 }
+                throw new Exception("Cannot determine format: file has no extension and content could not be read");
             }
-            throw new Exception("Cannot determine format: file has no extension");
+            throw new Exception("Cannot determine format: file has no extension and does not exist at '$filename'");
         }
         return $ext;
     }

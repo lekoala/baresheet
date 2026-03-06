@@ -138,6 +138,12 @@ class CsvReader implements ReaderInterface
                     $headers = array_map('strval', $line);
                     continue;
                 }
+                $colCount = count($line);
+                $expected = count($headers);
+                if ($colCount !== $expected) {
+                    $rowIdx = $count + 1;
+                    throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expected");
+                }
                 $line = array_combine($headers, $line);
             }
 

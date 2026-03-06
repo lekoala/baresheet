@@ -141,5 +141,44 @@ namespace LeKoala\Baresheet\Tests {
             $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/vnd.oasis.opendocument.spreadsheet'));
             $this->assertFalse($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Streamed output should not have Content-Length header');
         }
+
+        public function testAutoExtensions(): void
+        {
+            $data = [['A', 'B'], ['1', '2']];
+
+            // CSV
+            $writer = new CsvWriter();
+            ob_start();
+            $writer->output($data, 'test');
+            ob_end_clean();
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Disposition: attachment; filename="test.csv"'));
+            $GLOBALS['baresheet_mock_headers'] = [];
+
+            // XLSX
+            $writer = new XlsxWriter();
+            ob_start();
+            $writer->output($data, 'test');
+            ob_end_clean();
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Disposition: attachment; filename="test.xlsx"'));
+            $GLOBALS['baresheet_mock_headers'] = [];
+
+            // ODS
+            $writer = new OdsWriter();
+            ob_start();
+            $writer->output($data, 'test');
+            ob_end_clean();
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Disposition: attachment; filename="test.ods"'));
+            $GLOBALS['baresheet_mock_headers'] = [];
+
+            // Verify file system
+            $temp = sys_get_temp_dir() . '/bs_test_' . uniqid();
+            $writer = new XlsxWriter();
+            $writer->writeFile($data, $temp);
+            $this->assertFileExists($temp . '.xlsx');
+            unlink($temp . '.xlsx');
+        }
     }
 }

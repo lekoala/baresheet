@@ -34,8 +34,8 @@ class Spread
      */
     public static function getExtensionForContent(string $contents): string
     {
-        $header = strtoupper(substr(bin2hex($contents), 0, 8));
-        if ($header === '504B0304') {
+        // ZIP magic = PK \x03 \x04
+        if (str_starts_with($contents, "\x50\x4B\x03\x04")) {
             // ZIP file — check for ODS mimetype marker
             if (str_contains($contents, 'application/vnd.oasis.opendocument.spreadsheet')) {
                 return 'ods';
@@ -45,18 +45,6 @@ class Spread
         return 'csv';
     }
 
-    /**
-     * @param resource $stream
-     */
-    public static function getStreamContents($stream): string
-    {
-        rewind($stream);
-        $contents = stream_get_contents($stream);
-        if ($contents === false) {
-            $contents = "";
-        }
-        return $contents;
-    }
 
     /**
      * Uses php://temp with a 4 MB memory cap before spilling to disk.
@@ -99,8 +87,8 @@ class Spread
 
     public static function ensureExtension(string $filename, string $ext): string
     {
-        $fileExt = pathinfo($filename, PATHINFO_EXTENSION);
-        if ($fileExt != $ext) {
+        $fileExt = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if ($fileExt !== strtolower($ext)) {
             $filename .= ".$ext";
         }
         return $filename;
@@ -255,12 +243,14 @@ class Spread
             $props = self::zipGetData($zip, 'docProps/core.xml');
             if ($props) {
                 $matches = [];
-                preg_match_all("/<(?:dc|cp):([\w]*)>(.*)<\/(?:dc|cp):([\w]*)>/", $props, $matches);
-                $combine = array_combine($matches[1], $matches[2]);
-                if ($combine) {
-                    foreach (['title', 'subject', 'creator', 'description'] as $key) {
-                        if (isset($combine[$key])) {
-                            $arr['meta'][$key] = $combine[$key];
+                $res = preg_match_all("/<(?:dc|cp):([\w]*)>(.*)<\/(?:dc|cp):([\w]*)>/", $props, $matches);
+                if ($res !== false && $res > 0) {
+                    $combine = array_combine($matches[1], $matches[2]);
+                    if ($combine) {
+                        foreach (['title', 'subject', 'creator', 'description'] as $key) {
+                            if (isset($combine[$key])) {
+                                $arr['meta'][$key] = $combine[$key];
+                            }
                         }
                     }
                 }
@@ -437,5 +427,23 @@ class Spread
             return '$' . $r . '$' . ($row + 1);
         }
         return $r . ($row + 1);
+    }
+
+    /**
+     * Escape string for XML, stripping control chars (\x00-\x1F) except tab, LF, CR.
+     */
+    public static function escapeXml(string $str): string
+    {
+        $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
+        return str_replace(['&', '<', '>'], ['&amp;', '&lt;', '&gt;'], $str);
+    }
+
+    /**
+     * Escape string for XML attributes (includes quotes)
+     */
+    public static function escapeXmlAttr(string $str): string
+    {
+        $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
+        return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
     }
 }
