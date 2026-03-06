@@ -79,25 +79,37 @@ class CsvReader implements ReaderInterface
     private function parseStream($stream): Generator
     {
         // Auto-detect separator from first ~4KB before consuming the stream
+        // Read a sample for detection
+        $sample = fread($stream, 4096) ?: '';
+        rewind($stream);
+
+        // Auto-detect separator
         if ($this->separator === 'auto') {
-            $sample = fread($stream, 4096) ?: '';
-            rewind($stream);
             $this->separator = self::detectSeparator($sample);
         }
 
-        // Read up to 4 bytes to check for a BOM
-        $bomSample = fread($stream, 4) ?: '';
-        rewind($stream);
-        $this->inputBOM = Bom::tryFromSequence($bomSample);
+        // Check for a BOM in the sample
+        $this->inputBOM = Bom::tryFromSequence($sample);
 
         if ($this->inputBOM !== null) {
-            // Seek past the BOM, which varies in length
+            // Seek past the BOM
             fseek($stream, $this->inputBOM->length());
 
-            // If it's a UTF-16 or UTF-32 BOM, we MUST transcode the stream to UTF-8
-            // on the fly so fgetcsv can parse single-byte delimiters and newlines correctly.
+            // If it's not UTF-8, transcode the stream
             if (!$this->inputBOM->isUtf8()) {
-                stream_filter_append($stream, 'convert.iconv.' . $this->inputBOM->encoding() . '/UTF-8', STREAM_FILTER_READ);
+                $encoding = $this->inputBOM->encoding();
+                $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
+                if (!$filter) {
+                    throw new \RuntimeException("Failed to append iconv filter for encoding $encoding. Ensure iconv extension is enabled.");
+                }
+                // BOM takes precedence over manual encoding
+                $this->inputEncoding = null;
+            }
+        } elseif (($this->inputEncoding === null || $this->inputEncoding === 'auto') && $this->outputEncoding !== null) {
+            // Fallback detection if we need to convert but have no BOM
+            $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
+            if ($detected && $detected !== 'UTF-8') {
+                $this->inputEncoding = $detected;
             }
         }
 
@@ -113,7 +125,7 @@ class CsvReader implements ReaderInterface
             &&
             ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
         ) {
-            if ($this->skipEmptyLines && (count($line) === 1 && $line[0] === null)) {
+            if ($this->skipEmptyLines && ($line === [null] || $line === [])) {
                 continue;
             }
 
@@ -128,7 +140,8 @@ class CsvReader implements ReaderInterface
                 if ($expectedCols === null) {
                     $expectedCols = $colCount;
                 } elseif ($colCount !== $expectedCols) {
-                    throw new \RuntimeException("Row has $colCount columns, expected $expectedCols");
+                    $rowIdx = $count + 1;
+                    throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expectedCols. Potential malformed data or unclosed quote.");
                 }
             }
 
@@ -158,6 +171,11 @@ class CsvReader implements ReaderInterface
             if ($this->limit !== null && $yieldCount >= $this->limit) {
                 return;
             }
+        }
+
+        if (!feof($stream)) {
+            $rowIdx = $count + 1;
+            throw new \RuntimeException("Failed to parse CSV row $rowIdx. Potential malformed data or unclosed quote.");
         }
     }
 

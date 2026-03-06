@@ -137,35 +137,34 @@ $opts = new Options(
 $rows = Baresheet::read('data.csv', $opts);
 ```
 
-| Option           | Type             | Default  | Applies to               |
-|------------------|------------------|----------|--------------------------|
-| `assoc`          | bool             | `false`  | Read (All)               |
-| `strict`         | bool             | `false`  | Read (CSV, XLSX, ODS)    |
-| `stream`         | bool             | `true`   | Output (Any). If `true`, uses streaming. If `false`, buffers to send `Content-Length`. |
-| `limit`          | ?int             | `null`   | Read (All)               |
-| `offset`         | int              | `0`      | Read (All)               |
-| `skipEmptyLines` | bool             | `true`   | Read (All)               |
-| `headers`        | string[]         | `[]`     | Write (All), Read (CSV)  |
-| `separator`      | string           | `"auto"` | Read (CSV)               |
-| `enclosure`      | string           | `"`      | Read (CSV)               |
-| `escape`         | string           | `""`     | Read (CSV)               |
-| `eol`            | string           | `\n`     | Write (CSV)              |
-| `inputEncoding`  | ?string          | `null`   | Read (CSV)               |
-| `outputEncoding` | ?string          | `null`   | Read (CSV)               |
-| `bom`            | bool\|string\|Bom| `true`   | Write (CSV)              |
-| `escapeFormulas` | bool             | `false`  | Write (CSV)              |
-| `meta`           | array/Meta       | `null`   | Write (XLSX, ODS)        |
-| `autofilter`     | ?string          | `null`   | Write (XLSX)             |
-| `freezePane`     | ?string          | `null`   | Write (XLSX)             |
-| `sheet`          | string/int       | `null`   | Read/Write (XLSX, ODS)   |
-| `boldHeaders`    | bool             | `false`  | Write (XLSX, ODS)        |
-| `tempPath`       | ?string          | `null`   | Any (Temp files location)|
-| `sharedStrings`  | bool             | `false`  | Write (XLSX)             |
-| `autoWidth`      | bool             | `false`  | Write (XLSX)             |
+| Option           | Type              | Default  | Applies to                                                                             |
+|------------------|-------------------|----------|----------------------------------------------------------------------------------------|
+| `assoc`          | bool              | `false`  | Read (All)                                                                             |
+| `strict`         | bool              | `false`  | Read (CSV, XLSX, ODS)                                                                  |
+| `stream`         | bool              | `true`   | Output (Any). If `true`, uses streaming. If `false`, buffers to send `Content-Length`. |
+| `limit`          | ?int              | `null`   | Read (All)                                                                             |
+| `offset`         | int               | `0`      | Read (All)                                                                             |
+| `skipEmptyLines` | bool              | `true`   | Read (All)                                                                             |
+| `headers`        | string[]          | `[]`     | Write (All), Read (CSV)                                                                |
+| `separator`      | string            | `"auto"` | Read (CSV)                                                                             |
+| `enclosure`      | string            | `"`      | Read (CSV)                                                                             |
+| `escape`         | string            | `""`     | Read (CSV)                                                                             |
+| `eol`            | string            | `\n`     | Write (CSV)                                                                            |
+| `inputEncoding`  | ?string           | `null`   | Read (CSV)                                                                             |
+| `outputEncoding` | ?string           | `null`   | Read (CSV)                                                                             |
+| `bom`            | bool\|string\|Bom | `true`   | Write (CSV)                                                                            |
+| `escapeFormulas` | bool              | `false`  | Write (CSV)                                                                            |
+| `meta`           | array/Meta        | `null`   | Write (XLSX, ODS)                                                                      |
+| `autofilter`     | ?string           | `null`   | Write (XLSX)                                                                           |
+| `freezePane`     | ?string           | `null`   | Write (XLSX)                                                                           |
+| `sheet`          | string/int        | `null`   | Read/Write (XLSX, ODS)                                                                 |
+| `boldHeaders`    | bool              | `false`  | Write (XLSX, ODS)                                                                      |
+| `tempPath`       | ?string           | `null`   | Any (Temp files location)                                                              |
+| `sharedStrings`  | bool              | `false`  | Write (XLSX)                                                                           |
+| `autoWidth`      | bool              | `false`  | Write (XLSX)                                                                           |
 
 > [!important]
 > **Behavioral Change**: From version 2.x, `output()` defaults to **streaming** (`stream: true`). This is more efficient but means no `Content-Length` header is sent. Set `stream: false` if you need a progress bar for downloads.
-
 
 ## Streaming Output
 
