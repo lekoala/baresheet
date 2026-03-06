@@ -113,7 +113,7 @@ ensureFileExists($largeOds, 'ods');
  */
 function measureMemory(string $key, string $file): float
 {
-    $cmd = PHP_BINARY . ' ' . escapeshellarg(__FILE__) . ' --memory ' . $key . ' ' . escapeshellarg($file);
+    $cmd = PHP_BINARY . ' ' . escapeshellarg(__FILE__) . ' --memory ' . escapeshellarg($key) . ' ' . escapeshellarg($file);
     $bytes = (int) trim((string) shell_exec($cmd));
     return $bytes / 1024 / 1024;
 }
