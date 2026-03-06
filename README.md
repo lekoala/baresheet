@@ -86,7 +86,7 @@ $writer->writeFile($data, 'report.xlsx');
 - **Auto delimiter detection** — analyzes a sample to pick the best separator (default: `auto`)
 - **BOM handling** — detects and natively transcodes UTF-8/16/32 BOM sequences on the fly via stream filters
 - **Formula injection protection** — `escapeFormulas: true` (opt-in security flag, see Security section)
-- **RFC 4180 compliant** — handles enclosures and escapes according to standard behavior
+- **RFC 4180 compliant** — handles enclosures, double-quote escaping, and **CRLF (`\r\n`)** line endings by default for maximum interoperability.
 - **Stream reading** — `readStream()` for reading from any PHP resource
 
 ### XLSX
@@ -149,7 +149,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `separator`      | string            | `"auto"` | Read (CSV)                                                                             |
 | `enclosure`      | string            | `"`      | Read (CSV)                                                                             |
 | `escape`         | string            | `""`     | Read (CSV)                                                                             |
-| `eol`            | string            | `\n`     | Write (CSV)                                                                            |
+| `eol`            | string            | `\r\n`   | Write (CSV)                                                                            |
 | `inputEncoding`  | ?string           | `null`   | Read (CSV)                                                                             |
 | `outputEncoding` | ?string           | `null`   | Read (CSV)                                                                             |
 | `bom`            | bool\|string\|Bom | `true`   | Write (CSV)                                                                            |

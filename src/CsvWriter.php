@@ -15,7 +15,7 @@ class CsvWriter implements WriterInterface
     public string $separator = ",";
     public string $enclosure = "\"";
     public string $escape = "";
-    public string $eol = "\n";
+    public string $eol = "\r\n";
     public bool|Bom|string $bom = true;
     public bool $stream = true;
     public bool $escapeFormulas = false;

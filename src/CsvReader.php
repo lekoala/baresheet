@@ -22,6 +22,7 @@ class CsvReader implements ReaderInterface
     public string $separator = "auto";
     public string $enclosure = "\"";
     public string $escape = "";
+    public string $eol = "\r\n";
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
 
@@ -125,7 +126,8 @@ class CsvReader implements ReaderInterface
             &&
             ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
         ) {
-            if ($this->skipEmptyLines && ($line === [null] || $line === [])) {
+            // fgetcsv returns [null] for blank lines.
+            if ($this->skipEmptyLines && $line === [null]) {
                 continue;
             }
 

@@ -63,7 +63,7 @@ class OptionsTest extends TestCase
 
         // PHP's fputcsv uses RFC-4180 enclosure doubling ('' instead of \'), regardless of escape char.
         // Expected: 'I''m a "test"'
-        $expected = "'I''m a \"test\"'\n";
+        $expected = "'I''m a \"test\"'\r\n";
         self::assertEquals($expected, $csv);
 
         $reader = new CsvReader();

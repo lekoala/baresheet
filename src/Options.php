@@ -41,7 +41,7 @@ class Options
         /** @var string The escape character for CSV fields. */
         public string $escape = "",
         /** @var string The end-of-line character sequence for CSV files. */
-        public string $eol = "\n",
+        public string $eol = "\r\n",
         /** @var ?string Source encoding for reading CSV files. */
         public ?string $inputEncoding = null,
         /** @var ?string Target encoding for writing CSV files. */
