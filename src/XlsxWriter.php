@@ -66,8 +66,11 @@ class XlsxWriter implements WriterInterface
             $this->buildFile($data, $tempFilename);
             $tmpStream = fopen($tempFilename, 'r');
             if ($tmpStream) {
-                stream_copy_to_stream($tmpStream, $stream);
+                $result = stream_copy_to_stream($tmpStream, $stream);
                 fclose($tmpStream);
+                if ($result === false) {
+                    throw new Exception("Failed to copy temp file to stream");
+                }
             }
             unlink($tempFilename);
         }

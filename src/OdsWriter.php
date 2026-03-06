@@ -73,8 +73,11 @@ class OdsWriter implements WriterInterface
             $this->buildFile($data, $tempFilename);
             $tmpStream = fopen($tempFilename, 'r');
             if ($tmpStream) {
-                stream_copy_to_stream($tmpStream, $stream);
+                $result = stream_copy_to_stream($tmpStream, $stream);
                 fclose($tmpStream);
+                if ($result === false) {
+                    throw new Exception("Failed to copy temp file to stream");
+                }
             }
             unlink($tempFilename);
         }
@@ -258,11 +261,9 @@ class OdsWriter implements WriterInterface
         // Styles block (mandatory for some readers like OpenSpout)
         fwrite($fd, '<office:automatic-styles>');
         fwrite($fd, '<style:style style:name="ta1" style:family="table"/>');
-        if ($this->boldHeaders) {
-            fwrite($fd, '<style:style style:name="bold" style:family="table-cell">'
-                . '<style:text-properties fo:font-weight="bold"/>'
-                . '</style:style>');
-        }
+        fwrite($fd, '<style:style style:name="bold" style:family="table-cell">');
+        fwrite($fd, '<style:text-properties fo:font-weight="bold"/>');
+        fwrite($fd, '</style:style>');
         fwrite($fd, '</office:automatic-styles>');
 
         fwrite($fd, '<office:body><office:spreadsheet>');

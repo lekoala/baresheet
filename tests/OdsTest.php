@@ -279,4 +279,46 @@ class OdsTest extends TestCase
         // large.ods has '1' in first data row, '2' in second
         self::assertEquals('2', $data[0][0]);
     }
+
+    public function testStylesAreAlwaysDefined(): void
+    {
+        $writer = new OdsWriter();
+        // boldHeaders is false by default
+        $output = $writer->writeString([["test"]]);
+
+        $tempFile = sys_get_temp_dir() . '/test_styles_' . time() . '.ods';
+        file_put_contents($tempFile, $output);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $content = $zip->getFromName('content.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        self::assertStringContainsString('<style:style style:name="ta1" style:family="table"/>', $content);
+        self::assertStringContainsString('<style:style style:name="bold" style:family="table-cell">', $content);
+        self::assertStringContainsString('<style:text-properties fo:font-weight="bold"/>', $content);
+        self::assertStringContainsString('</style:style>', $content);
+    }
+
+    public function testBoldHeadersReferenceBoldStyle(): void
+    {
+        $writer = new OdsWriter();
+        $writer->boldHeaders = true;
+        $output = $writer->writeString([["Header"], ["Value"]]);
+
+        $tempFile = sys_get_temp_dir() . '/test_bold_ref_' . time() . '.ods';
+        file_put_contents($tempFile, $output);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $content = $zip->getFromName('content.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        // First row should have the bold style
+        self::assertStringContainsString('<table:table-cell table:style-name="bold" office:value-type="string"><text:p>Header</text:p></table:table-cell>', $content);
+        // Second row should NOT have the bold style
+        self::assertStringContainsString('<table:table-cell office:value-type="string"><text:p>Value</text:p></table:table-cell>', $content);
+    }
 }

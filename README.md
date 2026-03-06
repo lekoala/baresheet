@@ -141,7 +141,7 @@ $rows = Baresheet::read('data.csv', $opts);
 |------------------|------------------|----------|--------------------------|
 | `assoc`          | bool             | `false`  | Read (All)               |
 | `strict`         | bool             | `false`  | Read (CSV, XLSX, ODS)    |
-| `stream`         | bool             | `true`   | Output (Any)             |
+| `stream`         | bool             | `true`   | Output (Any). If `true`, uses streaming. If `false`, buffers to send `Content-Length`. |
 | `limit`          | ?int             | `null`   | Read (All)               |
 | `offset`         | int              | `0`      | Read (All)               |
 | `skipEmptyLines` | bool             | `true`   | Read (All)               |
@@ -162,6 +162,10 @@ $rows = Baresheet::read('data.csv', $opts);
 | `tempPath`       | ?string          | `null`   | Any (Temp files location)|
 | `sharedStrings`  | bool             | `false`  | Write (XLSX)             |
 | `autoWidth`      | bool             | `false`  | Write (XLSX)             |
+
+> [!important]
+> **Behavioral Change**: From version 2.x, `output()` defaults to **streaming** (`stream: true`). This is more efficient but means no `Content-Length` header is sent. Set `stream: false` if you need a progress bar for downloads.
+
 
 ## Streaming Output
 
