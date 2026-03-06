@@ -59,7 +59,10 @@ class Psr7Test extends TestCase
     {
         // Force fallback by using a class that returns false for canStream
         $writer = new class extends XlsxWriter {
-            protected function canStream(): bool { return false; }
+            protected function canStream(): bool
+            {
+                return false;
+            }
         };
         $stream = $writer->writeStream([
             ["Hello", "World"]
@@ -72,7 +75,10 @@ class Psr7Test extends TestCase
     {
         // Force fallback by using a class that returns false for canStream
         $writer = new class extends OdsWriter {
-            protected function canStream(): bool { return false; }
+            protected function canStream(): bool
+            {
+                return false;
+            }
         };
         $stream = $writer->writeStream([
             ["Hello", "World"]

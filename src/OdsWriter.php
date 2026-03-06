@@ -164,7 +164,7 @@ class OdsWriter implements WriterInterface
         $zip->finish();
     }
 
-    private function canStream(): bool
+    protected function canStream(): bool
     {
         return class_exists(\ZipStream\ZipStream::class);
     }

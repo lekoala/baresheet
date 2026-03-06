@@ -190,7 +190,7 @@ class XlsxWriter implements WriterInterface
         $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
     }
 
-    private function canStream(): bool
+    protected function canStream(): bool
     {
         return class_exists(\ZipStream\ZipStream::class);
     }
