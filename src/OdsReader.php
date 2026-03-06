@@ -13,6 +13,10 @@ use ZipArchive;
  */
 class OdsReader implements ReaderInterface
 {
+    private const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+    private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
+    private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
+
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
@@ -24,10 +28,6 @@ class OdsReader implements ReaderInterface
     {
         $options?->applyTo($this);
     }
-
-    private const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
-    private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
-    private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
     /**
      * @return Generator<mixed>

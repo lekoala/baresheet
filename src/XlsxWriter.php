@@ -14,6 +14,7 @@ use ZipArchive;
 class XlsxWriter implements WriterInterface
 {
     public const MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    private const BUFFER_SIZE = 1000;
 
     /**
      * @var Meta|array<string, mixed>|null Optional metadata for the generated document.
@@ -36,8 +37,6 @@ class XlsxWriter implements WriterInterface
     {
         $options?->applyTo($this);
     }
-
-    private const BUFFER_SIZE = 1000;
 
     // -- Write API --
 
