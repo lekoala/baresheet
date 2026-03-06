@@ -12,6 +12,8 @@ use LeKoala\Baresheet\Bom;
  */
 class CsvWriter implements WriterInterface
 {
+    public const MIMETYPE = 'text/csv';
+
     public string $separator = ",";
     public string $enclosure = "\"";
     public string $escape = "";
@@ -83,7 +85,7 @@ class CsvWriter implements WriterInterface
         }
 
         $content = $this->writeString($data);
-        Spread::outputHeaders('text/csv', $filename, strlen($content));
+        Spread::outputHeaders(self::MIMETYPE, $filename, strlen($content));
         echo $content;
     }
 
@@ -94,7 +96,7 @@ class CsvWriter implements WriterInterface
     {
         $options?->applyTo($this);
 
-        Spread::outputHeaders('text/csv', $filename);
+        Spread::outputHeaders(self::MIMETYPE, $filename);
         $stream = Spread::getOutputStream();
         $this->writeInternal($stream, $data);
         fclose($stream);

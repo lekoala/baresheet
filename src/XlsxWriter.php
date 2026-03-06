@@ -601,8 +601,8 @@ XML;
     {
         $sharedStrings = $this->sharedStrings
             ? '    <Relationship Id="rId3" '
-                . 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
-                . 'Target="sharedStrings.xml"/>'
+            . 'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" '
+            . 'Target="sharedStrings.xml"/>'
             : '';
         return <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
@@ -618,7 +618,7 @@ XML;
     {
         $sharedStrings = $this->sharedStrings
             ? '    <Override PartName="/xl/sharedStrings.xml" '
-                . 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
+            . 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
             : '';
         return <<<XML
 <?xml version="1.0" encoding="UTF-8"?>

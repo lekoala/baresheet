@@ -32,7 +32,7 @@ class OdsWriter implements WriterInterface
     }
 
     private const BUFFER_SIZE = 1000;
-    private const MIMETYPE = 'application/vnd.oasis.opendocument.spreadsheet';
+    public const MIMETYPE = 'application/vnd.oasis.opendocument.spreadsheet';
 
     // -- Write API --
 
