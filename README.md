@@ -9,6 +9,8 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 - PHP 8.1+
 - `ext-zip` (for XLSX and ODS)
 - `ext-simplexml` (for XLSX and ODS)
+- `ext-mbstring` (for encoding support)
+- `ext-iconv` (for CSV BOM support)
 
 ## Installation
 
@@ -38,7 +40,7 @@ $csv = Baresheet::writeString($data, 'csv');
 $xlsx = Baresheet::writeString($data, 'xlsx');
 $ods = Baresheet::writeString($data, 'ods');
 
-// Write to stream (PSR-7 Responses)
+// Write to PHP resource (for PSR-7 or Laravel Responses)
 $stream = Baresheet::writeStream($data, 'xlsx');
 
 // Stream as download (sends HTTP headers)
@@ -163,9 +165,6 @@ $rows = Baresheet::read('data.csv', $opts);
 | `sharedStrings`  | bool              | `false`  | Write (XLSX)                                                                           |
 | `autoWidth`      | bool              | `false`  | Write (XLSX)                                                                           |
 
-> [!important]
-> **Behavioral Change**: From version 2.x, `output()` defaults to **streaming** (`stream: true`). This is more efficient but means no `Content-Length` header is sent. Set `stream: false` if you need a progress bar for downloads.
-
 ## Streaming Output
 
 For large files, streaming avoids writing a temporary file to disk. **Baresheet streams `output()` by default.**
@@ -197,6 +196,8 @@ To avoid breaking the flow of your application or sending explicit `header()` ca
 
 Use the `writeStream()` method to generate the spreadsheet as a memory-capped `php://temp` stream resource, and feed it into your Response class:
 
+### Symfony / Laravel (StreamedResponse)
+
 ```php
 use LeKoala\Baresheet\XlsxWriter;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -211,6 +212,18 @@ return new StreamedResponse(function () use ($stream) {
     'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition' => 'attachment; filename="report.xlsx"',
 ]);
+```
+
+### PSR-7 (Guzzle, Nyholm, etc.)
+
+```php
+$stream = Baresheet::writeStream($data, 'xlsx');
+$body = new \GuzzleHttp\Psr7\Stream($stream); // wrap the native resource
+
+return $response
+    ->withHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    ->withHeader('Content-Disposition', 'attachment; filename="report.xlsx"')
+    ->withBody($body);
 ```
 
 ## Performance
