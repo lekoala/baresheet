@@ -370,38 +370,39 @@ class XlsxWriter implements WriterInterface
                 $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
 
                 // Cell generation logic
-                $vl = 0;
                 if ($value instanceof DateTimeInterface) {
-                    $value = Spread::dateToExcel($value);
-                    $c .= '<c r="' . $cn . '" t="n" s="1"><v>' . $value . '</v></c>';
+                    $excelDate = Spread::dateToExcel($value);
+                    $c .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                     $vl = 16;
-                } elseif (!is_scalar($value) || $value === '') {
+                } elseif ($value === null || $value === '' || (!is_scalar($value) && !($value instanceof \Stringable))) { // @phpstan-ignore-line
                     $c .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
-                } elseif (
-                    !is_string($value)
-                    || $value === '0'
-                    || (isset($value[0]) && $value[0] !== '0' && ctype_digit($value))
-                    || preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", (string)$value)
-                ) {
-                    $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $value . '</v></c>';
-                    $vl = mb_strlen((string)$value);
                 } else {
-                    $escaped = Spread::escapeXml((string)$value);
-                    if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
-                        $skey = '~' . $escaped;
-                        if (isset($sharedStringKeys[$skey])) {
-                            $ssIdx = $sharedStringKeys[$skey];
-                        } else {
-                            $sharedStrings[] = $escaped;
-                            $ssIdx = count($sharedStrings) - 1;
-                            $sharedStringKeys[$skey] = $ssIdx;
-                        }
-                        $c .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                    $strValue = (string)$value;
+                    $vl = mb_strlen($strValue);
+                    if (
+                        !is_string($value)
+                        || $value === '0'
+                        || (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue))
+                        || (is_numeric($value) && preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue))
+                    ) {
+                        $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                     } else {
-                        $c .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
+                        $escaped = Spread::escapeXml($strValue);
+                        if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
+                            $skey = '~' . $escaped;
+                            if (isset($sharedStringKeys[$skey])) {
+                                $ssIdx = $sharedStringKeys[$skey];
+                            } else {
+                                $sharedStrings[] = $escaped;
+                                $ssIdx = count($sharedStrings) - 1;
+                                $sharedStringKeys[$skey] = $ssIdx;
+                            }
+                            $c .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                        } else {
+                            $c .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
+                        }
                     }
-                    $vl = mb_strlen((string)$value);
                 }
                 $c .= "\r\n";
 
@@ -431,8 +432,12 @@ class XlsxWriter implements WriterInterface
 
         // Autofilter
         if ($this->autofilter) {
-            $escapedFilter = Spread::escapeXmlAttr($this->autofilter);
-            $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
+            $autofilter = $this->autofilter;
+            // Basic validation for coordinate range (e.g. A1:B10)
+            if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
+                $escapedFilter = Spread::escapeXmlAttr($autofilter);
+                $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
+            }
         }
 
         $footer .= '</worksheet>';

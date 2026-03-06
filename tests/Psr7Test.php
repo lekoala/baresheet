@@ -55,6 +55,7 @@ class Psr7Test extends TestCase
 
         $this->assertValidStream($stream, 'ods');
     }
+
     public function testXlsxFallbackWriteStream(): void
     {
         // Force fallback by using a class that returns false for canStream

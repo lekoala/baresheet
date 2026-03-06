@@ -81,9 +81,10 @@ class SecurityTest extends TestCase
         $this->assertIsString($workbookXml);
         $this->assertIsString($sheetXml);
 
-        // Check that the double quote was escaped to &quot;
+        // Check that the double quote was escaped to &quot; in Sheet name
         $this->assertStringContainsString('name="Evil&quot;Sheet"', $workbookXml);
-        $this->assertStringContainsString('ref="A1:B2&quot; evilattr=&quot;true"', $sheetXml);
+        // Check that the invalid autofilter was OMITTED due to validation
+        $this->assertStringNotContainsString('<autoFilter', $sheetXml);
 
         unlink($tempFile);
     }

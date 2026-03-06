@@ -245,7 +245,7 @@ class OdsWriter implements WriterInterface
         }
 
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-        $sheetName = htmlspecialchars($sheetVal, ENT_XML1, 'UTF-8');
+        $sheetName = Spread::escapeXmlAttr($sheetVal);
 
         fwrite($fd, '<?xml version="1.0" encoding="UTF-8"?>' . "\n");
         fwrite($fd, '<office:document-content'
@@ -383,9 +383,9 @@ XML;
     private function genMeta(): string
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
-        $creator = htmlspecialchars($metaObj->creator ?? "", ENT_XML1, 'UTF-8');
+        $creator = Spread::escapeXml($metaObj->creator ?? "");
         $titleVal = $metaObj?->title;
-        $title = $titleVal ? '<dc:title>' . htmlspecialchars($titleVal, ENT_XML1, 'UTF-8') . '</dc:title>' : '';
+        $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal) . '</dc:title>' : '';
         $date = date('Y-m-d\TH:i:s');
 
         return <<<XML
