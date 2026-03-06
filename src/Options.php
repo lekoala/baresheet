@@ -22,7 +22,7 @@ class Options
         /**
          * @var bool If true, writers stream the output directly to stdout instead of buffering.
          */
-        public bool $stream = false,
+        public bool $stream = true,
         /**
          * @var string[] Predefined headers to use for reading or writing.
          */

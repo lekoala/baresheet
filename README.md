@@ -38,7 +38,10 @@ $csv = Baresheet::writeString($data, 'csv');
 $xlsx = Baresheet::writeString($data, 'xlsx');
 $ods = Baresheet::writeString($data, 'ods');
 
-// Stream as download
+// Write to stream (PSR-7 Responses)
+$stream = Baresheet::writeStream($data, 'xlsx');
+
+// Stream as download (sends HTTP headers)
 Baresheet::output($data, 'report.xlsx');
 ```
 
@@ -138,7 +141,7 @@ $rows = Baresheet::read('data.csv', $opts);
 |------------------|------------------|----------|--------------------------|
 | `assoc`          | bool             | `false`  | Read (All)               |
 | `strict`         | bool             | `false`  | Read (CSV, XLSX, ODS)    |
-| `stream`         | bool             | `false`  | Output (Any)             |
+| `stream`         | bool             | `true`   | Output (Any)             |
 | `limit`          | ?int             | `null`   | Read (All)               |
 | `offset`         | int              | `0`      | Read (All)               |
 | `skipEmptyLines` | bool             | `true`   | Read (All)               |
@@ -162,28 +165,50 @@ $rows = Baresheet::read('data.csv', $opts);
 
 ## Streaming Output
 
-For large XLSX or ODS files, streaming avoids writing a temporary file to disk.
+For large files, streaming avoids writing a temporary file to disk. **Baresheet streams `output()` by default.**
 
 However, keep in mind that **streaming changes how data is sent to the browser**. Because the total file size is unknown before the transfer starts, the server cannot send a `Content-Length` header. This means the browser download will not display a progress bar or an estimated time of completion.
 
-To enable streaming for XLSX or ODS, install the optional dependency:
+To bypass streaming and force buffering, use `stream: false` with `output()`. Baresheet will buffer the file (either in memory for CSV, or via a temporary zip file for XLSX/ODS) to precisely calculate and send the `Content-Length` header along with it.
+
+> **Note on XLSX/ODS:** Streaming requires an optional dependency. Install it with:
 
 ```bash
 composer require maennchen/zipstream-php
 ```
 
-Then use `stream: true` with `output()`:
+If the `zipstream-php` dependency is missing, Baresheet will seamlessly and automatically fall back to buffered output.
 
 ```php
 $writer = new XlsxWriter();
-$writer->stream = true;
+$writer->stream = false;
 $writer->output($data, 'report.xlsx');
 
 // or via Options
-Baresheet::output($data, 'report.xlsx', new Options(stream: true));
+Baresheet::output($data, 'report.xlsx', new Options(stream: false));
 ```
 
-> Note: CSV `output()` natively writes directly to `php://output` as rows are processed.
+## PSR-7 / Response Objects (Symfony, Laravel)
+
+To avoid breaking the flow of your application or sending explicit `header()` calls directly, you should create a Response object when applicable in your framework.
+
+Use the `writeStream()` method to generate the spreadsheet as a memory-capped `php://temp` stream resource, and feed it into your Response class:
+
+```php
+use LeKoala\Baresheet\XlsxWriter;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+$writer = new XlsxWriter();
+$stream = $writer->writeStream($data);
+
+return new StreamedResponse(function () use ($stream) {
+    fpassthru($stream);
+    fclose($stream);
+}, 200, [
+    'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition' => 'attachment; filename="report.xlsx"',
+]);
+```
 
 ## Performance
 

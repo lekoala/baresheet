@@ -17,7 +17,7 @@ class CsvWriter implements WriterInterface
     public string $escape = "";
     public string $eol = "\n";
     public bool|Bom|string $bom = true;
-    public bool $stream = false;
+    public bool $stream = true;
     public bool $escapeFormulas = false;
     public ?string $outputEncoding = null;
     /**
@@ -32,16 +32,27 @@ class CsvWriter implements WriterInterface
 
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
-    public function writeString(iterable $data, ?Options $options = null): string
+    public function writeStream(iterable $data, ?Options $options = null)
     {
         $options?->applyTo($this);
 
         $stream = Spread::getMaxMemTempStream();
         $this->writeInternal($stream, $data);
-        $contents = Spread::getStreamContents($stream);
+        rewind($stream);
+        return $stream;
+    }
+
+    /**
+     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     */
+    public function writeString(iterable $data, ?Options $options = null): string
+    {
+        $stream = $this->writeStream($data, $options);
+        $contents = stream_get_contents($stream);
         fclose($stream);
-        return $contents;
+        return $contents !== false ? $contents : '';
     }
 
     /**
@@ -64,10 +75,14 @@ class CsvWriter implements WriterInterface
     {
         $options?->applyTo($this);
 
-        Spread::outputHeaders('text/csv', $filename);
-        $stream = Spread::getOutputStream();
-        $this->writeInternal($stream, $data);
-        fclose($stream);
+        if ($this->stream) {
+            $this->outputStream($data, $filename);
+            return;
+        }
+
+        $content = $this->writeString($data);
+        Spread::outputHeaders('text/csv', $filename, strlen($content));
+        echo $content;
     }
 
     /**
@@ -77,6 +92,7 @@ class CsvWriter implements WriterInterface
     {
         $options?->applyTo($this);
 
+        Spread::outputHeaders('text/csv', $filename);
         $stream = Spread::getOutputStream();
         $this->writeInternal($stream, $data);
         fclose($stream);

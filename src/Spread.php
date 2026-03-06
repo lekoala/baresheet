@@ -106,7 +106,7 @@ class Spread
         return $filename;
     }
 
-    public static function outputHeaders(string $contentType, string $filename): void
+    public static function outputHeaders(string $contentType, string $filename, ?int $size = null): void
     {
         if (headers_sent()) {
             throw new RuntimeException("Headers already sent");
@@ -120,6 +120,10 @@ class Spread
         );
         header('Cache-Control: max-age=0');
         header('Pragma: public');
+
+        if ($size !== null && $size > 0) {
+            header('Content-Length: ' . $size);
+        }
     }
 
     /**

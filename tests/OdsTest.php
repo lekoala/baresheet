@@ -42,7 +42,8 @@ class OdsTest extends TestCase
             ["hello", "world"]
         ]);
 
-        self::assertStringContainsString('mimetypeapplication/vnd.oasis.opendocument.spreadsheet', $output);
+        $ext = \LeKoala\Baresheet\Spread::getExtensionForContent($output);
+        self::assertEquals('ods', $ext);
     }
 
     public function testAssocMode(): void

@@ -58,6 +58,19 @@ class Baresheet
     }
 
     /**
+     * Write data to a stream. Extension is required.
+     *
+     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param string $ext  'csv', 'xlsx', or 'ods'
+     * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
+     */
+    public static function writeStream(iterable $data, string $ext, ?Options $options = null)
+    {
+        $writer = self::getWriter($ext);
+        return $writer->writeStream($data, $options);
+    }
+
+    /**
      * Write data to a string. Extension is required.
      *
      * @param iterable<array<float|int|string|\Stringable|null>> $data

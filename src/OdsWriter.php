@@ -19,7 +19,7 @@ class OdsWriter implements WriterInterface
     public Meta|array|null $meta = null;
     public string|int|null $sheet = null;
     public bool $boldHeaders = false;
-    public bool $stream = false;
+    public bool $stream = true;
     public ?string $tempPath = null;
     /**
      * @var string[]
@@ -38,19 +38,60 @@ class OdsWriter implements WriterInterface
 
     /**
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
-    public function writeString(iterable $data, ?Options $options = null): string
+    public function writeStream(iterable $data, ?Options $options = null)
     {
         $options?->applyTo($this);
 
-        $filename = Spread::getTempFilename();
-        $this->buildFile($data, $filename);
-        $contents = file_get_contents($filename);
-        if (!$contents) {
-            $contents = "";
+        $stream = Spread::getMaxMemTempStream();
+
+        if ($this->canStream()) {
+            $zip = new \ZipStream\ZipStream(
+                outputStream: $stream,
+                sendHttpHeaders: false,
+            );
+
+            // mimetype must be first and stored uncompressed
+            $zip->addFile(
+                fileName: 'mimetype',
+                data: self::MIMETYPE,
+                compressionMethod: \ZipStream\CompressionMethod::STORE,
+            );
+            $zip->addFile(fileName: 'META-INF/manifest.xml', data: $this->genManifest());
+            $zip->addFile(fileName: 'meta.xml', data: $this->genMeta());
+            $zip->addFile(fileName: 'styles.xml', data: $this->genStyles());
+
+            $contentStream = $this->genContent($data);
+            rewind($contentStream);
+            $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
+
+            $zip->finish();
+        } else {
+            // Buffer to temp file, then copy to stream
+            $tempFilename = Spread::getTempFilename();
+            $this->buildFile($data, $tempFilename);
+            $tmpStream = fopen($tempFilename, 'r');
+            if ($tmpStream) {
+                stream_copy_to_stream($tmpStream, $stream);
+                fclose($tmpStream);
+            }
+            unlink($tempFilename);
         }
-        unlink($filename);
-        return $contents;
+
+        rewind($stream);
+        return $stream;
+    }
+
+    /**
+     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     */
+    public function writeString(iterable $data, ?Options $options = null): string
+    {
+        $stream = $this->writeStream($data, $options);
+        $contents = stream_get_contents($stream);
+        fclose($stream);
+        return $contents !== false ? $contents : '';
     }
 
     /**
@@ -69,15 +110,17 @@ class OdsWriter implements WriterInterface
     {
         $options?->applyTo($this);
 
-        Spread::outputHeaders(self::MIMETYPE, $filename);
-
-        if ($this->stream) {
+        if ($this->stream && $this->canStream()) {
             $this->outputStream($data, $filename);
             return;
         }
 
         $tempFilename = Spread::getTempFilename();
         $this->buildFile($data, $tempFilename);
+
+        $size = filesize($tempFilename);
+        Spread::outputHeaders(self::MIMETYPE, $filename, $size !== false ? $size : null);
+
         readfile($tempFilename);
         unlink($tempFilename);
     }
@@ -99,6 +142,8 @@ class OdsWriter implements WriterInterface
             );
         }
 
+        Spread::outputHeaders(self::MIMETYPE, $filename);
+
         $zip = new \ZipStream\ZipStream(
             sendHttpHeaders: false,
         );
@@ -118,6 +163,11 @@ class OdsWriter implements WriterInterface
         $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
 
         $zip->finish();
+    }
+
+    private function canStream(): bool
+    {
+        return class_exists(\ZipStream\ZipStream::class);
     }
 
     // -- Internal --

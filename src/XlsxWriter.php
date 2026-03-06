@@ -13,6 +13,8 @@ use ZipArchive;
  */
 class XlsxWriter implements WriterInterface
 {
+    public const MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
     /**
      * @var Meta|array<string, mixed>|null Optional metadata for the generated document.
      */
@@ -21,7 +23,7 @@ class XlsxWriter implements WriterInterface
     public ?string $freezePane = null;
     public string|int|null $sheet = null;
     public bool $boldHeaders = false;
-    public bool $stream = false;
+    public bool $stream = true;
     public bool $sharedStrings = false;
     public bool $autoWidth = false;
     public ?string $tempPath = null;
@@ -41,19 +43,48 @@ class XlsxWriter implements WriterInterface
 
     /**
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
-    public function writeString(iterable $data, ?Options $options = null): string
+    public function writeStream(iterable $data, ?Options $options = null)
     {
         $options?->applyTo($this);
 
-        $filename = Spread::getTempFilename();
-        $this->buildFile($data, $filename);
-        $contents = file_get_contents($filename);
-        if (!$contents) {
-            $contents = "";
+        $stream = Spread::getMaxMemTempStream();
+
+        if ($this->canStream()) {
+            $zip = new \ZipStream\ZipStream(
+                outputStream: $stream,
+                sendHttpHeaders: false,
+            );
+
+            $this->addStaticFilesToZip($zip);
+            $this->streamWorksheetToZip($zip, $data);
+            $zip->finish();
+        } else {
+            // Buffer to temp file, then copy to stream
+            $tempFilename = Spread::getTempFilename();
+            $this->buildFile($data, $tempFilename);
+            $tmpStream = fopen($tempFilename, 'r');
+            if ($tmpStream) {
+                stream_copy_to_stream($tmpStream, $stream);
+                fclose($tmpStream);
+            }
+            unlink($tempFilename);
         }
-        unlink($filename);
-        return $contents;
+
+        rewind($stream);
+        return $stream;
+    }
+
+    /**
+     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     */
+    public function writeString(iterable $data, ?Options $options = null): string
+    {
+        $stream = $this->writeStream($data, $options);
+        $contents = stream_get_contents($stream);
+        fclose($stream);
+        return $contents !== false ? $contents : '';
     }
 
     /**
@@ -72,19 +103,17 @@ class XlsxWriter implements WriterInterface
     {
         $options?->applyTo($this);
 
-        $mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        Spread::outputHeaders($mime, $filename);
-
-        if ($this->stream) {
+        if ($this->stream && $this->canStream()) {
             $this->outputStream($data, $filename);
             return;
         }
 
         $tempFilename = Spread::getTempFilename();
-        $zip = new ZipArchive();
-        $zip->open($tempFilename, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-        $this->writeToZip($zip, $data);
-        $zip->close();
+        $this->buildFile($data, $tempFilename);
+
+        $size = filesize($tempFilename);
+        Spread::outputHeaders(self::MIMETYPE, $filename, $size !== false ? $size : null);
+
         readfile($tempFilename);
         unlink($tempFilename);
     }
@@ -106,7 +135,9 @@ class XlsxWriter implements WriterInterface
             );
         }
 
-        // Headers already sent by output(), disable ZipStream's own header logic
+        Spread::outputHeaders(self::MIMETYPE, $filename);
+
+        // Headers already sent explicitly, disable ZipStream's own header logic
         $zip = new \ZipStream\ZipStream(
             sendHttpHeaders: false,
         );
@@ -121,10 +152,38 @@ class XlsxWriter implements WriterInterface
             '[Content_Types].xml' => $this->genContentTypes(),
         ];
 
+        $zip = new \ZipStream\ZipStream(
+            sendHttpHeaders: false,
+        );
+
+        $this->addStaticFilesToZip($zip);
+        $this->streamWorksheetToZip($zip, $data);
+
+        $zip->finish();
+    }
+
+    private function addStaticFilesToZip(\ZipStream\ZipStream $zip): void
+    {
+        $files = [
+            '_rels/.rels' => $this->genRels(),
+            'docProps/app.xml' => $this->genAppXml(),
+            'docProps/core.xml' => $this->genCoreXml(),
+            'xl/styles.xml' => $this->genStyles(),
+            'xl/workbook.xml' => $this->genWorkbook(),
+            'xl/_rels/workbook.xml.rels' => $this->genWorkbookRels(),
+            '[Content_Types].xml' => $this->genContentTypes(),
+        ];
+
         foreach ($files as $path => $xml) {
             $zip->addFile(fileName: $path, data: $xml);
         }
+    }
 
+    /**
+     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     */
+    private function streamWorksheetToZip(\ZipStream\ZipStream $zip, iterable $data): void
+    {
         $sharedStrings = [];
         $sharedStringKeys = [];
         $worksheetStream = $this->genWorksheet($data, $sharedStrings, $sharedStringKeys);
@@ -134,8 +193,11 @@ class XlsxWriter implements WriterInterface
             $zip->addFile(fileName: 'xl/sharedStrings.xml', data: $this->genSharedStrings($sharedStrings));
         }
         $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
+    }
 
-        $zip->finish();
+    private function canStream(): bool
+    {
+        return class_exists(\ZipStream\ZipStream::class);
     }
 
     // -- Internal --
