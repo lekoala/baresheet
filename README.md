@@ -274,6 +274,7 @@ Here are the results extracting/writing 50,000 rows (4 columns) locally against 
 | Library                           | Avg Time (s) | Peak Memory (MB) |
 |-----------------------------------|--------------|------------------|
 | Baresheet (XLSX)                  | 0.4739       | 0.76             |
+| Baresheet (XLSX - Auto Width)     | 0.5009       | 0.77             |
 | SimpleXLSXGen (XLSX)              | 0.6714       | 109.77           |
 | OpenSpout (XLSX)                  | 0.9841       | 1.01             |
 | Baresheet (XLSX - Shared Strings) | 0.9969       | 34.23            |

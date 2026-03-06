@@ -319,34 +319,16 @@ class XlsxWriter implements WriterInterface
      */
     private function genWorksheet(iterable $data, array &$sharedStrings, array &$sharedStringKeys)
     {
-        $tempStream = tmpfile();
-        if (!$tempStream) {
-            throw new Exception("Failed to get temp file");
+        // We write the sheet data to a separate temp stream first so we can
+        // calculate column widths and write the <cols> section before <sheetData>.
+        $dataStream = tmpfile();
+        if (!$dataStream) {
+            throw new Exception("Failed to get temp file for sheet data");
         }
+
         $r = 0;
         $colWidths = [];
-
-        // Build sheetViews for freeze pane
-        $sheetViews = '';
-        if ($this->freezePane) {
-            $sheetViews = '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
-            $sheetViews .= '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>';
-            $sheetViews .= '</sheetView></sheetViews>';
-        }
-
-        $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
-        $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
-        $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-        $header .= $sheetViews;
-        if ($this->autoWidth) {
-            $header .= '__COLS_PLACEHOLDER__';
-        }
-        $header .= '<sheetData>';
-        fwrite($tempStream, $header);
-
-        // Bold headers use style index 2 (see genStyles)
         $boldStyle = $this->boldHeaders ? ' s="2"' : '';
-
         $colCache = [];
         $wrappedData = $this->prependHeaders($data);
         $isFirstRow = true;
@@ -365,11 +347,8 @@ class XlsxWriter implements WriterInterface
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
                 $cn = $colCache[$i] . $rowNum;
-
-                // Apply bold style to first row when boldHeaders is enabled
                 $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
 
-                // Cell generation logic
                 if ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
                     $c .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
@@ -405,57 +384,66 @@ class XlsxWriter implements WriterInterface
                     }
                 }
                 $c .= "\r\n";
-
                 if ($autoWidth) {
                     if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
                         $colWidths[$i] = $vl;
                     }
                 }
-
                 $i++;
             }
             $r++;
             $buffer .= "<row r=\"$r\">$c</row>\r\n";
             if ($r % $bufferSizeOpt === 0) {
-                fwrite($tempStream, $buffer);
+                fwrite($dataStream, $buffer);
                 $buffer = '';
             }
             $isFirstRow = false;
         }
 
         if ($buffer !== '') {
-            fwrite($tempStream, $buffer);
-            $buffer = '';
+            fwrite($dataStream, $buffer);
         }
 
-        $footer = '</sheetData>';
+        // Now assemble the final worksheet stream
+        $worksheetStream = tmpfile();
+        if (!$worksheetStream) {
+            fclose($dataStream);
+            throw new Exception("Failed to get temp file for worksheet");
+        }
 
-        // Autofilter
+        $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
+        $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+        $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+
+        if ($this->freezePane) {
+            $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
+            $header .= '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>';
+            $header .= '</sheetView></sheetViews>';
+        }
+
+        if ($autoWidth) {
+            $header .= $this->genColsXml($colWidths);
+        }
+
+        $header .= '<sheetData>';
+        fwrite($worksheetStream, $header);
+
+        rewind($dataStream);
+        stream_copy_to_stream($dataStream, $worksheetStream);
+        fclose($dataStream);
+
+        $footer = '</sheetData>';
         if ($this->autofilter) {
             $autofilter = $this->autofilter;
-            // Basic validation for coordinate range (e.g. A1:B10)
             if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
                 $escapedFilter = Spread::escapeXmlAttr($autofilter);
                 $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
             }
         }
-
         $footer .= '</worksheet>';
-        fwrite($tempStream, $footer);
+        fwrite($worksheetStream, $footer);
 
-        if ($this->autoWidth) {
-            // Replace cols placeholder with actual auto-sized columns
-            rewind($tempStream);
-            $content = stream_get_contents($tempStream);
-            $colsXml = $this->genColsXml($colWidths);
-            $content = str_replace('__COLS_PLACEHOLDER__', $colsXml, $content);
-
-            ftruncate($tempStream, 0);
-            rewind($tempStream);
-            fwrite($tempStream, (string)$content);
-        }
-
-        return $tempStream;
+        return $worksheetStream;
     }
 
     /**
