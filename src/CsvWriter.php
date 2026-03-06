@@ -136,66 +136,41 @@ class CsvWriter implements WriterInterface
         }
 
         $separator = $this->separator;
+        // For writer, "auto" means php default separator
         if ($separator === "auto") {
             $separator = ",";
         }
         $escapeFormulas = $this->escapeFormulas;
         $outputEncoding = $this->outputEncoding;
 
-        if (!empty($this->headers)) {
-            $row = $this->headers;
+        // Determine processing closure to avoid repetitive checks in the loop
+        $hasEncoding = ($outputEncoding !== null && $outputEncoding !== '');
+        /** @var \Closure(array<mixed>): array<int|string, bool|float|int|string|null> $processRow */
+        $processRow = static function (array $row) use ($escapeFormulas, $hasEncoding, $outputEncoding): array {
             if ($escapeFormulas) {
-                $row = $this->escapeRow($row);
+                $row = self::escapeRow($row);
             }
-            if ($outputEncoding !== null && $outputEncoding !== '') {
-                $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
+            if ($hasEncoding) {
+                /** @var string $outputEncoding */
+                $row = array_map(static fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
             }
             /** @var array<int|string, bool|float|int|string|null> $row */
+            return $row;
+        };
+
+        if (!empty($this->headers)) {
+            $row = $processRow($this->headers);
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
                 throw new RuntimeException("Failed to write headers to stream");
             }
         }
 
-        if ($outputEncoding === null || $outputEncoding === '') {
-            if (!$escapeFormulas) {
-                foreach ($data as $row) {
-                    /** @var array<int|string, bool|float|int|string|null> $row */
-                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-                    if ($result === false) {
-                        throw new RuntimeException("Failed to write line");
-                    }
-                }
-            } else {
-                foreach ($data as $row) {
-                    $row = $this->escapeRow($row);
-                    /** @var array<int|string, bool|float|int|string|null> $row */
-                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-                    if ($result === false) {
-                        throw new RuntimeException("Failed to write line");
-                    }
-                }
-            }
-        } else {
-            if (!$escapeFormulas) {
-                foreach ($data as $row) {
-                    $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
-                    /** @var array<int|string, bool|float|int|string|null> $row */
-                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-                    if ($result === false) {
-                        throw new RuntimeException("Failed to write line");
-                    }
-                }
-            } else {
-                foreach ($data as $row) {
-                    $row = $this->escapeRow($row);
-                    $row = array_map(fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
-                    /** @var array<int|string, bool|float|int|string|null> $row */
-                    $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-                    if ($result === false) {
-                        throw new RuntimeException("Failed to write line");
-                    }
-                }
+        foreach ($data as $row) {
+            $row = $processRow($row);
+            $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+            if ($result === false) {
+                throw new RuntimeException("Failed to write line");
             }
         }
     }
@@ -206,21 +181,12 @@ class CsvWriter implements WriterInterface
      * @param array<mixed> $row
      * @return array<mixed>
      */
-    private function escapeRow(array $row): array
+    private static function escapeRow(array $row): array
     {
+        $chars = "=+-@\t\r";
         foreach ($row as &$cell) {
-            if (is_string($cell) && $cell !== '') {
-                $firstChar = $cell[0];
-                if (
-                    $firstChar === '=' ||
-                    $firstChar === '+' ||
-                    $firstChar === '-' ||
-                    $firstChar === '@' ||
-                    $firstChar === "\t" ||
-                    $firstChar === "\r"
-                ) {
-                    $cell = "'" . $cell;
-                }
+            if (is_string($cell) && $cell !== '' && str_contains($chars, $cell[0])) {
+                $cell = "'" . $cell;
             }
         }
         return $row;
