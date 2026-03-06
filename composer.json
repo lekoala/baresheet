@@ -21,15 +21,14 @@
     ],
     "require": {
         "php": "^8.1.2",
-        "ext-filter": "*",
-        "ext-iconv": "*",
         "ext-libxml": "*",
-        "ext-mbstring": "*",
         "ext-simplexml": "*",
         "ext-xmlreader": "*",
         "ext-zip": "*"
     },
     "require-dev": {
+        "ext-iconv": "*",
+        "ext-mbstring": "*",
         "league/csv": "^9.28",
         "maennchen/zipstream-php": "^3.1",
         "openspout/openspout": "^4.24 || ^5.0",
@@ -40,6 +39,8 @@
         "squizlabs/php_codesniffer": "^3.6"
     },
     "suggest": {
+        "ext-iconv": "Required for encoding conversion",
+        "ext-mbstring": "Required for string operations (or use symfony/polyfill-mbstring)",
         "maennchen/zipstream-php": "Required for streaming XLSX and ODS output"
     },
     "autoload": {

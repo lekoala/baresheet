@@ -7,10 +7,17 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 ## Requirements
 
 - PHP 8.1+
-- `ext-zip` (for XLSX and ODS)
-- `ext-simplexml` (for XLSX and ODS)
-- `ext-mbstring` (for encoding support)
-- `ext-iconv` (for CSV BOM support)
+- ext-mbstring (Required for all formats; Symfony polyfill is a valid alternative)
+
+### Format Specific (Required for XLSX/ODS)
+
+- ext-zip
+- ext-xmlreader, ext-simplexml, ext-libxml (standard XML extensions, usually bundled together)
+
+### Optional
+
+- ext-iconv (Required only for CSV BOM transcoding)
+- maennchen/zipstream-php (Required only for streaming XLSX/ODS output)
 
 ## Installation
 
