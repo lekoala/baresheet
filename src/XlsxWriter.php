@@ -52,14 +52,7 @@ class XlsxWriter implements WriterInterface
         $stream = Spread::getMaxMemTempStream();
 
         if ($this->canStream()) {
-            $zip = new \ZipStream\ZipStream(
-                outputStream: $stream,
-                sendHttpHeaders: false,
-            );
-
-            $this->addStaticFilesToZip($zip);
-            $this->streamWorksheetToZip($zip, $data);
-            $zip->finish();
+            $this->streamIterative($data, $stream);
         } else {
             // Buffer to temp file, then copy to stream
             $tempFilename = Spread::getTempFilename();
@@ -140,28 +133,27 @@ class XlsxWriter implements WriterInterface
 
         Spread::outputHeaders(self::MIMETYPE, $filename);
 
-        // Headers already sent explicitly, disable ZipStream's own header logic
-        $zip = new \ZipStream\ZipStream(
-            sendHttpHeaders: false,
-        );
+        $this->streamIterative($data);
+    }
 
-        $files = [
-            '_rels/.rels' => $this->genRels(),
-            'docProps/app.xml' => $this->genAppXml(),
-            'docProps/core.xml' => $this->genCoreXml(),
-            'xl/styles.xml' => $this->genStyles(),
-            'xl/workbook.xml' => $this->genWorkbook(),
-            'xl/_rels/workbook.xml.rels' => $this->genWorkbookRels(),
-            '[Content_Types].xml' => $this->genContentTypes(),
+    /**
+     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param resource|null $outputStream
+     */
+    private function streamIterative(iterable $data, $outputStream = null): void
+    {
+        $zipArgs = [
+            // We handle headers ourselves via Spread::outputHeaders() to maintain consistency
+            // across all writers (CSV/XLSX/ODS) and support PSR-7 StreamedResponses.
+            'sendHttpHeaders' => false,
         ];
-
-        $zip = new \ZipStream\ZipStream(
-            sendHttpHeaders: false,
-        );
+        if ($outputStream) {
+            $zipArgs['outputStream'] = $outputStream;
+        }
+        $zip = new \ZipStream\ZipStream(...$zipArgs);
 
         $this->addStaticFilesToZip($zip);
         $this->streamWorksheetToZip($zip, $data);
-
         $zip->finish();
     }
 

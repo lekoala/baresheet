@@ -47,26 +47,7 @@ class OdsWriter implements WriterInterface
         $stream = Spread::getMaxMemTempStream();
 
         if ($this->canStream()) {
-            $zip = new \ZipStream\ZipStream(
-                outputStream: $stream,
-                sendHttpHeaders: false,
-            );
-
-            // mimetype must be first and stored uncompressed
-            $zip->addFile(
-                fileName: 'mimetype',
-                data: self::MIMETYPE,
-                compressionMethod: \ZipStream\CompressionMethod::STORE,
-            );
-            $zip->addFile(fileName: 'META-INF/manifest.xml', data: $this->genManifest());
-            $zip->addFile(fileName: 'meta.xml', data: $this->genMeta());
-            $zip->addFile(fileName: 'styles.xml', data: $this->genStyles());
-
-            $contentStream = $this->genContent($data);
-            rewind($contentStream);
-            $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
-
-            $zip->finish();
+            $this->streamIterative($data, $stream);
         } else {
             // Buffer to temp file, then copy to stream
             $tempFilename = Spread::getTempFilename();
@@ -147,9 +128,24 @@ class OdsWriter implements WriterInterface
 
         Spread::outputHeaders(self::MIMETYPE, $filename);
 
-        $zip = new \ZipStream\ZipStream(
-            sendHttpHeaders: false,
-        );
+        $this->streamIterative($data);
+    }
+
+    /**
+     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param resource|null $outputStream
+     */
+    private function streamIterative(iterable $data, $outputStream = null): void
+    {
+        $zipArgs = [
+            // We handle headers ourselves via Spread::outputHeaders() to maintain consistency
+            // across all writers (CSV/XLSX/ODS) and support PSR-7 StreamedResponses.
+            'sendHttpHeaders' => false,
+        ];
+        if ($outputStream) {
+            $zipArgs['outputStream'] = $outputStream;
+        }
+        $zip = new \ZipStream\ZipStream(...$zipArgs);
 
         // mimetype must be first and stored uncompressed
         $zip->addFile(
