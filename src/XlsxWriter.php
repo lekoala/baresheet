@@ -356,16 +356,28 @@ class XlsxWriter implements WriterInterface
                     $c .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } else {
-                    $strValue = (string)$value;
-                    $vl = mb_strlen($strValue);
-                    if (
-                        !is_string($value)
-                        || $value === '0'
-                        || (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue))
-                        || (is_numeric($value) && preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue))
-                    ) {
+                    $isNumeric = false;
+                    if (is_int($value) || is_float($value)) {
+                        $isNumeric = true;
+                    } elseif (!is_string($value)) {
+                        $isNumeric = true;
+                    } else {
+                        if ($value === '0') {
+                            $isNumeric = true;
+                        } elseif (isset($value[0]) && $value[0] !== '0' && ctype_digit($value)) {
+                            $isNumeric = true;
+                        } elseif (is_numeric($value)) {
+                            $isNumeric = (bool)preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $value);
+                        }
+                    }
+
+                    if ($isNumeric) {
+                        $strValue = (string)$value;
+                        $vl = strlen($strValue);
                         $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                     } else {
+                        $strValue = (string)$value;
+                        $vl = mb_strlen($strValue);
                         $escaped = Spread::escapeXml($strValue);
                         if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
                             $skey = '~' . $escaped;
