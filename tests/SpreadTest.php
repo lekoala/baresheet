@@ -61,4 +61,18 @@ class SpreadTest extends TestCase
 
         unlink($tempFile);
     }
+
+    public function testZipError(): void
+    {
+        self::assertEquals('File already exists.', Spread::zipError(\ZipArchive::ER_EXISTS));
+        self::assertEquals('Zip archive inconsistent.', Spread::zipError(\ZipArchive::ER_INCONS));
+        self::assertEquals('Invalid argument.', Spread::zipError(\ZipArchive::ER_INVAL));
+        self::assertEquals('Malloc failure.', Spread::zipError(\ZipArchive::ER_MEMORY));
+        self::assertEquals('No such file.', Spread::zipError(\ZipArchive::ER_NOENT));
+        self::assertEquals('Not a zip archive.', Spread::zipError(\ZipArchive::ER_NOZIP));
+        self::assertEquals("Can't open file.", Spread::zipError(\ZipArchive::ER_OPEN));
+        self::assertEquals('Read error.', Spread::zipError(\ZipArchive::ER_READ));
+        self::assertEquals('Seek error.', Spread::zipError(\ZipArchive::ER_SEEK));
+        self::assertEquals('Unknown error code 999.', Spread::zipError(999));
+    }
 }
