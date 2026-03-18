@@ -154,7 +154,12 @@ class CsvWriter implements WriterInterface
             }
             if ($hasEncoding) {
                 /** @var string $outputEncoding */
-                $row = array_map(static fn($v) => is_string($v) ? mb_convert_encoding($v, $outputEncoding) : $v, $row);
+                foreach ($row as &$v) {
+                    if (is_string($v)) {
+                        $v = mb_convert_encoding($v, $outputEncoding);
+                    }
+                }
+                unset($v);
             }
             /** @var array<int|string, bool|float|int|string|null> $row */
             return $row;
