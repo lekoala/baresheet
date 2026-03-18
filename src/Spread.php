@@ -208,11 +208,24 @@ class Spread
     /**
      * Convert a DateTime to an Excel serial date number.
      */
-    public static function dateToExcel(\DateTimeInterface $dt): float
+    public static function dateToExcel(\DateTimeInterface $dt, bool $is1904 = false): float
     {
-        $base = new DateTime('1899-12-30');
-        $diff = $base->diff(DateTime::createFromInterface($dt));
-        $days = (int) $diff->format('%r%a');
+        if ($is1904) {
+            $base = new DateTime('1904-01-01');
+            $diff = $base->diff(DateTime::createFromInterface($dt));
+            $days = (int) $diff->format('%r%a');
+        } else {
+            $base = new DateTime('1899-12-30');
+            $diff = $base->diff(DateTime::createFromInterface($dt));
+            $days = (int) $diff->format('%r%a');
+
+            // Adjust for Lotus 1-2-3 leap year bug
+            $ymd = $dt->format('Y-m-d');
+            if ($ymd >= '1900-01-01' && $ymd <= '1900-02-28') {
+                $days -= 1;
+            }
+        }
+
         $timeFraction = ($dt->format('H') * 3600 + $dt->format('i') * 60 + $dt->format('s')) / 86400;
         return $days + $timeFraction;
     }
