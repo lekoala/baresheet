@@ -153,9 +153,9 @@ class CsvWriter implements WriterInterface
                 $row = self::escapeRow($row);
             }
             if ($hasEncoding) {
-                /** @var string $outputEncoding */
                 foreach ($row as &$v) {
                     if (is_string($v)) {
+                        /** @var string $outputEncoding */
                         $v = mb_convert_encoding($v, $outputEncoding);
                     }
                 }
