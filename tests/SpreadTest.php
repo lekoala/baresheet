@@ -75,4 +75,32 @@ class SpreadTest extends TestCase
         self::assertEquals('Seek error.', Spread::zipError(\ZipArchive::ER_SEEK));
         self::assertEquals('Unknown error code 999.', Spread::zipError(999));
     }
+
+    public function testDateToExcel(): void
+    {
+        // 1899-12-30 is base 0
+        $dtBase = new \DateTime('1899-12-30 00:00:00');
+        self::assertEquals(0.0, Spread::dateToExcel($dtBase));
+
+        // 1900-01-01 is 2
+        $dt1900 = new \DateTime('1900-01-01 00:00:00');
+        self::assertEquals(2.0, Spread::dateToExcel($dt1900));
+
+        // 1900-02-28 is 60 (before leap bug)
+        $dtFeb28 = new \DateTime('1900-02-28 00:00:00');
+        self::assertEquals(60.0, Spread::dateToExcel($dtFeb28));
+
+        // 1900-03-01 is 61 (after leap bug)
+        $dtMar01 = new \DateTime('1900-03-01 00:00:00');
+        self::assertEquals(61.0, Spread::dateToExcel($dtMar01));
+
+        // Modern date
+        $dtModern = new \DateTime('2023-10-15 12:00:00');
+        self::assertEquals(45214.5, Spread::dateToExcel($dtModern));
+
+        // Quarter day
+        $dtQuarter = new \DateTime('2024-01-01 06:00:00');
+        self::assertEquals(45292.25, Spread::dateToExcel($dtQuarter));
+    }
+
 }
