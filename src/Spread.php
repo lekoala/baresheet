@@ -191,14 +191,15 @@ class Spread
             $dt->setTime($hours, $minutes, $seconds);
         }
 
-        // Adjust for dates before the Gregorian calendar adoption
-        if ($days < 0) {
-            if ($dt->getTimestamp() <= strtotime('1582-10-15')) {
-                $year = (int) $dt->format('Y');
-                $diff = floor($year / 100) - floor($year / 400) - 2;
-                if ($diff > 0) {
-                    $dt->modify("- $diff days");
-                }
+        // Handle Julian to Gregorian calendar drift (approx 1 day every 128 years).
+        // This adjustment is for historical dates before the Gregorian calendar transition (1582-10-15).
+        // It treats Excel numbers as representing historical Julian dates.
+        if ($dt->getTimestamp() < strtotime('1582-10-15')) {
+            $year = (int) $dt->format('Y');
+            // Cumulative drift formula: 10 days in 1582, increasing by 1 every century not divisible by 400.
+            $drift = floor($year / 100) - floor($year / 400) - 2;
+            if ($drift > 0) {
+                $dt->modify("- $drift days");
             }
         }
 
@@ -227,7 +228,18 @@ class Spread
         }
 
         $timeFraction = ($dt->format('H') * 3600 + $dt->format('i') * 60 + $dt->format('s')) / 86400;
-        return $days + $timeFraction;
+        $serial = $days + $timeFraction;
+
+        // Inverse Julian-to-Gregorian correction for historical dates
+        if ($dt->getTimestamp() < strtotime('1582-10-15')) {
+            $year = (int) $dt->format('Y');
+            $drift = floor($year / 100) - floor($year / 400) - 2;
+            if ($drift > 0) {
+                $serial += $drift;
+            }
+        }
+
+        return $serial;
     }
 
     /**
