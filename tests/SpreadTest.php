@@ -82,13 +82,13 @@ class SpreadTest extends TestCase
         $dtBase = new \DateTime('1899-12-30 00:00:00');
         self::assertEquals(0.0, Spread::dateToExcel($dtBase));
 
-        // 1900-01-01 is 2
+        // 1900-01-01 is 1 in Excel
         $dt1900 = new \DateTime('1900-01-01 00:00:00');
-        self::assertEquals(2.0, Spread::dateToExcel($dt1900));
+        self::assertEquals(1.0, Spread::dateToExcel($dt1900));
 
-        // 1900-02-28 is 60 (before leap bug)
+        // 1900-02-28 is 59 in Excel (before leap bug)
         $dtFeb28 = new \DateTime('1900-02-28 00:00:00');
-        self::assertEquals(60.0, Spread::dateToExcel($dtFeb28));
+        self::assertEquals(59.0, Spread::dateToExcel($dtFeb28));
 
         // 1900-03-01 is 61 (after leap bug)
         $dtMar01 = new \DateTime('1900-03-01 00:00:00');
@@ -102,5 +102,4 @@ class SpreadTest extends TestCase
         $dtQuarter = new \DateTime('2024-01-01 06:00:00');
         self::assertEquals(45292.25, Spread::dateToExcel($dtQuarter));
     }
-
 }
