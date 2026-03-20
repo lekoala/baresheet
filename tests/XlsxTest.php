@@ -558,6 +558,29 @@ class XlsxTest extends TestCase
         self::assertEquals('s1 - B1', $data[0][1]);
     }
 
+    /**
+     * @dataProvider builtInFormatCodeProvider
+     */
+    public function testGetBuiltInFormatCode(int $numFmtId, ?string $expected): void
+    {
+        self::assertEquals($expected, XlsxReader::getBuiltInFormatCode($numFmtId));
+    }
+
+    public static function builtInFormatCodeProvider(): array
+    {
+        return [
+            [0, 'General'],
+            [1, '0'],
+            [9, '0%'],
+            [14, 'm/d/yyyy'],
+            [27, '[$-404]e/m/d'],
+            [49, '@'],
+            [59, 't0'],
+            [70, 't# ??/??'],
+            [999, null],
+        ];
+    }
+
     public function testIsDateTimeFormatCode(): void
     {
         // Positive cases: Standard
