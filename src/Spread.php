@@ -211,15 +211,12 @@ class Spread
      */
     public static function dateToExcel(\DateTimeInterface $dt, bool $is1904 = false): float
     {
-        if ($is1904) {
-            $base = new DateTime('1904-01-01');
-            $diff = $base->diff(DateTime::createFromInterface($dt));
-            $days = (int) $diff->format('%r%a');
-        } else {
-            $base = new DateTime('1899-12-30');
-            $diff = $base->diff(DateTime::createFromInterface($dt));
-            $days = (int) $diff->format('%r%a');
+        $baseDate = $is1904 ? '1904-01-01' : '1899-12-30';
+        $base = new DateTime($baseDate);
+        $diff = $base->diff(DateTime::createFromInterface($dt));
+        $days = (int) $diff->format('%r%a');
 
+        if (!$is1904) {
             // Adjust for Lotus 1-2-3 leap year bug
             $ymd = $dt->format('Y-m-d');
             if ($ymd >= '1900-01-01' && $ymd <= '1900-02-28') {
