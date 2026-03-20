@@ -379,7 +379,7 @@ class XlsxWriter implements WriterInterface
                         $strValue = (string)$value;
                         $vl = mb_strlen($strValue);
                         $escaped = Spread::escapeXml($strValue);
-                        if ($sharedStringsOpt && mb_strlen($escaped) <= 160) {
+                        if ($sharedStringsOpt && $vl <= 160) {
                             $skey = '~' . $escaped;
                             if (isset($sharedStringKeys[$skey])) {
                                 $ssIdx = $sharedStringKeys[$skey];
