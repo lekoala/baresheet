@@ -278,9 +278,14 @@ class XlsxReader implements ReaderInterface
     {
         $options?->applyTo($this);
         $filename = Spread::getTempFilename();
-        file_put_contents($filename, $contents);
-        yield from $this->readFile($filename);
-        unlink($filename);
+        try {
+            file_put_contents($filename, $contents);
+            yield from $this->readFile($filename);
+        } finally {
+            if (is_file($filename)) {
+                unlink($filename);
+            }
+        }
     }
 
     /**

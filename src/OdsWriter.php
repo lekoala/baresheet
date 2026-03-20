@@ -51,16 +51,21 @@ class OdsWriter implements WriterInterface
         } else {
             // Buffer to temp file, then copy to stream
             $tempFilename = Spread::getTempFilename();
-            $this->buildFile($data, $tempFilename);
-            $tmpStream = fopen($tempFilename, 'r');
-            if ($tmpStream) {
-                $result = stream_copy_to_stream($tmpStream, $stream);
-                fclose($tmpStream);
-                if ($result === false) {
-                    throw new Exception("Failed to copy temp file to stream");
+            try {
+                $this->buildFile($data, $tempFilename);
+                $tmpStream = fopen($tempFilename, 'r');
+                if ($tmpStream) {
+                    $result = stream_copy_to_stream($tmpStream, $stream);
+                    fclose($tmpStream);
+                    if ($result === false) {
+                        throw new Exception("Failed to copy temp file to stream");
+                    }
+                }
+            } finally {
+                if (is_file($tempFilename)) {
+                    unlink($tempFilename);
                 }
             }
-            unlink($tempFilename);
         }
 
         rewind($stream);
@@ -102,13 +107,18 @@ class OdsWriter implements WriterInterface
         }
 
         $tempFilename = Spread::getTempFilename();
-        $this->buildFile($data, $tempFilename);
+        try {
+            $this->buildFile($data, $tempFilename);
 
-        $size = filesize($tempFilename);
-        Spread::outputHeaders(self::MIMETYPE, $filename, $size !== false ? $size : null);
+            $size = filesize($tempFilename);
+            Spread::outputHeaders(self::MIMETYPE, $filename, $size !== false ? $size : null);
 
-        readfile($tempFilename);
-        unlink($tempFilename);
+            readfile($tempFilename);
+        } finally {
+            if (is_file($tempFilename)) {
+                unlink($tempFilename);
+            }
+        }
     }
 
     /**
@@ -221,11 +231,16 @@ class OdsWriter implements WriterInterface
 
         // Copy from temp location to final destination when using tempPath
         if ($this->tempPath) {
-            $contents = file_get_contents($destinationFile);
-            if ($contents !== false) {
-                file_put_contents($filename, $contents);
+            try {
+                $contents = file_get_contents($destinationFile);
+                if ($contents !== false) {
+                    file_put_contents($filename, $contents);
+                }
+            } finally {
+                if (is_file($destinationFile)) {
+                    unlink($destinationFile);
+                }
             }
-            unlink($destinationFile);
         }
 
         return true;
