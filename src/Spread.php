@@ -164,11 +164,21 @@ class Spread
             }
         }
 
+        static $base1904 = null;
+        static $base1899_31 = null;
+        static $base1899_30 = null;
+
+        if ($base1904 === null) {
+            $base1904 = new DateTime('1904-01-01');
+            $base1899_31 = new DateTime('1899-12-31');
+            $base1899_30 = new DateTime('1899-12-30');
+        }
+
         if ($is1904) {
-            $baseDate = '1904-01-01';
+            $dt = clone $base1904;
         } else {
             // Excel day 60 = Feb 29 1900 (non-existent) — Lotus 1-2-3 bug compensation
-            $baseDate = $floatValue < 60 && $floatValue > 0 ? '1899-12-31' : '1899-12-30';
+            $dt = clone ($floatValue < 60 && $floatValue > 0 ? $base1899_31 : $base1899_30);
         }
 
         $days = (int) floor($floatValue);
@@ -179,7 +189,6 @@ class Spread
         }
         $interval = "$days days";
 
-        $dt = new DateTime($baseDate);
         $dt->modify($interval);
 
         if ($partDay > 0) {
@@ -194,7 +203,7 @@ class Spread
         // Handle Julian to Gregorian calendar drift (approx 1 day every 128 years).
         // This adjustment is for historical dates before the Gregorian calendar transition (1582-10-15).
         // It treats Excel numbers as representing historical Julian dates.
-        if ($dt->getTimestamp() < strtotime('1582-10-15')) {
+        if ($dt->getTimestamp() < -12219292800) { // strtotime('1582-10-15')
             $year = (int) $dt->format('Y');
             // Cumulative drift formula: 10 days in 1582, increasing by 1 every century not divisible by 400.
             $drift = floor($year / 100) - floor($year / 400) - 2;
@@ -211,9 +220,22 @@ class Spread
      */
     public static function dateToExcel(\DateTimeInterface $dt, bool $is1904 = false): float
     {
-        $baseDate = $is1904 ? '1904-01-01' : '1899-12-30';
-        $base = new DateTime($baseDate);
-        $diff = $base->diff(DateTime::createFromInterface($dt));
+        static $base1904 = null;
+        static $base1899 = null;
+
+        if ($base1904 === null) {
+            $base1904 = new DateTime('1904-01-01');
+            $base1899 = new DateTime('1899-12-30');
+        }
+
+        $base = $is1904 ? $base1904 : $base1899;
+
+        // Ensure we are diffing against a DateTime object
+        if (!$dt instanceof DateTime) {
+            $dt = DateTime::createFromInterface($dt);
+        }
+
+        $diff = $base->diff($dt);
         $days = (int) $diff->format('%r%a');
 
         if (!$is1904) {
@@ -228,7 +250,7 @@ class Spread
         $serial = $days + $timeFraction;
 
         // Inverse Julian-to-Gregorian correction for historical dates
-        if ($dt->getTimestamp() < strtotime('1582-10-15')) {
+        if ($dt->getTimestamp() < -12219292800) { // strtotime('1582-10-15')
             $year = (int) $dt->format('Y');
             $drift = floor($year / 100) - floor($year / 400) - 2;
             if ($drift > 0) {
