@@ -138,4 +138,69 @@ class OptionsTest extends TestCase
 
         rmdir($customTemp);
     }
+
+    public function testApplyToGenericObject(): void
+    {
+        $opts = new Options(
+            assoc: true,
+            strict: true,
+            stream: false,
+            headers: ['a', 'b'],
+            skipEmptyLines: false,
+            offset: 10,
+            limit: 100,
+            separator: ';',
+            enclosure: "'",
+            escape: "\\",
+            eol: "\n",
+            inputEncoding: 'UTF-8',
+            outputEncoding: 'UTF-16',
+            bom: \LeKoala\Baresheet\Bom::Utf16Be,
+            escapeFormulas: true,
+            meta: ['title' => 'Test'],
+            autofilter: 'A1:B1',
+            freezePane: 'A2',
+            sheet: 'MySheet',
+            boldHeaders: true,
+            tempPath: '/tmp',
+            sharedStrings: true,
+            autoWidth: true
+        );
+
+        $target = new class {
+            public bool $assoc = false;
+            public bool $strict = false;
+            public bool $stream = true;
+            public array $headers = [];
+            public bool $skipEmptyLines = true;
+            public int $offset = 0;
+            public ?int $limit = null;
+            public string $separator = "auto";
+            public string $enclosure = "\"";
+            public string $escape = "";
+            public string $eol = "\r\n";
+            public ?string $inputEncoding = null;
+            public ?string $outputEncoding = null;
+            public bool|\LeKoala\Baresheet\Bom|string $bom = true;
+            public bool $escapeFormulas = false;
+            public \LeKoala\Baresheet\Meta|array|null $meta = null;
+            public ?string $autofilter = null;
+            public ?string $freezePane = null;
+            public string|int|null $sheet = null;
+            public bool $boldHeaders = false;
+            public ?string $tempPath = null;
+            public bool $sharedStrings = false;
+            public bool $autoWidth = false;
+        };
+
+        $opts->applyTo($target);
+
+        foreach (get_object_vars($opts) as $k => $v) {
+            self::assertEquals($v, $target->$k, "Property $k was not correctly copied");
+        }
+
+        $minimalTarget = new \stdClass();
+        $opts->applyTo($minimalTarget);
+        self::assertEmpty(get_object_vars($minimalTarget), "Properties should not be added to target if they don't exist");
+    }
 }
