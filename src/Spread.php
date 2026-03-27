@@ -164,21 +164,30 @@ class Spread
             }
         }
 
-        static $base1904 = null;
-        static $base1899_31 = null;
-        static $base1899_30 = null;
+        /** @var array<string, \DateTime> */
+        static $base1904 = [];
+        /** @var array<string, \DateTime> */
+        static $base1899_31 = [];
+        /** @var array<string, \DateTime> */
+        static $base1899_30 = [];
+        /** @var array<string, int> */
+        static $driftThresholds = [];
 
-        if ($base1904 === null) {
-            $base1904 = new DateTime('1904-01-01');
-            $base1899_31 = new DateTime('1899-12-31');
-            $base1899_30 = new DateTime('1899-12-30');
+        $tz = date_default_timezone_get();
+
+        if (!isset($base1904[$tz])) {
+            $base1904[$tz] = new DateTime('1904-01-01');
+            $base1899_31[$tz] = new DateTime('1899-12-31');
+            $base1899_30[$tz] = new DateTime('1899-12-30');
+            // Cache the strtotime result for the drift threshold in this timezone
+            $driftThresholds[$tz] = (int) strtotime('1582-10-15');
         }
 
         if ($is1904) {
-            $dt = clone $base1904;
+            $dt = clone $base1904[$tz];
         } else {
             // Excel day 60 = Feb 29 1900 (non-existent) — Lotus 1-2-3 bug compensation
-            $dt = clone ($floatValue < 60 && $floatValue > 0 ? $base1899_31 : $base1899_30);
+            $dt = clone ($floatValue < 60 && $floatValue > 0 ? $base1899_31[$tz] : $base1899_30[$tz]);
         }
 
         $days = (int) floor($floatValue);
@@ -203,7 +212,7 @@ class Spread
         // Handle Julian to Gregorian calendar drift (approx 1 day every 128 years).
         // This adjustment is for historical dates before the Gregorian calendar transition (1582-10-15).
         // It treats Excel numbers as representing historical Julian dates.
-        if ($dt->getTimestamp() < -12219292800) { // strtotime('1582-10-15')
+        if ($dt->getTimestamp() < $driftThresholds[$tz]) {
             $year = (int) $dt->format('Y');
             // Cumulative drift formula: 10 days in 1582, increasing by 1 every century not divisible by 400.
             $drift = floor($year / 100) - floor($year / 400) - 2;
@@ -220,15 +229,22 @@ class Spread
      */
     public static function dateToExcel(\DateTimeInterface $dt, bool $is1904 = false): float
     {
-        static $base1904 = null;
-        static $base1899 = null;
+        /** @var array<string, \DateTime> */
+        static $base1904 = [];
+        /** @var array<string, \DateTime> */
+        static $base1899 = [];
+        /** @var array<string, int> */
+        static $driftThresholds = [];
 
-        if ($base1904 === null) {
-            $base1904 = new DateTime('1904-01-01');
-            $base1899 = new DateTime('1899-12-30');
+        $tz = date_default_timezone_get();
+
+        if (!isset($base1904[$tz])) {
+            $base1904[$tz] = new DateTime('1904-01-01');
+            $base1899[$tz] = new DateTime('1899-12-30');
+            $driftThresholds[$tz] = (int) strtotime('1582-10-15');
         }
 
-        $base = $is1904 ? $base1904 : $base1899;
+        $base = $is1904 ? $base1904[$tz] : $base1899[$tz];
 
         // Ensure we are diffing against a DateTime object
         if (!$dt instanceof DateTime) {
@@ -250,7 +266,7 @@ class Spread
         $serial = $days + $timeFraction;
 
         // Inverse Julian-to-Gregorian correction for historical dates
-        if ($dt->getTimestamp() < -12219292800) { // strtotime('1582-10-15')
+        if ($dt->getTimestamp() < $driftThresholds[$tz]) {
             $year = (int) $dt->format('Y');
             $drift = floor($year / 100) - floor($year / 400) - 2;
             if ($drift > 0) {
