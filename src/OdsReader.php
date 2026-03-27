@@ -36,6 +36,7 @@ class OdsReader implements ReaderInterface
     {
         $options?->applyTo($this);
 
+        Spread::isSafePath($filename);
         if (!is_file($filename)) {
             throw new Exception("Invalid file $filename");
         }

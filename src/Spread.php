@@ -28,6 +28,16 @@ class Spread
     }
 
     /**
+     * @throws RuntimeException
+     */
+    public static function isSafePath(string $path): void
+    {
+        if (str_starts_with(strtolower($path), 'phar://')) {
+            throw new RuntimeException("Phar deserialization is not allowed");
+        }
+    }
+
+    /**
      * Determine format by inspecting raw bytes.
      * ZIP magic = check mimetype entry for ODS, otherwise XLSX. Non-ZIP = CSV.
      * Returns 'ods', 'xlsx', or 'csv'.
@@ -65,6 +75,7 @@ class Spread
      */
     public static function getOutputStream(string $filename = 'php://output')
     {
+        self::isSafePath($filename);
         $stream = fopen($filename, 'w');
         if (!$stream) {
             throw new RuntimeException("Failed to open stream");
@@ -77,6 +88,7 @@ class Spread
      */
     public static function getInputStream(string $filename)
     {
+        self::isSafePath($filename);
         $stream = fopen($filename, 'r');
         if (!$stream) {
             throw new RuntimeException("Failed to open stream");
