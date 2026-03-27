@@ -307,16 +307,9 @@ class OdsWriter implements WriterInterface
                         . '</table:table-cell>';
                 } elseif ($value === null || $value === '') {
                     $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
-                } elseif (is_numeric($value) && !is_string($value)) {
-                    $buffer .= '<table:table-cell' . $rowCellStyle
-                        . ' office:value-type="float"'
-                        . ' office:value="' . $value . '">'
-                        . '<text:p>' . $value . '</text:p>'
-                        . '</table:table-cell>';
                 } elseif (
-                    is_string($value)
-                    && is_numeric($value)
-                    && ($value === '0' || (isset($value[0]) && $value[0] !== '0' || str_contains($value, '.')))
+                    is_numeric($value)
+                    && (!is_string($value) || $value === '0' || (isset($value[0]) && $value[0] !== '0' || str_contains($value, '.')))
                 ) {
                     $buffer .= '<table:table-cell' . $rowCellStyle
                         . ' office:value-type="float"'
