@@ -60,7 +60,13 @@ class CsvReader implements ReaderInterface
     {
         $options?->applyTo($this);
         $stream = Spread::getInputStream($filename);
-        yield from $this->parseStream($stream);
+        try {
+            yield from $this->parseStream($stream);
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
     }
 
     // -- Internal --
