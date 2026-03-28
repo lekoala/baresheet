@@ -145,8 +145,7 @@ class OdsReader implements ReaderInterface
                                                     $cellDepth = $reader->depth;
                                                     while ($reader->read() && $reader->depth > $cellDepth) {
                                                         if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'p' && $reader->namespaceURI === self::NS_TEXT) {
-                                                            $textNode = $reader->expand();
-                                                            $textP = $textNode ? $textNode->textContent : '';
+                                                            $textP = $reader->readString();
                                                         }
                                                     }
                                                 }
