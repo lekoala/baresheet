@@ -1,0 +1,3 @@
+## 2024-11-20 - Optimize ODS Text Extraction
+**Learning:** In PHP's `XMLReader`, using `$reader->readString()` is significantly faster and more memory-efficient than creating a full DOM tree via `$reader->expand()->textContent` for extracting text content from elements. This is highly effective for reading large `.ods` spreadsheet files.
+**Action:** Use `$reader->readString()` instead of `$reader->expand()->textContent` for extracting text from XML elements whenever possible.
