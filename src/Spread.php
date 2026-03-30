@@ -493,10 +493,16 @@ class Spread
      */
     public static function escapeXml(string $str): string
     {
-        if ($str !== '' && strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
+        if ($str === '') {
+            return '';
+        }
+        if (strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
             $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
         }
-        return htmlspecialchars($str, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+        if (strpbrk($str, '&<>"\'') !== false) {
+            return htmlspecialchars($str, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+        }
+        return $str;
     }
 
     /**
@@ -504,9 +510,15 @@ class Spread
      */
     public static function escapeXmlAttr(string $str): string
     {
-        if ($str !== '' && strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
+        if ($str === '') {
+            return '';
+        }
+        if (strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
             $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
         }
-        return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
+        if (strpbrk($str, '&<>"\'') !== false) {
+            return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
+        }
+        return $str;
     }
 }
