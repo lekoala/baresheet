@@ -1,3 +1,3 @@
-## 2024-11-20 - Optimize ODS Text Extraction
-**Learning:** In PHP's `XMLReader`, using `$reader->readString()` is significantly faster and more memory-efficient than creating a full DOM tree via `$reader->expand()->textContent` for extracting text content from elements. This is highly effective for reading large `.ods` spreadsheet files.
-**Action:** Use `$reader->readString()` instead of `$reader->expand()->textContent` for extracting text from XML elements whenever possible.
+## 2025-02-17 - Optimize XML Escaping in Hot Loops
+**Learning:** In highly repetitive loops like ODS/XLSX generation, calling `strpbrk` to check for control characters (\x00-\x1F) separately from standard `htmlspecialchars` overhead incurs measurable performance penalty on plain text strings. Combining the `strpbrk` check to look for both control and HTML characters (`&<>"'`) at once allows returning completely unmodified strings instantly via a "fast path".
+**Action:** Always combine character checks (e.g. `strpbrk`) into a single call for hot paths when evaluating string constraints to maximize early returns, especially in high-volume cell formatting functions.
