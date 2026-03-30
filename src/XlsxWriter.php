@@ -374,24 +374,22 @@ class XlsxWriter implements WriterInterface
                     $isNumeric = false;
                     if (is_int($value) || is_float($value)) {
                         $isNumeric = true;
-                    } elseif (!is_string($value)) {
-                        $isNumeric = true;
+                        $strValue = (string)$value;
                     } else {
-                        if ($value === '0') {
+                        $strValue = (string)$value;
+                        if ($strValue === '0') {
                             $isNumeric = true;
-                        } elseif (isset($value[0]) && $value[0] !== '0' && ctype_digit($value)) {
+                        } elseif (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue)) {
                             $isNumeric = true;
-                        } elseif (is_numeric($value)) {
-                            $isNumeric = (bool)preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $value);
+                        } elseif (is_numeric($strValue)) {
+                            $isNumeric = (bool)preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
                         }
                     }
 
                     if ($isNumeric) {
-                        $strValue = (string)$value;
                         $vl = strlen($strValue);
                         $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                     } else {
-                        $strValue = (string)$value;
                         $vl = mb_strlen($strValue);
                         $escaped = Spread::escapeXml($strValue);
                         if ($sharedStringsOpt && $vl <= 160) {
