@@ -27,6 +27,7 @@ class Baresheet
      */
     public static function read(string $filename, ?Options $options = null): Generator
     {
+        Spread::isSafePath($filename);
         $ext = self::getExtension($filename);
         $reader = self::getReader($ext);
         return $reader->readFile($filename, $options);
@@ -52,6 +53,7 @@ class Baresheet
      */
     public static function write(iterable $data, string $filename, ?Options $options = null): bool
     {
+        Spread::isSafePath($filename);
         $ext = self::getExtension($filename);
         $writer = self::getWriter($ext);
         return $writer->writeFile($data, $filename, $options);
@@ -124,6 +126,7 @@ class Baresheet
     {
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if (!$ext) {
+            Spread::isSafePath($filename);
             if (is_file($filename)) {
                 $header = @file_get_contents($filename, false, null, 0, 8192);
                 if ($header !== false) {
