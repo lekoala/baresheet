@@ -1,3 +1,6 @@
 ## 2024-11-20 - Optimize ODS Text Extraction
 **Learning:** In PHP's `XMLReader`, using `$reader->readString()` is significantly faster and more memory-efficient than creating a full DOM tree via `$reader->expand()->textContent` for extracting text content from elements. This is highly effective for reading large `.ods` spreadsheet files.
 **Action:** Use `$reader->readString()` instead of `$reader->expand()->textContent` for extracting text from XML elements whenever possible.
+## 2024-11-20 - Fast-path XML escaping
+**Learning:** `strpbrk` is heavily optimized in C and uses a fast bitmask lookup. When escaping large volumes of strings for XML (like in spreadsheet exports), the vast majority of strings don't contain special characters (`&<>"'`) or control characters (`\x00-\x1F`). By combining all checks into a single `strpbrk` call, we can return early and completely bypass the overhead of `htmlspecialchars` and array-based `str_replace` for common plain-text strings. Since all searched characters are 7-bit ASCII (`< 128`), this byte-based search is completely safe for UTF-8 encoded text and won't trigger false positives on multi-byte characters.
+**Action:** Use `strpbrk` to implement a fast-path early return for common string transformations like escaping, checking for both special characters and invalid control characters simultaneously.
