@@ -7,3 +7,6 @@
 ## 2024-11-20 - Avoid closure overhead in tight loops
 **Learning:** In high-iteration loops (e.g., writing 100,000+ rows to a CSV), invoking a closure or function on every iteration adds measurable overhead, even if the closure does nothing.
 **Action:** When a loop applies optional transformations via a closure (like encoding or escaping), compute a boolean `$needsProcessing` flag beforehand and use it to completely bypass the closure call when no transformations are required. This fast-path optimization yields ~30% write time reductions in plain-text CSV generation.
+## 2026-04-02 - Optimize mb_strlen in tight loops
+**Learning:** In performance-critical loops writing cell values, `mb_strlen()` is significantly slower than `strlen()`. However, blindly replacing it can cause regressions, such as breaking Excel column auto-sizing for multi-byte characters.
+**Action:** Use `strlen()` for byte-length threshold checks (like limiting shared strings to <= 160 bytes), but conditionally retain `mb_strlen()` only when its result is strictly required (like when `autoWidth` is actively enabled for the column).
