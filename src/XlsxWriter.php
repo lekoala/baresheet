@@ -356,12 +356,12 @@ class XlsxWriter implements WriterInterface
             $c = "";
             $i = 0;
             $rowNum = $r + 1;
+            $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
             foreach ($dataRow as $value) {
                 if (!isset($colCache[$i])) {
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
                 $cn = $colCache[$i] . $rowNum;
-                $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
 
                 if ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
