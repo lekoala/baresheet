@@ -390,9 +390,18 @@ class XlsxWriter implements WriterInterface
                         $vl = strlen($strValue);
                         $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                     } else {
-                        $vl = mb_strlen($strValue);
+                        // ⚡ Bolt: Fast-path optimization
+                        // mb_strlen is significantly slower than strlen in tight loops.
+                        // Use strlen (byte-length) as a fast threshold check for shared strings.
+                        // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
+                        $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
+
                         $escaped = Spread::escapeXml($strValue);
-                        if ($sharedStringsOpt && $vl <= 160) {
+
+                        // For shared strings logic, use strlen for byte-length threshold checking
+                        $strByteLen = $autoWidth ? strlen($strValue) : $vl;
+
+                        if ($sharedStringsOpt && $strByteLen <= 160) {
                             $skey = '~' . $escaped;
                             if (isset($sharedStringKeys[$skey])) {
                                 $ssIdx = $sharedStringKeys[$skey];
