@@ -10,3 +10,6 @@
 ## 2026-04-02 - Optimize mb_strlen in tight loops
 **Learning:** In performance-critical loops writing cell values, `mb_strlen()` is significantly slower than `strlen()`. However, blindly replacing it can cause regressions, such as breaking Excel column auto-sizing for multi-byte characters.
 **Action:** Use `strlen()` for byte-length threshold checks (like limiting shared strings to <= 160 bytes), but conditionally retain `mb_strlen()` only when its result is strictly required (like when `autoWidth` is actively enabled for the column).
+## 2026-04-02 - Avoid closure calls for simple caching logic in high-iteration loops
+**Learning:** In performance-critical PHP loops (e.g., iterating through every cell in an XLSX spreadsheet), abstracting simple logic and array caching behind a closure call (like `$isDate($excelFormat)`) introduces significant overhead per iteration. Even a simple function call in a loop executed millions of times is expensive.
+**Action:** Inline simple logic and caching checks directly into the loop instead of wrapping them in a closure. Replacing a closure call with direct logic/array cache access significantly reduces execution time in tight loops.
