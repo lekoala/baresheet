@@ -10,3 +10,6 @@
 ## 2026-04-02 - Optimize mb_strlen in tight loops
 **Learning:** In performance-critical loops writing cell values, `mb_strlen()` is significantly slower than `strlen()`. However, blindly replacing it can cause regressions, such as breaking Excel column auto-sizing for multi-byte characters.
 **Action:** Use `strlen()` for byte-length threshold checks (like limiting shared strings to <= 160 bytes), but conditionally retain `mb_strlen()` only when its result is strictly required (like when `autoWidth` is actively enabled for the column).
+## 2024-05-18 - Optimize array iteration with foreach and references
+**Learning:** In PHP, when mapping over a high-iteration array, using `array_map` with a closure introduces significant overhead due to the repeated function call.
+**Action:** Replace `array_map(fn($v) => ...)` with a `foreach` loop that modifies elements by reference `foreach ($arr as &$v)` and then unsets the reference `unset($v)`. This yields measurable performance improvements over large arrays by completely bypassing per-element function call overhead.
