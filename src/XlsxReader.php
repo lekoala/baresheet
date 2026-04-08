@@ -124,15 +124,6 @@ class XlsxReader implements ReaderInterface
         $totalColumns = null;
         $colFormats = [];
         $isDateCache = [];
-        $isDate = function (?string $excelFormatCode) use (&$isDateCache) {
-            if (!$excelFormatCode) {
-                return false;
-            }
-            if (!isset($isDateCache[$excelFormatCode])) {
-                $isDateCache[$excelFormatCode] = self::isDateTimeFormatCode($excelFormatCode);
-            }
-            return $isDateCache[$excelFormatCode];
-        };
 
         // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
@@ -206,14 +197,22 @@ class XlsxReader implements ReaderInterface
                             $excelFormat = null;
                             if ($s !== '') {
                                 $excelFormat = $cellFormats[(int)$s] ?? null;
-                                $format = $isDate($excelFormat) ? 'date' : null;
+                                if ($excelFormat !== null) {
+                                    if (!isset($isDateCache[$excelFormat])) {
+                                        $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
+                                    }
+                                    $format = $isDateCache[$excelFormat] ? 'date' : null;
+                                }
                             }
 
                             if ($t === 'n' && is_numeric($v)) {
                                 if ($excelFormat === null) {
                                     $format = $colFormats[$col] ?? null;
                                 } else {
-                                    $format = $isDate($excelFormat) ? 'date' : 'number';
+                                    if (!isset($isDateCache[$excelFormat])) {
+                                        $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
+                                    }
+                                    $format = $isDateCache[$excelFormat] ? 'date' : 'number';
                                 }
                             }
 
