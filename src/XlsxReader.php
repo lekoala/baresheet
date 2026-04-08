@@ -209,9 +209,6 @@ class XlsxReader implements ReaderInterface
                                 if ($excelFormat === null) {
                                     $format = $colFormats[$col] ?? null;
                                 } else {
-                                    if (!isset($isDateCache[$excelFormat])) {
-                                        $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
-                                    }
                                     $format = $isDateCache[$excelFormat] ? 'date' : 'number';
                                 }
                             }
