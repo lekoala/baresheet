@@ -13,3 +13,6 @@
 ## 2024-05-18 - Optimize array iteration with foreach and references
 **Learning:** In PHP, when mapping over a high-iteration array, using `array_map` with a closure introduces significant overhead due to the repeated function call.
 **Action:** Replace `array_map(fn($v) => ...)` with a `foreach` loop that modifies elements by reference `foreach ($arr as &$v)` and then unsets the reference `unset($v)`. This yields measurable performance improvements over large arrays by completely bypassing per-element function call overhead.
+## 2026-04-09 - Avoid closure overhead in high-iteration XML loops
+**Learning:** In PHP, defining and calling a closure (e.g., `$isDate = function(...) use (...) {...}`) within a deeply nested parsing loop (like iterating through tens of thousands of cells in an Excel worksheet) introduces measurable overhead.
+**Action:** Inline the logic and caching mechanisms directly into the loop instead of wrapping them in a closure. This bypasses the function call overhead on every iteration and provides a measurable speedup for parsing large documents.
