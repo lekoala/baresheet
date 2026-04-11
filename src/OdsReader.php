@@ -86,7 +86,6 @@ class OdsReader implements ReaderInterface
         $reader->open($xmlFile, null, LIBXML_NONET);
 
         $tableIndex = 0;
-        $targetTableFound = false;
 
         $headers = null;
         $totalColumns = null;
@@ -106,7 +105,6 @@ class OdsReader implements ReaderInterface
                 }
 
                 if ($isTarget) {
-                    $targetTableFound = true;
                     if (!$reader->isEmptyElement) {
                         $tableDepth = $reader->depth;
                         $moved = $reader->read();
@@ -213,7 +211,8 @@ class OdsReader implements ReaderInterface
                             $moved = $reader->read();
                         }
                     }
-                    break;
+                    $reader->close();
+                    return;
                 }
                 $tableIndex++;
             }
@@ -221,7 +220,7 @@ class OdsReader implements ReaderInterface
 
         $reader->close();
 
-        if (!$targetTableFound && $this->sheet !== null) {
+        if ($this->sheet !== null) {
             throw new Exception("Sheet '{$this->sheet}' not found");
         }
     }
