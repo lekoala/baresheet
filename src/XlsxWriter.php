@@ -353,22 +353,22 @@ class XlsxWriter implements WriterInterface
         $buffer = '';
 
         foreach ($wrappedData as $dataRow) {
-            $c = "";
+            $r++;
             $i = 0;
-            $rowNum = $r + 1;
             $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
+            $buffer .= "<row r=\"$r\">";
             foreach ($dataRow as $value) {
                 if (!isset($colCache[$i])) {
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
-                $cn = $colCache[$i] . $rowNum;
+                $cn = $colCache[$i] . $r;
 
                 if ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
-                    $c .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
+                    $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                     $vl = 16;
                 } elseif ($value === null || $value === '' || (!is_scalar($value) && !($value instanceof \Stringable))) { // @phpstan-ignore-line
-                    $c .= '<c r="' . $cn . '"' . $cellStyle . '/>';
+                    $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } else {
                     $isNumeric = false;
@@ -388,7 +388,7 @@ class XlsxWriter implements WriterInterface
 
                     if ($isNumeric) {
                         $vl = strlen($strValue);
-                        $c .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                     } else {
                         // ⚡ Bolt: Fast-path optimization
                         // mb_strlen is significantly slower than strlen in tight loops.
@@ -410,13 +410,13 @@ class XlsxWriter implements WriterInterface
                                 $ssIdx = count($sharedStrings) - 1;
                                 $sharedStringKeys[$skey] = $ssIdx;
                             }
-                            $c .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                            $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
                         } else {
-                            $c .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
+                            $buffer .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
                         }
                     }
                 }
-                $c .= "\r\n";
+                $buffer .= "\r\n";
                 if ($autoWidth) {
                     if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
                         $colWidths[$i] = $vl;
@@ -424,8 +424,7 @@ class XlsxWriter implements WriterInterface
                 }
                 $i++;
             }
-            $r++;
-            $buffer .= "<row r=\"$r\">$c</row>\r\n";
+            $buffer .= "</row>\r\n";
             if ($r % $bufferSizeOpt === 0) {
                 fwrite($dataStream, $buffer);
                 $buffer = '';
