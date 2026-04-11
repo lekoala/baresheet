@@ -191,6 +191,7 @@ class OptionsTest extends TestCase
             public ?string $tempPath = null;
             public bool $sharedStrings = false;
             public bool $autoWidth = false;
+            public array $requiredColumns = [];
         };
 
         $opts->applyTo($target);

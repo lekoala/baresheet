@@ -171,6 +171,32 @@ $rows = Baresheet::read('data.csv', $opts);
 | `tempPath`       | ?string           | `null`   | Any (Temp files location) |
 | `sharedStrings`  | bool              | `false`  | Write (XLSX)              |
 | `autoWidth`      | bool              | `false`  | Write (XLSX)              |
+| `requiredColumns`| string[]          | `[]`     | Read (CSV, XLSX, ODS)     |
+
+## Required Columns Validation
+
+Validate that input files contain expected columns before processing. This catches malformed files early, avoiding wasted cycles parsing invalid data.
+
+```php
+// Throws RuntimeException if 'email' or 'price' columns are missing
+$rows = Baresheet::read('products.csv', new Options(
+    assoc: true,
+    requiredColumns: ['sku', 'price', 'qty']
+));
+
+foreach ($rows as $row) {
+    // All required columns are guaranteed to exist
+    processProduct($row);
+}
+```
+
+The validation occurs immediately after reading the header row and throws a descriptive exception listing the missing columns:
+
+```
+RuntimeException: Missing required columns: price, qty
+```
+
+Works with all reader formats (CSV, XLSX, ODS) and the `Baresheet` facade.
 
 ## Streaming Output
 

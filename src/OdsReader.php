@@ -23,6 +23,8 @@ class OdsReader implements ReaderInterface
     public int $offset = 0;
     public bool $skipEmptyLines = true;
     public string|int|null $sheet = null;
+    /** @var string[] */
+    public array $requiredColumns = [];
 
     public function __construct(?Options $options = null)
     {
@@ -183,6 +185,16 @@ class OdsReader implements ReaderInterface
                                         if ($headers === null) {
                                             $headers = array_map('strval', $rowData);
                                             $totalColumns = count($headers);
+                                            // Validate required columns
+                                            if (!empty($this->requiredColumns)) {
+                                                $missing = array_diff($this->requiredColumns, $headers);
+                                                if (!empty($missing)) {
+                                                    $reader->close();
+                                                    throw new \RuntimeException(
+                                                        'Missing required columns: ' . implode(', ', $missing)
+                                                    );
+                                                }
+                                            }
                                             continue;
                                         }
                                         $rowData = array_slice(array_pad($rowData, $totalColumns ?? 0, null), 0, $totalColumns ?? 0);

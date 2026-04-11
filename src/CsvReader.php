@@ -25,6 +25,8 @@ class CsvReader implements ReaderInterface
     public string $eol = "\r\n";
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
+    /** @var string[] */
+    public array $requiredColumns = [];
 
     public function __construct(?Options $options = null)
     {
@@ -163,6 +165,15 @@ class CsvReader implements ReaderInterface
                 // No headers yet, use first line as headers
                 if ($headers === null) {
                     $headers = array_map('strval', $line);
+                    // Validate required columns
+                    if (!empty($this->requiredColumns)) {
+                        $missing = array_diff($this->requiredColumns, $headers);
+                        if (!empty($missing)) {
+                            throw new \RuntimeException(
+                                'Missing required columns: ' . implode(', ', $missing)
+                            );
+                        }
+                    }
                     continue;
                 }
                 $colCount = count($line);

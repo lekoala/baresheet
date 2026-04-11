@@ -33,6 +33,8 @@ class Options
         public int $offset = 0,
         /** @var ?int Maximum number of rows to read. */
         public ?int $limit = null,
+        /** @var string[] Required column names that must exist in the header row. */
+        public array $requiredColumns = [],
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = "auto",
