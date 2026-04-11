@@ -20,7 +20,11 @@ class XlsxReader implements ReaderInterface
     public bool $skipEmptyLines = true;
     public string|int|null $sheet = null;
     /** @var string[] */
+    public array $headers = [];
+    /** @var string[] */
     public array $requiredColumns = [];
+    /** @var string[] */
+    public array $columns = [];
 
     public function __construct(?Options $options = null)
     {
@@ -138,6 +142,13 @@ class XlsxReader implements ReaderInterface
         $startRow = $this->assoc ? 1 : 0;
         $totalColumns = null;
         $colRefCache = [];
+        $columnMap = [];
+        $selectedIndices = []; // Set of column indices to parse (empty = all)
+
+        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
+        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
+            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+        }
 
         while ($reader->read()) {
             if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 'row') {
@@ -148,10 +159,42 @@ class XlsxReader implements ReaderInterface
 
                 if (!$reader->isEmptyElement) {
                     $rowDepth = $reader->depth;
-                    while ($reader->read() && $reader->depth > $rowDepth) {
+                    $moved = $reader->read();
+                    while ($moved && $reader->depth > $rowDepth) {
                         if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 'c') {
-                            $t = $reader->getAttribute('t') ?? '';
                             $r = $reader->getAttribute('r') ?? '';
+
+                            $cellIndex = $col;
+                            if ($r !== '') {
+                                $colLetter = rtrim($r, '0123456789');
+                                // Cache column letter → index: columnIndex() only runs once per column.
+                                $cellIndex = $colRefCache[$colLetter] ?? null;
+                                if ($cellIndex === null) {
+                                    $cellIndex = Spread::columnIndex($colLetter) - 1;
+                                    $colRefCache[$colLetter] = $cellIndex;
+                                }
+                            }
+
+                            // Optimization: Skip parsing unselected cells entirely
+                            if (!empty($selectedIndices) && !isset($selectedIndices[$cellIndex])) {
+                                // Skip the entire <c> subtree without reading value
+                                if (!$reader->isEmptyElement) {
+                                    $moved = $reader->next();
+                                } else {
+                                    $moved = $reader->read();
+                                }
+                                // Still need to track position for sparse row handling
+                                while ($cellIndex > $col) {
+                                    $rowData[] = null;
+                                    $col++;
+                                }
+                                // Add null placeholder for skipped column
+                                $rowData[] = null;
+                                $col++;
+                                continue;
+                            }
+
+                            $t = $reader->getAttribute('t') ?? '';
                             $s = $reader->getAttribute('s') ?? '';
                             $v = '';
 
@@ -175,16 +218,6 @@ class XlsxReader implements ReaderInterface
                             }
 
                             $format = null;
-                            $cellIndex = $col;
-                            if ($r !== '') {
-                                $colLetter = rtrim($r, '0123456789');
-                                // Cache column letter → index: columnIndex() only runs once per column.
-                                $cellIndex = $colRefCache[$colLetter] ?? null;
-                                if ($cellIndex === null) {
-                                    $cellIndex = Spread::columnIndex($colLetter) - 1;
-                                    $colRefCache[$colLetter] = $cellIndex;
-                                }
-                            }
 
                             while ($cellIndex > $col) {
                                 $rowData[] = null;
@@ -232,6 +265,7 @@ class XlsxReader implements ReaderInterface
                             $rowData[] = $v;
                             $col++;
                         }
+                        $moved = $reader->read();
                     }
                 }
 
@@ -257,13 +291,24 @@ class XlsxReader implements ReaderInterface
                                 );
                             }
                         }
+                        // Build column selection map
+                        [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $headers);
                         continue;
                     }
                     $rowData = array_combine($headers, array_slice($rowData, 0, $totalColumns));
+                    // Apply column selection
+                    if (!empty($columnMap)) {
+                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, true);
+                    }
                 } else {
                     if ($totalColumns === null) {
                         $totalColumns = count($rowData);
                     }
+                }
+
+                // Apply column selection for non-assoc mode
+                if (!$this->assoc && !empty($columnMap)) {
+                    $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, false);
                 }
 
                 if ($yieldCount < $this->offset) {

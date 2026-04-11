@@ -535,4 +535,70 @@ class Spread
         }
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
     }
+
+    /**
+     * Build column selection maps and validate required columns exist.
+     *
+     * @param string[] $columns Columns to select
+     * @param string[] $headers Available headers (file or explicit)
+     * @return array{0: array<string, int>, 1: array<int, true>} [$columnMap, $selectedIndices]
+     * @throws RuntimeException If any column not found in headers
+     */
+    public static function buildColumnSelection(array $columns, array $headers): array
+    {
+        $columnMap = [];
+        $selectedIndices = [];
+
+        if (!empty($columns)) {
+            $missing = [];
+            foreach ($columns as $colName) {
+                $idx = array_search($colName, $headers);
+                if ($idx === false) {
+                    $missing[] = $colName;
+                } else {
+                    /** @var int $idx */
+                    $columnMap[$colName] = $idx;
+                    $selectedIndices[$idx] = true;
+                }
+            }
+
+            if (!empty($missing)) {
+                throw new RuntimeException(
+                    'Missing required columns: ' . implode(', ', $missing)
+                );
+            }
+        }
+
+        return [$columnMap, $selectedIndices];
+    }
+
+    /**
+     * Apply column selection to a row of data.
+     *
+     * @param array<mixed> $row The input row data
+     * @param array<string, int> $columnMap Map of column names to indices
+     * @param string[] $columns Column names in desired order
+     * @param bool $assoc Whether to return associative array
+     * @return array<mixed> The filtered/reordered row
+     */
+    public static function applyColumnSelection(array $row, array $columnMap, array $columns, bool $assoc): array
+    {
+        if (empty($columnMap)) {
+            return $row;
+        }
+
+        $selected = [];
+        foreach ($columns as $colName) {
+            if ($assoc) {
+                // In assoc mode, row is keyed by column name (after array_combine)
+                $selected[$colName] = $row[$colName] ?? null;
+            } else {
+                // In non-assoc mode, row is keyed by numeric index
+                $idx = $columnMap[$colName] ?? null;
+                $selected[] = ($idx !== null) ? ($row[$idx] ?? null) : null;
+            }
+        }
+
+        return $selected;
+    }
 }

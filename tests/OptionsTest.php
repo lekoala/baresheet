@@ -192,6 +192,7 @@ class OptionsTest extends TestCase
             public bool $sharedStrings = false;
             public bool $autoWidth = false;
             public array $requiredColumns = [];
+            public array $columns = [];
         };
 
         $opts->applyTo($target);

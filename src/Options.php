@@ -35,6 +35,8 @@ class Options
         public ?int $limit = null,
         /** @var string[] Required column names that must exist in the header row. */
         public array $requiredColumns = [],
+        /** @var string[] Columns to extract (selects and reorders). Empty = all columns. */
+        public array $columns = [],
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = "auto",

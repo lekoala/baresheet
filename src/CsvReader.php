@@ -26,7 +26,11 @@ class CsvReader implements ReaderInterface
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
     /** @var string[] */
+    public array $headers = [];
+    /** @var string[] */
     public array $requiredColumns = [];
+    /** @var string[] */
+    public array $columns = [];
 
     public function __construct(?Options $options = null)
     {
@@ -128,6 +132,12 @@ class CsvReader implements ReaderInterface
         $yieldCount = 0;
         $expectedCols = null;
         $doEncode = $this->inputEncoding && $this->outputEncoding;
+        $columnMap = [];
+
+        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
+        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
+            [$columnMap, ] = Spread::buildColumnSelection($this->columns, $this->headers);
+        }
 
         while (
             !feof($stream)
@@ -174,6 +184,8 @@ class CsvReader implements ReaderInterface
                             );
                         }
                     }
+                    // Build column selection map
+                    [$columnMap, ] = Spread::buildColumnSelection($this->columns, $headers);
                     continue;
                 }
                 $colCount = count($line);
@@ -183,6 +195,11 @@ class CsvReader implements ReaderInterface
                     throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expected");
                 }
                 $line = array_combine($headers, $line);
+            }
+
+            // Apply column selection
+            if (!empty($columnMap)) {
+                $line = Spread::applyColumnSelection($line, $columnMap, $this->columns, $this->assoc);
             }
 
             if ($count < $this->offset) {

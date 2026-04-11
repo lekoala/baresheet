@@ -24,7 +24,11 @@ class OdsReader implements ReaderInterface
     public bool $skipEmptyLines = true;
     public string|int|null $sheet = null;
     /** @var string[] */
+    public array $headers = [];
+    /** @var string[] */
     public array $requiredColumns = [];
+    /** @var string[] */
+    public array $columns = [];
 
     public function __construct(?Options $options = null)
     {
@@ -92,6 +96,13 @@ class OdsReader implements ReaderInterface
         $headers = null;
         $totalColumns = null;
         $yieldCount = 0;
+        $columnMap = [];
+        $selectedIndices = []; // Set of column indices to parse (empty = all)
+
+        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
+        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
+            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+        }
 
         while ($reader->read()) {
             if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'table' && $reader->namespaceURI === self::NS_TABLE) {
@@ -124,9 +135,36 @@ class OdsReader implements ReaderInterface
 
                                     if (!$reader->isEmptyElement) {
                                         $rowDepth = $reader->depth;
-                                        while ($reader->read() && $reader->depth > $rowDepth) {
+                                        $moved = $reader->read();
+                                        while ($moved && $reader->depth > $rowDepth) {
                                             if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'table-cell' && $reader->namespaceURI === self::NS_TABLE) {
                                                 $colRepeat = (int)($reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?: 1);
+                                                $colIndex = count($rowData);
+
+                                                // Optimization: Skip parsing unselected cells
+                                                $selectedInRange = false;
+                                                if (!empty($selectedIndices)) {
+                                                    for ($i = 0; $i < $colRepeat; $i++) {
+                                                        if (isset($selectedIndices[$colIndex + $i])) {
+                                                            $selectedInRange = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                } else {
+                                                    $selectedInRange = true;
+                                                }
+
+                                                if (!$selectedInRange) {
+                                                    if (!$reader->isEmptyElement) {
+                                                        $moved = $reader->next();
+                                                    } else {
+                                                        $moved = $reader->read();
+                                                    }
+                                                    for ($i = 0; $i < $colRepeat; $i++) {
+                                                        $rowData[] = null;
+                                                    }
+                                                    continue;
+                                                }
 
                                                 $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
                                                 $value = null;
@@ -169,6 +207,7 @@ class OdsReader implements ReaderInterface
                                                     }
                                                 }
                                             }
+                                            $moved = $reader->read();
                                         }
                                     }
 
@@ -195,14 +234,25 @@ class OdsReader implements ReaderInterface
                                                     );
                                                 }
                                             }
+                        // Build column selection map
+                                            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $headers);
                                             continue;
                                         }
                                         $rowData = array_slice(array_pad($rowData, $totalColumns ?? 0, null), 0, $totalColumns ?? 0);
                                         $rowData = array_combine($headers, $rowData);
+                                        // Apply column selection
+                                        if (!empty($columnMap)) {
+                                            $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, true);
+                                        }
                                     } else {
                                         if ($totalColumns === null) {
                                             $totalColumns = count($rowData);
                                         }
+                                    }
+
+                                    // Apply column selection for non-assoc mode
+                                    if (!$this->assoc && !empty($columnMap)) {
+                                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, false);
                                     }
 
                                     if ($yieldCount < $this->offset) {
