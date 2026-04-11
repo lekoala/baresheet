@@ -165,7 +165,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `inputEncoding`   | ?string           | `null`   | Read (CSV)                |
 | `outputEncoding`  | ?string           | `null`   | Read (CSV)                |
 | `bom`             | bool\|string\|Bom | `true`   | Write (CSV)               |
-| `escapeFormulas`  | bool              | `false`  | Write (CSV)               |
+| `escapeFormulas`  | bool/callable     | `false`  | Write (CSV)               |
 | `meta`            | array/Meta        | `null`   | Write (XLSX, ODS)         |
 | `autofilter`      | ?string           | `null`   | Write (XLSX)              |
 | `freezePane`      | ?string           | `null`   | Write (XLSX)              |
@@ -430,6 +430,29 @@ If you are exporting data to be consumed by clients opening the file in Excel, y
 $writer = new CsvWriter();
 $writer->escapeFormulas = true; // Protects against formula injection by prefixing a single-quote
 ```
+
+#### Selective Formula Escaping
+
+For advanced use cases, `escapeFormulas` also accepts a **callable** that receives the cell value and column index, allowing you to selectively escape only specific columns:
+
+```php
+$writer = new CsvWriter();
+$writer->escapeFormulas = function (string $cell, int $colIndex): string {
+    // Skip phone columns (column 1) to preserve + prefixes
+    if ($colIndex === 1) {
+        return $cell;
+    }
+    // Apply default escaping for everything else
+    $chars = "=+-@\t\r";
+    if ($cell !== '' && str_contains($chars, $cell[0])) {
+        return "'" . $cell;
+    }
+    return $cell;
+};
+$writer->writeFile($data, 'export.csv');
+```
+
+**Important:** Heuristic detection of "malicious" formulas is fundamentally unreliable. Attackers can use `CHAR()` functions to build strings character-by-character, and new attack vectors emerge constantly. The library takes a conservative approach: blanket escaping by default when enabled, or user-controlled selective escaping via callback. For maximum security with user-generated content, prefer **XLSX** format, which has explicit cell type metadata and is immune to formula injection.
 
 ## License
 

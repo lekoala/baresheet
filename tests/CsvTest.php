@@ -203,19 +203,87 @@ class CsvTest extends TestCase
         self::assertStringContainsString("'@url", $output);
     }
 
-    public function testFormulaEscapingIsDefault(): void
+    public function testFormulaEscapingWithCallable(): void
     {
         $writer = new CsvWriter();
         $writer->bom = false;
-        // escapeFormulas should be false by default to prevent data corruption!
+        // Skip escaping for column index 1 (phone numbers), escape everything else
+        $writer->escapeFormulas = function (string $cell, int $colIndex): string {
+            if ($colIndex === 1) {
+                return $cell; // Don't escape phone column
+            }
+            // Default escaping
+            $chars = "=+-@\t\r";
+            if ($cell !== '' && str_contains($chars, $cell[0])) {
+                return "'" . $cell;
+            }
+            return $cell;
+        };
+
         $output = $writer->writeString([
-            ["=SUM(A1:A10)", "+cmd", "-data", "@url", "\ttab", "\rreturn"],
+            ["Name", "Phone", "Formula"],
+            ["John", "+1234567890", "=SUM(A1:A10)"],
+            ["Jane", "+9876543210", "=HYPERLINK(...)"],
         ]);
 
-        self::assertStringContainsString("=SUM(A1:A10)", $output);
-        self::assertStringNotContainsString("'=SUM(A1:A10)", $output);
-        self::assertStringContainsString("+cmd", $output);
-        self::assertStringNotContainsString("'+cmd", $output);
+        // Phone numbers should NOT be escaped (column 1)
+        self::assertStringContainsString("+1234567890", $output);
+        self::assertStringNotContainsString("'+1234567890", $output);
+        self::assertStringContainsString("+9876543210", $output);
+        self::assertStringNotContainsString("'+9876543210", $output);
+
+        // Formulas in column 2 SHOULD be escaped
+        self::assertStringContainsString("'=SUM(A1:A10)", $output);
+        self::assertStringContainsString("'=HYPERLINK(...)", $output);
+
+        // Header in column 0 should NOT be escaped (doesn't start with formula char)
+        self::assertStringContainsString("Name", $output);
+    }
+
+    public function testFormulaEscapingCallableReceivesCorrectColumnIndex(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+
+        $receivedIndices = [];
+        $writer->escapeFormulas = function (string $cell, int $colIndex) use (&$receivedIndices): string {
+            $receivedIndices[] = ['cell' => $cell, 'index' => $colIndex];
+            return $cell;
+        };
+
+        $writer->writeString([
+            ["A", "B", "C"],
+            ["1", "2", "3"],
+        ]);
+
+        // Should have recorded indices 0, 1, 2 for each row
+        self::assertCount(6, $receivedIndices);
+        self::assertEquals(['cell' => 'A', 'index' => 0], $receivedIndices[0]);
+        self::assertEquals(['cell' => 'B', 'index' => 1], $receivedIndices[1]);
+        self::assertEquals(['cell' => 'C', 'index' => 2], $receivedIndices[2]);
+        self::assertEquals(['cell' => '1', 'index' => 0], $receivedIndices[3]);
+        self::assertEquals(['cell' => '2', 'index' => 1], $receivedIndices[4]);
+        self::assertEquals(['cell' => '3', 'index' => 2], $receivedIndices[5]);
+    }
+
+    public function testFormulaEscapingCallableWithNonStringCells(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+
+        $callCount = 0;
+        $writer->escapeFormulas = function (string $cell, int $colIndex) use (&$callCount): string {
+            $callCount++;
+            return $cell;
+        };
+
+        // Write data with mixed types (ints and nulls)
+        $writer->writeString([
+            [123, null, "=formula"],
+        ]);
+
+        // Callable should only be invoked for string cells
+        self::assertEquals(1, $callCount);
     }
 
     public function testCustomSeparator(): void

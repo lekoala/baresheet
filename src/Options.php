@@ -52,8 +52,11 @@ class Options
         public ?string $outputEncoding = null,
         /** @var bool|\LeKoala\Baresheet\Bom|string If true, writes a UTF-8 BOM, otherwise accepts a specific Bom enum or sequence string. */
         public bool|\LeKoala\Baresheet\Bom|string $bom = true,
-        /** @var bool If true, escapes formulas starting with `=`, `+`, `-`, or `@` to prevent injection. */
-        public bool $escapeFormulas = false,
+        /**
+         * @var bool|callable If true, escapes formulas starting with `=`, `+`, `-`, or `@` to prevent injection.
+         *                    If a callable, it receives (string $cell, int $colIndex) and should return the processed cell.
+         */
+        public $escapeFormulas = false,
         // ─── XLSX & ODS ──────────────────────────
         /**
          * @var Meta|array<string, mixed>|null Optional metadata for the generated document.

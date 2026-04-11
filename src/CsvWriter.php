@@ -20,7 +20,11 @@ class CsvWriter implements WriterInterface
     public string $eol = "\r\n";
     public bool|Bom|string $bom = true;
     public bool $stream = true;
-    public bool $escapeFormulas = false;
+    /**
+     * @var bool|callable If true, escapes formulas starting with `=`, `+`, `-`, or `@` to prevent injection.
+     *                    If a callable, it receives (string $cell, int $colIndex) and should return the processed cell.
+     */
+    public $escapeFormulas = false;
     public ?string $outputEncoding = null;
     /**
      * @var string[]
@@ -147,6 +151,7 @@ class CsvWriter implements WriterInterface
 
         // Determine processing closure to avoid repetitive checks in the loop
         $hasEncoding = ($outputEncoding !== null && $outputEncoding !== '');
+        $isCallable = is_callable($escapeFormulas);
 
         // ⚡ Bolt: Fast-path optimization
         // Bypassing the closure call when no transformations are required saves ~30%
@@ -154,9 +159,21 @@ class CsvWriter implements WriterInterface
         $needsProcessing = $escapeFormulas || $hasEncoding;
 
         /** @var \Closure(array<mixed>): array<int|string, bool|float|int|string|null> $processRow */
-        $processRow = static function (array $row) use ($escapeFormulas, $hasEncoding, $outputEncoding): array {
+        $processRow = static function (array $row) use ($escapeFormulas, $hasEncoding, $outputEncoding, $isCallable): array {
             if ($escapeFormulas) {
-                $row = self::escapeRow($row);
+                if ($isCallable) {
+                    /** @var callable(string, int): string $escapeFormulas */
+                    $colIndex = 0;
+                    foreach ($row as &$cell) {
+                        if (is_string($cell)) {
+                            $cell = $escapeFormulas($cell, $colIndex);
+                        }
+                        $colIndex++;
+                    }
+                    unset($cell);
+                } else {
+                    $row = self::escapeRow($row);
+                }
             }
             if ($hasEncoding) {
                 foreach ($row as &$v) {
