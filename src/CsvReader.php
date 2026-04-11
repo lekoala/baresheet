@@ -194,12 +194,23 @@ class CsvReader implements ReaderInterface
                     $rowIdx = $count + 1;
                     throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expected");
                 }
-                $line = array_combine($headers, $line);
-            }
-
-            // Apply column selection
-            if (!empty($columnMap)) {
-                $line = Spread::applyColumnSelection($line, $columnMap, $this->columns, $this->assoc);
+                // Fast path: skip array_combine when columns are selected — index directly
+                if (!empty($columnMap)) {
+                    $selected = [];
+                    foreach ($this->columns as $colName) {
+                        $selected[$colName] = $line[$columnMap[$colName]];
+                    }
+                    $line = $selected;
+                } else {
+                    $line = array_combine($headers, $line);
+                }
+            } elseif (!empty($columnMap)) {
+                // Non-assoc mode: pick by index
+                $selected = [];
+                foreach ($this->columns as $colName) {
+                    $selected[] = $line[$columnMap[$colName]];
+                }
+                $line = $selected;
             }
 
             if ($count < $this->offset) {
