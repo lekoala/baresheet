@@ -144,9 +144,19 @@ class Spread
      */
     public static function columnIndex(string $letter): int
     {
-        $length = strlen($letter);
+        $l = strlen($letter);
+        if ($l === 1) {
+            return ord(strtoupper($letter[0])) - 64;
+        }
+        if ($l === 2) {
+            return (ord(strtoupper($letter[0])) - 64) * 26 + (ord(strtoupper($letter[1])) - 64);
+        }
+        if ($l === 3) {
+            return (ord(strtoupper($letter[0])) - 64) * 676 + (ord(strtoupper($letter[1])) - 64) * 26 + (ord(strtoupper($letter[2])) - 64);
+        }
+
         $index = 0;
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $l; $i++) {
             $index = $index * 26 + (ord(strtoupper($letter[$i])) - 64);
         }
         return $index;
