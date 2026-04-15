@@ -19,3 +19,6 @@
 ## 2024-05-20 - Fast-path Excel column string length parsing
 **Learning:** `Spread::columnIndex(string $letter): int` was previously parsing characters using a loop: `for ($i = 0; $i < $length; $i++) { $index = $index * 26 + (ord(strtoupper($letter[$i])) - 64); }`. This parsing logic occurs inside tight inner loops for cell column parsing in `XlsxReader`.
 **Action:** Unroll lengths 1 to 3 since valid Excel column names max out at length 3 (up to "XFD"). Return early to bypass `strlen()`, `ord()`, and loop bounds checking iterations, increasing reading speed for the Baresheet XLSX parser by approximately ~5%.
+## 2024-05-20 - Favor clean caching over unrolling
+**Learning:** While unrolling parsing loops for Excel column letters provided a slight performance bump in microbenchmarks, the resulting code was messy and harder to maintain. A simpler, more readable approach is to memoize results using a `static` array cache, which yields even better performance for repeated calls (like parsing the same columns across thousands of rows) without sacrificing code clarity.
+**Action:** Use a `static $cache = []` to memoize the results of `Spread::columnIndex(string $letter)` instead of manually unrolling the string parsing loop.

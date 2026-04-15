@@ -144,21 +144,19 @@ class Spread
      */
     public static function columnIndex(string $letter): int
     {
-        $l = strlen($letter);
-        if ($l === 1) {
-            return ord(strtoupper($letter[0])) - 64;
-        }
-        if ($l === 2) {
-            return (ord(strtoupper($letter[0])) - 64) * 26 + (ord(strtoupper($letter[1])) - 64);
-        }
-        if ($l === 3) {
-            return (ord(strtoupper($letter[0])) - 64) * 676 + (ord(strtoupper($letter[1])) - 64) * 26 + (ord(strtoupper($letter[2])) - 64);
+        /** @var array<string, int> $cache */
+        static $cache = [];
+        if (isset($cache[$letter])) {
+            return $cache[$letter];
         }
 
+        $length = strlen($letter);
         $index = 0;
-        for ($i = 0; $i < $l; $i++) {
+        for ($i = 0; $i < $length; $i++) {
             $index = $index * 26 + (ord(strtoupper($letter[$i])) - 64);
         }
+
+        $cache[$letter] = $index;
         return $index;
     }
 
