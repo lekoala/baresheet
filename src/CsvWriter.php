@@ -158,25 +158,13 @@ class CsvWriter implements WriterInterface
         // write time (~0.13s reduction per 100k rows) by avoiding per-row function call overhead.
         $needsProcessing = $escapeFormulas || $hasEncoding;
 
-        /** @var \Closure(array<mixed>): array<int|string, bool|float|int|string|null> $processRow */
-        $processRow = static function (array $row) use ($escapeFormulas, $hasEncoding, $outputEncoding, $isCallable): array {
-            if ($escapeFormulas) {
-                if ($isCallable) {
-                    /** @var callable(string, int): string $escapeFormulas */
-                    $colIndex = 0;
-                    foreach ($row as &$cell) {
-                        if (is_string($cell)) {
-                            $cell = $escapeFormulas($cell, $colIndex);
-                        }
-                        $colIndex++;
-                    }
-                    unset($cell);
-                } else {
-                    $row = self::escapeRow($row);
-                }
-            }
+        if (!empty($this->headers)) {
+            $row = $this->headers;
+            // The user requested that we do NOT escape headers, but we should still
+            // apply outputEncoding if one is set.
             if ($hasEncoding) {
                 foreach ($row as &$v) {
+                    // @phpstan-ignore-next-line
                     if (is_string($v)) {
                         /** @var string $outputEncoding */
                         $v = mb_convert_encoding($v, $outputEncoding);
@@ -185,11 +173,6 @@ class CsvWriter implements WriterInterface
                 unset($v);
             }
             /** @var array<int|string, bool|float|int|string|null> $row */
-            return $row;
-        };
-
-        if (!empty($this->headers)) {
-            $row = $needsProcessing ? $processRow($this->headers) : $this->headers;
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
                 throw new RuntimeException("Failed to write headers to stream");
@@ -198,8 +181,32 @@ class CsvWriter implements WriterInterface
 
         foreach ($data as $row) {
             if ($needsProcessing) {
-                $row = $processRow($row);
+                if ($escapeFormulas) {
+                    if ($isCallable) {
+                        /** @var callable(string, int): string $escapeFormulas */
+                        $colIndex = 0;
+                        foreach ($row as &$cell) {
+                            if (is_string($cell)) {
+                                $cell = $escapeFormulas($cell, $colIndex);
+                            }
+                            $colIndex++;
+                        }
+                        unset($cell);
+                    } else {
+                        $row = self::escapeRow($row);
+                    }
+                }
+                if ($hasEncoding) {
+                    foreach ($row as &$v) {
+                        if (is_string($v)) {
+                            /** @var string $outputEncoding */
+                            $v = mb_convert_encoding($v, $outputEncoding);
+                        }
+                    }
+                    unset($v);
+                }
             }
+            /** @var array<int|string, bool|float|int|string|null> $row */
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
                 throw new RuntimeException("Failed to write line");
