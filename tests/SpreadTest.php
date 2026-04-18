@@ -102,4 +102,14 @@ class SpreadTest extends TestCase
         $dtQuarter = new \DateTime('2024-01-01 06:00:00');
         self::assertEquals(45292.25, Spread::dateToExcel($dtQuarter));
     }
+
+    public function testEnsureExtension(): void
+    {
+        self::assertEquals('test.csv', Spread::ensureExtension('test', 'csv'));
+        self::assertEquals('test.csv', Spread::ensureExtension('test.csv', 'csv'));
+        self::assertEquals('test.CSV', Spread::ensureExtension('test.CSV', 'csv'));
+        self::assertEquals('test.csv', Spread::ensureExtension('test.csv', 'CSV'));
+        self::assertEquals('test.xlsx.csv', Spread::ensureExtension('test.xlsx', 'csv'));
+        self::assertEquals('path/to/test.ods', Spread::ensureExtension('path/to/test', 'ods'));
+    }
 }
