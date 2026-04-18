@@ -12,8 +12,6 @@ use LeKoala\Baresheet\Bom;
  */
 class CsvReader implements ReaderInterface
 {
-    private ?Bom $inputBOM = null;
-
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
@@ -78,14 +76,6 @@ class CsvReader implements ReaderInterface
     // -- Internal --
 
     /**
-     * Get the detected input BOM sequence, if any.
-     */
-    public function getInputBOM(): ?Bom
-    {
-        return $this->inputBOM;
-    }
-
-    /**
      * @param resource $stream
      * @return Generator<mixed>
      */
@@ -102,15 +92,15 @@ class CsvReader implements ReaderInterface
         }
 
         // Check for a BOM in the sample
-        $this->inputBOM = Bom::tryFromSequence($sample);
+        $inputBOM = Bom::tryFromSequence($sample);
 
-        if ($this->inputBOM !== null) {
+        if ($inputBOM !== null) {
             // Seek past the BOM
-            fseek($stream, $this->inputBOM->length());
+            fseek($stream, $inputBOM->length());
 
             // If it's not UTF-8, transcode the stream
-            if (!$this->inputBOM->isUtf8()) {
-                $encoding = $this->inputBOM->encoding();
+            if (!$inputBOM->isUtf8()) {
+                $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
                     throw new \RuntimeException("Failed to append iconv filter for encoding $encoding. Ensure iconv extension is enabled.");

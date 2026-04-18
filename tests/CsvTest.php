@@ -333,7 +333,6 @@ class CsvTest extends TestCase
             $reader->assoc = true;
             $data = iterator_to_array($reader->readString($content));
 
-            self::assertEquals($bom, $reader->getInputBOM(), "Failed detecting {$bom->name}");
             self::assertCount(1, $data);
             self::assertEquals('john', $data[0]['name'], "Failed decoding data for {$bom->name}");
         }
