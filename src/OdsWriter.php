@@ -232,10 +232,7 @@ class OdsWriter implements WriterInterface
         // Copy from temp location to final destination when using tempPath
         if ($this->tempPath) {
             try {
-                $contents = file_get_contents($destinationFile);
-                if ($contents !== false) {
-                    file_put_contents($filename, $contents);
-                }
+                copy($destinationFile, $filename);
             } finally {
                 if (is_file($destinationFile)) {
                     unlink($destinationFile);
