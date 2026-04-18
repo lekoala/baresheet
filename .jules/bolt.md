@@ -22,3 +22,6 @@
 ## 2024-05-20 - Favor clean caching over unrolling
 **Learning:** While unrolling parsing loops for Excel column letters provided a slight performance bump in microbenchmarks, the resulting code was messy and harder to maintain. A simpler, more readable approach is to memoize results using a `static` array cache, which yields even better performance for repeated calls (like parsing the same columns across thousands of rows) without sacrificing code clarity.
 **Action:** Use a `static $cache = []` to memoize the results of `Spread::columnIndex(string $letter)` instead of manually unrolling the string parsing loop.
+## 2024-06-12 - Memory-efficient file copying
+**Learning:** Using `file_get_contents()` and `file_put_contents()` for file copying loads the entire file into memory, which can hit memory limits for large files. PHP's `copy()` is a stream-based operation handled at the OS/filesystem level, keeping memory usage constant regardless of file size.
+**Action:** Use `copy()` instead of `file_get_contents()` and `file_put_contents()` when moving files, especially large ones like ZIP archives.
