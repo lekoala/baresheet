@@ -559,12 +559,18 @@ class Spread
 
         if (!empty($columns)) {
             $missing = [];
+
+            // To preserve array_search behavior of finding the FIRST matching index when there are duplicate headers,
+            // we reverse the array before flipping it. Since headers are usually unique, the overhead is minimal,
+            // while providing an O(1) lookup map that is perfectly compatible with the previous behavior.
+            $headerMap = array_flip(array_reverse($headers, true));
+
             foreach ($columns as $colName) {
-                $idx = array_search($colName, $headers);
-                if ($idx === false) {
+                if (!isset($headerMap[$colName])) {
                     $missing[] = $colName;
                 } else {
                     /** @var int $idx */
+                    $idx = $headerMap[$colName];
                     $columnMap[$colName] = $idx;
                     $selectedIndices[$idx] = true;
                 }
