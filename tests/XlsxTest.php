@@ -11,9 +11,31 @@ use LeKoala\Baresheet\XlsxWriter;
 
 class XlsxTest extends TestCase
 {
+    public function testReadString(): void
+    {
+        $reader = new XlsxReader();
+        $contents = file_get_contents(__DIR__ . '/data/basic.xlsx');
+        self::assertIsString($contents);
+        /** @var array<array<mixed>> $data */
+        $data = iterator_to_array($reader->readString((string)$contents));
+        self::assertCount(1, $data);
+        self::assertCount(3, $data[0]);
+        self::assertEquals('john', $data[0][0]);
+
+        // Test with options using header.xlsx for assoc
+        $contentsHeader = file_get_contents(__DIR__ . '/data/header.xlsx');
+        $options = new Options();
+        $options->assoc = true;
+        /** @var array<array<string, mixed>> $dataAssoc */
+        $dataAssoc = iterator_to_array($reader->readString((string)$contentsHeader, $options));
+        self::assertTrue($reader->assoc);
+        self::assertNotEmpty($dataAssoc);
+        self::assertArrayHasKey('email', $dataAssoc[0]);
+    }
     public function testReadXlsxFromFile(): void
     {
         $reader = new XlsxReader();
+        /** @var array<array<mixed>> $data */
         $data = iterator_to_array($reader->readFile(__DIR__ . '/data/basic.xlsx'));
         self::assertCount(1, $data);
         self::assertCount(3, $data[0]);
