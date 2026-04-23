@@ -12,6 +12,25 @@ use LeKoala\Baresheet\Baresheet;
 
 class OdsTest extends TestCase
 {
+    public function testReadString(): void
+    {
+        $writer = new OdsWriter();
+        $original = [
+            ["Alice", "alice@example.com", "24"],
+            ["Bob", "bob@example.com", "35"],
+        ];
+
+        $output = $writer->writeString($original);
+
+        $reader = new OdsReader();
+        $readBack = iterator_to_array($reader->readString($output));
+
+        self::assertCount(2, $readBack);
+        self::assertEquals("Alice", $readBack[0][0]);
+        self::assertEquals("bob@example.com", $readBack[1][1]);
+        self::assertEquals("35", $readBack[1][2]);
+    }
+
     public function testWriteAndReadBack(): void
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_' . time() . '.ods';
