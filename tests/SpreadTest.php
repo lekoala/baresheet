@@ -112,4 +112,39 @@ class SpreadTest extends TestCase
         self::assertEquals('test.xlsx.csv', Spread::ensureExtension('test.xlsx', 'csv'));
         self::assertEquals('path/to/test.ods', Spread::ensureExtension('path/to/test', 'ods'));
     }
+
+    public function testColumnLetter(): void
+    {
+        self::assertEquals('A', Spread::columnLetter(1));
+        self::assertEquals('Z', Spread::columnLetter(26));
+        self::assertEquals('AA', Spread::columnLetter(27));
+        self::assertEquals('AZ', Spread::columnLetter(52));
+        self::assertEquals('BA', Spread::columnLetter(53));
+        self::assertEquals('ZZ', Spread::columnLetter(702));
+        self::assertEquals('AAA', Spread::columnLetter(703));
+        self::assertEquals('XFD', Spread::columnLetter(16384));
+    }
+
+    public function testColumnIndex(): void
+    {
+        self::assertEquals(1, Spread::columnIndex('A'));
+        self::assertEquals(26, Spread::columnIndex('Z'));
+        self::assertEquals(27, Spread::columnIndex('AA'));
+        self::assertEquals(52, Spread::columnIndex('AZ'));
+        self::assertEquals(53, Spread::columnIndex('BA'));
+        self::assertEquals(702, Spread::columnIndex('ZZ'));
+        self::assertEquals(703, Spread::columnIndex('AAA'));
+        self::assertEquals(16384, Spread::columnIndex('XFD'));
+        // Test case sensitivity
+        self::assertEquals(1, Spread::columnIndex('a'));
+    }
+
+    public function testColumnIndexAndLetterConsistency(): void
+    {
+        for ($i = 1; $i <= 2000; $i++) {
+            $letter = Spread::columnLetter($i);
+            $index = Spread::columnIndex($letter);
+            self::assertEquals($i, $index, "Failed for index $i (Letter: $letter)");
+        }
+    }
 }
