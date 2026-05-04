@@ -92,14 +92,14 @@ class XlsxReader implements ReaderInterface
 
             if (isset($stylesXml->cellXfs->xf)) {
                 foreach ($stylesXml->cellXfs->xf as $v) {
-                    /** @var ?\SimpleXMLElement $numFmtId */
-                    $numFmtId = $v->attributes()['numFmtId'];
-                    $fmtId = (string)$numFmtId;
+                    $fmtId = (string)($v['numFmtId'] ?? '0');
 
                     $cellFormat = $numericalFormats[$fmtId] ?? null;
 
                     if ($cellFormat === null) {
-                        $cellFormat = self::getBuiltInFormatCode(intval($fmtId));
+                        $cellFormat = self::getBuiltInFormatCode((int)$fmtId);
+                        // Cache built-in formats too to avoid redundant match/lookup
+                        $numericalFormats[$fmtId] = $cellFormat;
                     }
 
                     $cellFormats[] = $cellFormat;
