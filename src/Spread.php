@@ -32,7 +32,7 @@ class Spread
      */
     public static function isSafePath(string $path): void
     {
-        if (str_starts_with(strtolower($path), 'phar://')) {
+        if (str_contains(strtolower($path), 'phar://')) {
             throw new RuntimeException("Phar deserialization is not allowed");
         }
     }
