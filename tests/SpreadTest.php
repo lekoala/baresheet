@@ -147,4 +147,33 @@ class SpreadTest extends TestCase
             self::assertEquals($i, $index, "Failed for index $i (Letter: $letter)");
         }
     }
+
+    /**
+     * @dataProvider invalidPathProvider
+     */
+    public function testIsSafePathThrowsException(string $path): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        Spread::isSafePath($path);
+    }
+
+    /**
+     * @return array<array<string>>
+     */
+    public static function invalidPathProvider(): array
+    {
+        return [
+            ['phar://test'],
+            ['PHAR://TEST'],
+            ['php://filter/resource=phar://test'],
+        ];
+    }
+
+    public function testIsSafePathAllowsNormalPath(): void
+    {
+        Spread::isSafePath('test.csv');
+        Spread::isSafePath('/path/to/test.xlsx');
+        $this->assertTrue(true);
+    }
 }
