@@ -296,19 +296,15 @@ class XlsxReader implements ReaderInterface
                         continue;
                     }
                     $rowData = array_combine($headers, array_slice($rowData, 0, $totalColumns));
-                    // Apply column selection
-                    if (!empty($columnMap)) {
-                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, true);
-                    }
                 } else {
                     if ($totalColumns === null) {
                         $totalColumns = count($rowData);
                     }
                 }
 
-                // Apply column selection for non-assoc mode
-                if (!$this->assoc && !empty($columnMap)) {
-                    $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, false);
+                // Apply column selection
+                if (!empty($columnMap)) {
+                    $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, $this->assoc);
                 }
 
                 if ($yieldCount < $this->offset) {
