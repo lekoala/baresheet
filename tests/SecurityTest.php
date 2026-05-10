@@ -105,4 +105,25 @@ class SecurityTest extends TestCase
         $reader = new XlsxReader();
         iterator_to_array($reader->readFile($invalidFile));
     }
+
+    public function testPharDeserializationBlocked(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        Spread::isSafePath('phar://test.phar');
+    }
+
+    public function testPharDeserializationBlockedCaseInsensitive(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        Spread::isSafePath('PHAR://test.phar');
+    }
+
+    public function testPharDeserializationBlockedNested(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        Spread::isSafePath('php://filter/resource=phar://test.phar');
+    }
 }
