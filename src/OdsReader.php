@@ -240,19 +240,15 @@ class OdsReader implements ReaderInterface
                                         }
                                         $rowData = array_slice(array_pad($rowData, $totalColumns ?? 0, null), 0, $totalColumns ?? 0);
                                         $rowData = array_combine($headers, $rowData);
-                                        // Apply column selection
-                                        if (!empty($columnMap)) {
-                                            $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, true);
-                                        }
                                     } else {
                                         if ($totalColumns === null) {
                                             $totalColumns = count($rowData);
                                         }
                                     }
 
-                                    // Apply column selection for non-assoc mode
-                                    if (!$this->assoc && !empty($columnMap)) {
-                                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, false);
+                                    // Apply column selection
+                                    if (!empty($columnMap)) {
+                                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, $this->assoc);
                                     }
 
                                     if ($yieldCount < $this->offset) {
