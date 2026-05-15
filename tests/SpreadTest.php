@@ -147,4 +147,20 @@ class SpreadTest extends TestCase
             self::assertEquals($i, $index, "Failed for index $i (Letter: $letter)");
         }
     }
+
+    public function testGetSheetNamesInvalidZip(): void
+    {
+        $invalidFile = __DIR__ . '/data/auto.csv';
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/Failed to open zip archive/');
+        Spread::getSheetNames($invalidFile);
+    }
+
+    public function testGetSheetNamesNonExistentFile(): void
+    {
+        $nonExistentFile = __DIR__ . '/data/non_existent.xlsx';
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessageMatches('/Failed to open zip archive/');
+        Spread::getSheetNames($nonExistentFile);
+    }
 }
