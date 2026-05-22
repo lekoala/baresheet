@@ -125,4 +125,29 @@ class SecurityTest extends TestCase
         $this->expectExceptionMessage('Phar deserialization is not allowed');
         Spread::isSafePath('php://filter/resource=phar://test.phar');
     }
+
+    /**
+     * Test that zipGetData rejects entries whose uncompressed size exceeds the
+     * configured limit, preventing Zip Bomb DoS attacks.
+     */
+    public function testZipBombRejection(): void
+    {
+        $tempZip = sys_get_temp_dir() . '/test_zipbomb_' . time() . '.zip';
+
+        $zip = new \ZipArchive();
+        $zip->open($tempZip, \ZipArchive::CREATE);
+        $zip->addFromString('xl/workbook.xml', str_repeat('A', 200));
+        $zip->close();
+
+        $zip = new \ZipArchive();
+        $zip->open($tempZip);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('exceeds maximum allowed size');
+
+        Spread::zipGetData($zip, 'xl/workbook.xml', maxSize: 100);
+
+        $zip->close();
+        unlink($tempZip);
+    }
 }

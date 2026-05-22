@@ -495,16 +495,24 @@ class Spread
         };
     }
 
-    public static function zipGetData(ZipArchive $zip, string $name): ?string
+    public static function zipGetData(ZipArchive $zip, string $name, int $maxSize = 50_000_000): ?string
     {
         $idx = $zip->locateName($name);
-        if ($idx !== false) {
-            $result = $zip->getFromIndex($idx);
-            if ($result !== false) {
-                return $result;
-            }
+        if ($idx === false) {
+            return null;
         }
-        return null;
+
+        $stat = $zip->statIndex($idx);
+        if ($stat === false) {
+            return null;
+        }
+
+        if ($stat['size'] > $maxSize) {
+            throw new \RuntimeException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+        }
+
+        $result = $zip->getFromIndex($idx);
+        return $result !== false ? $result : null;
     }
 
     /**
