@@ -587,9 +587,7 @@ class XlsxTest extends TestCase
         self::assertEquals('s1 - B1', $data[0][1]);
     }
 
-    /**
-     * @dataProvider builtInFormatCodeProvider
-     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('builtInFormatCodeProvider')]
     public function testGetBuiltInFormatCode(int $numFmtId, ?string $expected): void
     {
         self::assertEquals($expected, XlsxReader::getBuiltInFormatCode($numFmtId));

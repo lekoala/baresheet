@@ -92,7 +92,6 @@ class OdsReader implements ReaderInterface
         $reader->open($xmlFile, null, LIBXML_NONET);
 
         $tableIndex = 0;
-
         $headers = null;
         $totalColumns = null;
         $yieldCount = 0;
@@ -105,221 +104,271 @@ class OdsReader implements ReaderInterface
         }
 
         while ($reader->read()) {
-            if (
-                $reader->nodeType === \XMLReader::ELEMENT
-                && $reader->localName === 'table'
-                && $reader->namespaceURI === self::NS_TABLE
-            ) {
-                $name = $reader->getAttributeNs('name', self::NS_TABLE);
-                $isTarget = false;
-
-                if ($this->sheet === null && $tableIndex === 0) {
-                    $isTarget = true;
-                } elseif (is_int($this->sheet) && $tableIndex === $this->sheet) {
-                    $isTarget = true;
-                } elseif (is_string($this->sheet) && $name === $this->sheet) {
-                    $isTarget = true;
-                }
-
-                if ($isTarget) {
-                    if (!$reader->isEmptyElement) {
-                        $tableDepth = $reader->depth;
-                        $moved = $reader->read();
-                        while ($moved && $reader->depth > $tableDepth) {
-                            if (
-                                $reader->nodeType === \XMLReader::ELEMENT
-                                && $reader->localName === 'table-row'
-                                && $reader->namespaceURI === self::NS_TABLE
-                            ) {
-                                $rowRepeat = (int) (
-                                    $reader->getAttributeNs('number-rows-repeated', self::NS_TABLE) ?? '1'
-                                );
-                                if ($rowRepeat > 100) {
-                                    $moved = $reader->next();
-                                    continue;
-                                }
-
-                                for ($ri = 0; $ri < $rowRepeat; $ri++) {
-                                    $rowData = [];
-                                    $isEmpty = true;
-
-                                    if (!$reader->isEmptyElement) {
-                                        $rowDepth = $reader->depth;
-                                        $moved = $reader->read();
-                                        while ($moved && $reader->depth > $rowDepth) {
-                                            if (
-                                                $reader->nodeType === \XMLReader::ELEMENT
-                                                && $reader->localName === 'table-cell'
-                                                && $reader->namespaceURI === self::NS_TABLE
-                                            ) {
-                                                $colRepeat = (int) (
-                                                    $reader->getAttributeNs('number-columns-repeated', self::NS_TABLE)
-                                                    ?? '1'
-                                                );
-                                                $colIndex = count($rowData);
-
-                                                // Optimization: Skip parsing unselected cells
-                                                $selectedInRange = false;
-                                                if (!empty($selectedIndices)) {
-                                                    for ($i = 0; $i < $colRepeat; $i++) {
-                                                        if (isset($selectedIndices[$colIndex + $i])) {
-                                                            $selectedInRange = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                } else {
-                                                    $selectedInRange = true;
-                                                }
-
-                                                if (!$selectedInRange) {
-                                                    if (!$reader->isEmptyElement) {
-                                                        $moved = $reader->next();
-                                                    } else {
-                                                        $moved = $reader->read();
-                                                    }
-                                                    for ($i = 0; $i < $colRepeat; $i++) {
-                                                        $rowData[] = null;
-                                                    }
-                                                    continue;
-                                                }
-
-                                                $valueType =
-                                                    $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
-                                                $value = null;
-
-                                                if (
-                                                    $valueType === 'float'
-                                                    || $valueType === 'currency'
-                                                    || $valueType === 'percentage'
-                                                ) {
-                                                    $value = $reader->getAttributeNs('value', self::NS_OFFICE);
-                                                } elseif ($valueType === 'date') {
-                                                    $value = $reader->getAttributeNs('date-value', self::NS_OFFICE);
-                                                } elseif ($valueType === 'time') {
-                                                    $value = $reader->getAttributeNs('time-value', self::NS_OFFICE);
-                                                } elseif ($valueType === 'boolean') {
-                                                    $value = $reader->getAttributeNs('boolean-value', self::NS_OFFICE);
-                                                }
-
-                                                $textP = '';
-                                                if (!$reader->isEmptyElement) {
-                                                    $cellDepth = $reader->depth;
-                                                    while ($reader->read() && $reader->depth > $cellDepth) {
-                                                        if (
-                                                            $reader->nodeType === \XMLReader::ELEMENT
-                                                            && $reader->localName === 'p'
-                                                            && $reader->namespaceURI === self::NS_TEXT
-                                                        ) {
-                                                            // readString() is much faster and uses less memory than expand()->textContent
-                                                            $textP = $reader->readString();
-                                                        }
-                                                    }
-                                                }
-
-                                                if ($value === null) {
-                                                    if ($valueType === 'string' || $valueType === '') {
-                                                        $value = $textP !== '' ? $textP : null;
-                                                    }
-                                                }
-
-                                                if ($value === null && $colRepeat > 100) {
-                                                    break;
-                                                }
-
-                                                for ($ci = 0; $ci < $colRepeat; $ci++) {
-                                                    $rowData[] = $value;
-                                                    if ($value !== null && $value !== '') {
-                                                        $isEmpty = false;
-                                                    }
-                                                }
-                                            }
-                                            $moved = $reader->read();
-                                        }
-                                    }
-
-                                    if ($isEmpty && $this->skipEmptyLines) {
-                                        break;
-                                    }
-
-                                    if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
-                                        $colCount = count($rowData);
-                                        throw new \RuntimeException(
-                                            "Row has {$colCount} columns, expected {$totalColumns}",
-                                        );
-                                    }
-
-                                    if ($this->assoc) {
-                                        if ($headers === null) {
-                                            $headers = array_map('strval', $rowData);
-                                            $totalColumns = count($headers);
-                                            // Validate required columns
-                                            if (!empty($this->requiredColumns)) {
-                                                $missing = array_diff($this->requiredColumns, $headers);
-                                                if (!empty($missing)) {
-                                                    $reader->close();
-                                                    throw new \RuntimeException(
-                                                        'Missing required columns: ' . implode(', ', $missing),
-                                                    );
-                                                }
-                                            }
-                                            // Build column selection map
-                                            [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
-                                                $this->columns,
-                                                $headers,
-                                            );
-                                            continue;
-                                        }
-                                        $rowData = array_slice(
-                                            array_pad($rowData, $totalColumns ?? 0, null),
-                                            0,
-                                            $totalColumns ?? 0,
-                                        );
-                                        $rowData = array_combine($headers, $rowData);
-                                    } else {
-                                        if ($totalColumns === null) {
-                                            $totalColumns = count($rowData);
-                                        }
-                                    }
-
-                                    // Apply column selection
-                                    if (!empty($columnMap)) {
-                                        $rowData = Spread::applyColumnSelection(
-                                            $rowData,
-                                            $columnMap,
-                                            $this->columns,
-                                            $this->assoc,
-                                        );
-                                    }
-
-                                    if ($yieldCount < $this->offset) {
-                                        $yieldCount++;
-                                        continue;
-                                    }
-
-                                    yield $rowData;
-                                    $yieldCount++;
-                                    if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
-                                        $reader->close();
-                                        return;
-                                    }
-                                }
-                                $moved = $reader->next();
-                                continue;
-                            }
-                            $moved = $reader->read();
-                        }
-                    }
-                    $reader->close();
-                    return;
-                }
-                $tableIndex++;
+            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                continue;
             }
+            if ($reader->localName !== 'table') {
+                continue;
+            }
+            if ($reader->namespaceURI !== self::NS_TABLE) {
+                continue;
+            }
+
+            $name = $reader->getAttributeNs('name', self::NS_TABLE);
+            if (!$this->isTargetSheet($tableIndex, $name)) {
+                $tableIndex++;
+                continue;
+            }
+
+            if ($reader->isEmptyElement) {
+                continue;
+            }
+
+            yield from $this->parseTable(
+                $reader,
+                $headers,
+                $totalColumns,
+                $yieldCount,
+                $columnMap,
+                $selectedIndices,
+            );
+
+            $reader->close();
+            return;
         }
 
         $reader->close();
 
         if ($this->sheet !== null) {
             throw new Exception("Sheet '{$this->sheet}' not found");
+        }
+    }
+
+    /**
+     * Check if the given table index/name matches the requested sheet.
+     */
+    private function isTargetSheet(int $tableIndex, ?string $name): bool
+    {
+        if ($this->sheet === null && $tableIndex === 0) {
+            return true;
+        }
+        if (is_int($this->sheet) && $tableIndex === $this->sheet) {
+            return true;
+        }
+        if (is_string($this->sheet) && $name === $this->sheet) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param ?array<string> $headers
+     * @param ?int $totalColumns
+     * @param int $yieldCount
+     * @param array<string, int> $columnMap
+     * @param array<int, true> $selectedIndices
+     * @return Generator<mixed>
+     */
+    private function parseTable(
+        \XMLReader $reader,
+        ?array &$headers,
+        ?int &$totalColumns,
+        int &$yieldCount,
+        array &$columnMap,
+        array &$selectedIndices,
+    ): Generator {
+        $tableDepth = $reader->depth;
+        $moved = $reader->read();
+
+        while ($moved && $reader->depth > $tableDepth) {
+            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                $moved = $reader->read();
+                continue;
+            }
+            if ($reader->localName !== 'table-row') {
+                $moved = $reader->read();
+                continue;
+            }
+            if ($reader->namespaceURI !== self::NS_TABLE) {
+                $moved = $reader->read();
+                continue;
+            }
+
+            $rowRepeat = (int) ($reader->getAttributeNs('number-rows-repeated', self::NS_TABLE) ?? '1');
+            if ($rowRepeat > 100) {
+                $moved = $reader->next();
+                continue;
+            }
+
+            for ($ri = 0; $ri < $rowRepeat; $ri++) {
+                $rowData = [];
+                $isEmpty = true;
+
+                if (!$reader->isEmptyElement) {
+                    $rowDepth = $reader->depth;
+                    $moved = $reader->read();
+
+                    while ($moved && $reader->depth > $rowDepth) {
+                        if (
+                            $reader->nodeType === \XMLReader::ELEMENT
+                            && $reader->localName === 'table-cell'
+                            && $reader->namespaceURI === self::NS_TABLE
+                        ) {
+                            $colRepeat = (int) (
+                                $reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1'
+                            );
+                            $colIndex = count($rowData);
+
+                            // Optimization: Skip parsing unselected cells
+                            $selectedInRange = false;
+                            if (!empty($selectedIndices)) {
+                                for ($i = 0; $i < $colRepeat; $i++) {
+                                    if (isset($selectedIndices[$colIndex + $i])) {
+                                        $selectedInRange = true;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                $selectedInRange = true;
+                            }
+
+                            if (!$selectedInRange) {
+                                if (!$reader->isEmptyElement) {
+                                    $moved = $reader->next();
+                                } else {
+                                    $moved = $reader->read();
+                                }
+                                for ($i = 0; $i < $colRepeat; $i++) {
+                                    $rowData[] = null;
+                                }
+                                continue;
+                            }
+
+                            $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
+                            $value = null;
+
+                            if (
+                                $valueType === 'float'
+                                || $valueType === 'currency'
+                                || $valueType === 'percentage'
+                            ) {
+                                $value = $reader->getAttributeNs('value', self::NS_OFFICE);
+                            } elseif ($valueType === 'date') {
+                                $value = $reader->getAttributeNs('date-value', self::NS_OFFICE);
+                            } elseif ($valueType === 'time') {
+                                $value = $reader->getAttributeNs('time-value', self::NS_OFFICE);
+                            } elseif ($valueType === 'boolean') {
+                                $value = $reader->getAttributeNs('boolean-value', self::NS_OFFICE);
+                            }
+
+                            $textP = '';
+                            if (!$reader->isEmptyElement) {
+                                $cellDepth = $reader->depth;
+                                while ($reader->read() && $reader->depth > $cellDepth) {
+                                    if (
+                                        $reader->nodeType === \XMLReader::ELEMENT
+                                        && $reader->localName === 'p'
+                                        && $reader->namespaceURI === self::NS_TEXT
+                                    ) {
+                                        // readString() is much faster and uses less memory than expand()->textContent
+                                        $textP = $reader->readString();
+                                    }
+                                }
+                            }
+
+                            if ($value === null) {
+                                if ($valueType === 'string' || $valueType === '') {
+                                    $value = $textP !== '' ? $textP : null;
+                                }
+                            }
+
+                            if ($value === null && $colRepeat > 100) {
+                                break;
+                            }
+
+                            for ($ci = 0; $ci < $colRepeat; $ci++) {
+                                $rowData[] = $value;
+                                if ($value !== null && $value !== '') {
+                                    $isEmpty = false;
+                                }
+                            }
+                        }
+                        $moved = $reader->read();
+                    }
+                }
+
+                if ($isEmpty && $this->skipEmptyLines) {
+                    break;
+                }
+
+                if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
+                    $colCount = count($rowData);
+                    throw new \RuntimeException(
+                        "Row has {$colCount} columns, expected {$totalColumns}",
+                    );
+                }
+
+                if ($this->assoc) {
+                    if ($headers === null) {
+                        $headers = [];
+                        foreach ($rowData as $v) {
+                            $headers[] = $v !== null ? (string) $v : '';
+                        }
+                        $totalColumns = count($headers);
+                        // Validate required columns
+                        if (!empty($this->requiredColumns)) {
+                            $missing = array_diff($this->requiredColumns, $headers);
+                            if (!empty($missing)) {
+                                $reader->close();
+                                throw new \RuntimeException(
+                                    'Missing required columns: ' . implode(', ', $missing),
+                                );
+                            }
+                        }
+                        // Build column selection map
+                        [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
+                            $this->columns,
+                            $headers,
+                        );
+                        continue;
+                    }
+                    $rowData = array_slice(
+                        array_pad($rowData, $totalColumns ?? 0, null),
+                        0,
+                        $totalColumns ?? 0,
+                    );
+                    $rowData = array_combine($headers, $rowData);
+                } else {
+                    if ($totalColumns === null) {
+                        $totalColumns = count($rowData);
+                    }
+                }
+
+                // Apply column selection
+                if (!empty($columnMap)) {
+                    $rowData = Spread::applyColumnSelection(
+                        $rowData,
+                        $columnMap,
+                        $this->columns,
+                        $this->assoc,
+                    );
+                }
+
+                if ($yieldCount < $this->offset) {
+                    $yieldCount++;
+                    continue;
+                }
+
+                yield $rowData;
+                $yieldCount++;
+                if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
+                    $reader->close();
+                    return;
+                }
+            }
+
+            $moved = $reader->next();
         }
     }
 }

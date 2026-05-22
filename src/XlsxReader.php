@@ -77,34 +77,10 @@ class XlsxReader implements ReaderInterface
         }
 
         // Styles
-        $numericalFormats = [];
         $cellFormats = [];
         $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
         if ($stylesData) {
-            $stylesXml = Spread::safeXml($stylesData);
-
-            if (isset($stylesXml->numFmts)) {
-                foreach ($stylesXml->numFmts->children() as $fmt) {
-                    $attrs = $fmt->attributes();
-                    $numericalFormats[(string) $attrs->numFmtId] = (string) $attrs->formatCode;
-                }
-            }
-
-            if (isset($stylesXml->cellXfs->xf)) {
-                foreach ($stylesXml->cellXfs->xf as $v) {
-                    $fmtId = (string) ($v['numFmtId'] ?? '0');
-
-                    $cellFormat = $numericalFormats[$fmtId] ?? null;
-
-                    if ($cellFormat === null) {
-                        $cellFormat = self::getBuiltInFormatCode((int) $fmtId);
-                        // Cache built-in formats too to avoid redundant match/lookup
-                        $numericalFormats[$fmtId] = $cellFormat;
-                    }
-
-                    $cellFormats[] = $cellFormat;
-                }
-            }
+            $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
         }
 
         // Check 1904 date system
@@ -151,179 +127,237 @@ class XlsxReader implements ReaderInterface
         }
 
         while ($reader->read()) {
-            if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 'row') {
-                $rowCount++;
-                $rowData = [];
-                $col = 0;
-                $isEmpty = true;
+            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                continue;
+            }
+            if ($reader->name !== 'row') {
+                continue;
+            }
 
-                if (!$reader->isEmptyElement) {
-                    $rowDepth = $reader->depth;
-                    $moved = $reader->read();
-                    while ($moved && $reader->depth > $rowDepth) {
-                        if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 'c') {
-                            $r = $reader->getAttribute('r') ?? '';
+            $rowCount++;
+            $rowData = [];
+            $col = 0;
+            $isEmpty = true;
 
-                            $cellIndex = $col;
-                            if ($r !== '') {
-                                $colLetter = rtrim($r, '0123456789');
-                                // Cache column letter → index: columnIndex() only runs once per column.
-                                $cellIndex = $colRefCache[$colLetter] ?? null;
-                                if ($cellIndex === null) {
-                                    $cellIndex = Spread::columnIndex($colLetter) - 1;
-                                    $colRefCache[$colLetter] = $cellIndex;
-                                }
+            if (!$reader->isEmptyElement) {
+                $rowDepth = $reader->depth;
+                $moved = $reader->read();
+
+                while ($moved && $reader->depth > $rowDepth) {
+                    if (
+                        $reader->nodeType === \XMLReader::ELEMENT
+                        && $reader->name === 'c'
+                    ) {
+                        $r = $reader->getAttribute('r') ?? '';
+
+                        $cellIndex = $col;
+                        if ($r !== '') {
+                            $colLetter = rtrim($r, '0123456789');
+                            // Cache column letter → index: columnIndex() only runs once per column.
+                            $cellIndex = $colRefCache[$colLetter] ?? null;
+                            if ($cellIndex === null) {
+                                $cellIndex = Spread::columnIndex($colLetter) - 1;
+                                $colRefCache[$colLetter] = $cellIndex;
                             }
+                        }
 
-                            // Optimization: Skip parsing unselected cells entirely
-                            if (!empty($selectedIndices) && !isset($selectedIndices[$cellIndex])) {
-                                // Skip the entire <c> subtree without reading value
-                                if (!$reader->isEmptyElement) {
-                                    $moved = $reader->next();
-                                } else {
-                                    $moved = $reader->read();
-                                }
-                                // Still need to track position for sparse row handling
-                                while ($cellIndex > $col) {
-                                    $rowData[] = null;
-                                    $col++;
-                                }
-                                // Add null placeholder for skipped column
+                        // Optimization: Skip parsing unselected cells entirely
+                        if (!empty($selectedIndices) && !isset($selectedIndices[$cellIndex])) {
+                            // Skip the entire <c> subtree without reading value
+                            if (!$reader->isEmptyElement) {
+                                $moved = $reader->next();
+                            } else {
+                                $moved = $reader->read();
+                            }
+                            // Still need to track position for sparse row handling
+                            while ($cellIndex > $col) {
                                 $rowData[] = null;
                                 $col++;
-                                continue;
                             }
+                            // Add null placeholder for skipped column
+                            $rowData[] = null;
+                            $col++;
+                            continue;
+                        }
 
-                            $t = $reader->getAttribute('t') ?? '';
-                            $s = $reader->getAttribute('s') ?? '';
-                            $v = '';
+                        $t = $reader->getAttribute('t') ?? '';
+                        $s = $reader->getAttribute('s') ?? '';
 
-                            $cDepth = $reader->depth;
-                            if (!$reader->isEmptyElement) {
-                                while ($reader->read() && $reader->depth > $cDepth) {
-                                    if ($reader->nodeType === \XMLReader::ELEMENT) {
-                                        if ($reader->name === 'v') {
-                                            $v = $reader->readString();
-                                        } elseif ($reader->name === 'is') {
-                                            $isDepth = $reader->depth;
-                                            $v = '';
-                                            while ($reader->read() && $reader->depth > $isDepth) {
-                                                if (
-                                                    $reader->nodeType === \XMLReader::ELEMENT
-                                                    && $reader->name === 't'
-                                                ) {
-                                                    $v .= $reader->readString();
-                                                }
+                        $v = '';
+                        $cDepth = $reader->depth;
+                        if (!$reader->isEmptyElement) {
+                            while ($reader->read() && $reader->depth > $cDepth) {
+                                if ($reader->nodeType === \XMLReader::ELEMENT) {
+                                    if ($reader->name === 'v') {
+                                        $v = $reader->readString();
+                                    } elseif ($reader->name === 'is') {
+                                        $isDepth = $reader->depth;
+                                        $v = '';
+                                        while ($reader->read() && $reader->depth > $isDepth) {
+                                            if (
+                                                $reader->nodeType === \XMLReader::ELEMENT
+                                                && $reader->name === 't'
+                                            ) {
+                                                $v .= $reader->readString();
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
 
-                            $format = null;
+                        $format = null;
 
-                            while ($cellIndex > $col) {
-                                $rowData[] = null;
-                                $col++;
-                            }
-
-                            if ($t === 's') {
-                                $idx = (int) $v;
-                                $v = $sharedStrings[$idx] ?? '';
-                            }
-
-                            $excelFormat = null;
-                            $isDateFormat = false;
-                            if ($s !== '') {
-                                $excelFormat = $cellFormats[(int) $s] ?? null;
-                                if ($excelFormat) {
-                                    if (!isset($isDateCache[$excelFormat])) {
-                                        $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
-                                    }
-                                    $isDateFormat = $isDateCache[$excelFormat];
-                                }
-                                $format = $isDateFormat ? 'date' : null;
-                            }
-
-                            if ($t === 'n' && is_numeric($v)) {
-                                if ($excelFormat === null) {
-                                    $format = $colFormats[$col] ?? null;
-                                } else {
-                                    $format = $isDateFormat ? 'date' : 'number';
-                                }
-                            }
-
-                            if ($format !== null && $rowCount > $startRow && !isset($colFormats[$col])) {
-                                $colFormats[$col] = $format;
-                            }
-
-                            if ($format === 'date') {
-                                $v = Spread::excelDateToString($v, null, $is1904);
-                            }
-
-                            if ($v !== '') {
-                                $isEmpty = false;
-                            }
-
-                            $rowData[] = $v;
+                        while ($cellIndex > $col) {
+                            $rowData[] = null;
                             $col++;
                         }
-                        $moved = $reader->read();
-                    }
-                }
 
-                while ($totalColumns && $col < $totalColumns) {
-                    $rowData[] = null;
-                    $col++;
-                }
+                        if ($t === 's') {
+                            $idx = (int) $v;
+                            $v = $sharedStrings[$idx] ?? '';
+                        }
 
-                if ($isEmpty && $this->skipEmptyLines) {
-                    continue;
-                }
-                if ($this->assoc) {
-                    if ($headers === null) {
-                        $headers = array_map('strval', $rowData);
-                        $totalColumns = count($headers);
-                        // Validate required columns
-                        if (!empty($this->requiredColumns)) {
-                            $missing = array_diff($this->requiredColumns, $headers);
-                            if (!empty($missing)) {
-                                $reader->close();
-                                throw new \RuntimeException(
-                                    'Missing required columns: ' . implode(', ', $missing),
-                                );
+                        $excelFormat = null;
+                        $isDateFormat = false;
+                        if ($s !== '') {
+                            $excelFormat = $cellFormats[(int) $s] ?? null;
+                            if ($excelFormat) {
+                                if (!isset($isDateCache[$excelFormat])) {
+                                    $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
+                                }
+                                $isDateFormat = $isDateCache[$excelFormat];
+                            }
+                            $format = $isDateFormat ? 'date' : null;
+                        }
+
+                        if ($t === 'n' && is_numeric($v)) {
+                            if ($excelFormat === null) {
+                                $format = $colFormats[$col] ?? null;
+                            } else {
+                                $format = $isDateFormat ? 'date' : 'number';
                             }
                         }
-                        // Build column selection map
-                        [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $headers);
-                        continue;
-                    }
-                    $rowData = array_combine($headers, array_slice($rowData, 0, $totalColumns));
-                } else {
-                    if ($totalColumns === null) {
-                        $totalColumns = count($rowData);
-                    }
-                }
 
-                // Apply column selection
-                if (!empty($columnMap)) {
-                    $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, $this->assoc);
-                }
+                        if ($format !== null && !isset($colFormats[$col])) {
+                            $colFormats[$col] = $format;
+                        }
 
-                if ($yieldCount < $this->offset) {
-                    $yieldCount++;
+                        if ($format === 'date') {
+                            $v = Spread::excelDateToString($v, null, $is1904);
+                        }
+
+                        if ($v !== '') {
+                            $isEmpty = false;
+                        }
+
+                        $rowData[] = $v;
+                        $col++;
+                    }
+                    $moved = $reader->read();
+                }
+            }
+
+            while ($totalColumns && $col < $totalColumns) {
+                $rowData[] = null;
+                $col++;
+            }
+
+            if ($isEmpty && $this->skipEmptyLines) {
+                continue;
+            }
+
+            if ($this->assoc) {
+                if ($headers === null) {
+                    $headers = [];
+                    foreach ($rowData as $v) {
+                        $headers[] = $v !== null ? (string) $v : '';
+                    }
+                    $totalColumns = count($headers);
+                    // Validate required columns
+                    if (!empty($this->requiredColumns)) {
+                        $missing = array_diff($this->requiredColumns, $headers);
+                        if (!empty($missing)) {
+                            $reader->close();
+                            throw new \RuntimeException(
+                                'Missing required columns: ' . implode(', ', $missing),
+                            );
+                        }
+                    }
+                    // Build column selection map
+                    [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
+                        $this->columns,
+                        $headers,
+                    );
                     continue;
                 }
-
-                yield $rowData;
-                $yieldCount++;
-                if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
-                    $reader->close();
-                    return;
+                $rowData = array_combine($headers, array_slice($rowData, 0, $totalColumns));
+            } else {
+                if ($totalColumns === null) {
+                    $totalColumns = count($rowData);
                 }
+            }
+
+            // Apply column selection
+            if (!empty($columnMap)) {
+                $rowData = Spread::applyColumnSelection(
+                    $rowData,
+                    $columnMap,
+                    $this->columns,
+                    $this->assoc,
+                );
+            }
+
+            if ($yieldCount < $this->offset) {
+                $yieldCount++;
+                continue;
+            }
+
+            yield $rowData;
+            $yieldCount++;
+            if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
+                $reader->close();
+                return;
             }
         }
         $reader->close();
+    }
+
+    /**
+     * Parse styles.xml and return cell format lookup array.
+     *
+     * @param array<string, ?string> $numericalFormats
+     * @return array<int, ?string>
+     */
+    private static function parseCellFormats(string $stylesData, array $numericalFormats = []): array
+    {
+        $cellFormats = [];
+        $stylesXml = Spread::safeXml($stylesData);
+
+        if (isset($stylesXml->numFmts)) {
+            foreach ($stylesXml->numFmts->children() as $fmt) {
+                $attrs = $fmt->attributes();
+                $numericalFormats[(string) $attrs->numFmtId] = (string) $attrs->formatCode;
+            }
+        }
+
+        if (isset($stylesXml->cellXfs->xf)) {
+            foreach ($stylesXml->cellXfs->xf as $v) {
+                $fmtId = (string) ($v['numFmtId'] ?? '0');
+
+                $cellFormat = $numericalFormats[$fmtId] ?? null;
+
+                if ($cellFormat === null) {
+                    $cellFormat = self::getBuiltInFormatCode((int) $fmtId);
+                    // Cache built-in formats too to avoid redundant match/lookup
+                    $numericalFormats[$fmtId] = $cellFormat;
+                }
+
+                $cellFormats[] = $cellFormat;
+            }
+        }
+
+        return $cellFormats;
     }
 
     /**

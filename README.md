@@ -292,6 +292,48 @@ Missing columns throw immediately:
 RuntimeException: Missing required columns: missing_column
 ```
 
+### Data Transformation
+
+Baresheet preserves raw cell values by design. For cleaning, casting, or filtering, use the `Transform` class — generator-based pipelines that compose with readers and writers without loading data into memory.
+
+```php
+use LeKoala\Baresheet\Transform;
+
+// Trim whitespace from all string values
+$rows = Transform::trim($reader->readFile('data.csv'));
+
+// Chain multiple transforms (PHP 8.5+ pipe operator)
+$clean = $reader->readFile('data.csv')
+    |> Transform::trim(...)
+    |> Transform::nullAs(..., 'N/A')
+    |> Transform::boolAs(..., 'Yes', 'No');
+
+// Cast types for database inserts
+$typed = Transform::cast($rows, [
+    'qty' => 'int',
+    'price' => 'float',
+    'active' => 'bool',
+    'created' => 'date',  // returns DateTimeInterface
+]);
+
+// Tell your IDE / PHPStan the expected shape after casting
+/** @var Generator<array{qty: int, price: float, active: bool, created: ?DateTimeInterface}> $typed */
+$typed = Transform::cast($rows, [
+    'qty' => 'int',
+    'price' => 'float',
+    'active' => 'bool',
+    'created' => 'date',
+]);
+
+// Filter rows
+$active = Transform::filter($rows, fn($row) => $row['active'] === 'Yes');
+
+// Batch insert in chunks of 1000
+foreach (Transform::chunk($rows, 1000) as $batch) {
+    $db->bulkInsert($batch);
+}
+```
+
 ## Streaming Output
 
 For large files, streaming avoids writing a temporary file to disk. **Baresheet streams `output()` by default.**
