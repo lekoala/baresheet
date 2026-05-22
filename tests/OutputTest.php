@@ -24,8 +24,10 @@ namespace LeKoala\Baresheet {
 }
 
 namespace LeKoala\Baresheet\Tests {
+    use LeKoala\Baresheet\Baresheet;
     use LeKoala\Baresheet\CsvWriter;
     use LeKoala\Baresheet\OdsWriter;
+    use LeKoala\Baresheet\Spread;
     use LeKoala\Baresheet\XlsxWriter;
     use PHPUnit\Framework\TestCase;
 
@@ -214,6 +216,47 @@ namespace LeKoala\Baresheet\Tests {
             $writer->writeFile($data, $temp);
             $this->assertFileExists($temp . '.xlsx');
             unlink($temp . '.xlsx');
+        }
+
+        public function testOutputHeaders(): void
+        {
+            Spread::outputHeaders('text/csv', 'test.csv', 100);
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: text/csv'));
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Length: 100'));
+        }
+
+        public function testOutputHeadersWithoutSize(): void
+        {
+            Spread::outputHeaders('application/pdf', 'report.pdf');
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/pdf'));
+            $this->assertFalse($this->hasHeaderPrefix($headers, 'Content-Length:'));
+        }
+
+        public function testBaresheetOutputCsv(): void
+        {
+            ob_start();
+            Baresheet::output([['A', 'B'], ['1', '2']], 'test.csv');
+            $output = ob_get_clean();
+
+            $this->assertNotEmpty($output);
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: text/csv'));
+        }
+
+        public function testBaresheetOutputXlsx(): void
+        {
+            ob_start();
+            Baresheet::output([['A', 'B'], ['1', '2']], 'test.xlsx');
+            $output = ob_get_clean();
+
+            $this->assertNotEmpty($output);
+            $headers = $this->getMockHeaders();
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ));
         }
     }
 }

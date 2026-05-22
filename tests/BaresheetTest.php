@@ -158,4 +158,55 @@ class BaresheetTest extends TestCase
         $this->expectExceptionMessage('Unsupported format: pdf');
         Baresheet::getWriter('pdf');
     }
+
+    public function testGetReaderCsv(): void
+    {
+        $reader = Baresheet::getReader('csv');
+        self::assertInstanceOf(\LeKoala\Baresheet\CsvReader::class, $reader);
+    }
+
+    public function testGetReaderXlsx(): void
+    {
+        $reader = Baresheet::getReader('xlsx');
+        self::assertInstanceOf(\LeKoala\Baresheet\XlsxReader::class, $reader);
+    }
+
+    public function testGetReaderOds(): void
+    {
+        $reader = Baresheet::getReader('ods');
+        self::assertInstanceOf(\LeKoala\Baresheet\OdsReader::class, $reader);
+    }
+
+    public function testGetReaderCaseInsensitive(): void
+    {
+        $reader = Baresheet::getReader('CSV');
+        self::assertInstanceOf(\LeKoala\Baresheet\CsvReader::class, $reader);
+    }
+
+    public function testGetReaderUnsupported(): void
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Unsupported format: pdf');
+        Baresheet::getReader('pdf');
+    }
+
+    public function testWriteStreamCsv(): void
+    {
+        $stream = Baresheet::writeStream([['A', 'B'], ['1', '2']], 'csv');
+        self::assertIsResource($stream);
+        $contents = stream_get_contents($stream);
+        self::assertNotEmpty($contents);
+        self::assertStringContainsString('A', $contents);
+        fclose($stream);
+    }
+
+    public function testWriteStreamXlsx(): void
+    {
+        $stream = Baresheet::writeStream([['A', 'B'], ['1', '2']], 'xlsx');
+        self::assertIsResource($stream);
+        $contents = stream_get_contents($stream);
+        self::assertNotEmpty($contents);
+        self::assertStringStartsWith("PK", $contents); // ZIP magic
+        fclose($stream);
+    }
 }

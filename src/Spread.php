@@ -78,7 +78,7 @@ class Spread
     public static function getOutputStream(string $filename = 'php://output')
     {
         self::isSafePath($filename);
-        $stream = fopen($filename, 'w');
+        $stream = @fopen($filename, 'w');
         if (!$stream) {
             throw new RuntimeException('Failed to open stream');
         }
@@ -91,7 +91,7 @@ class Spread
     public static function getInputStream(string $filename)
     {
         self::isSafePath($filename);
-        $stream = fopen($filename, 'r');
+        $stream = @fopen($filename, 'r');
         if (!$stream) {
             throw new RuntimeException('Failed to open stream');
         }

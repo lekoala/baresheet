@@ -349,4 +349,14 @@ class TransformTest extends TestCase
         $second = $gen->current();
         self::assertEquals(['name' => 'jane'], $second);
     }
+
+    public function testCastInvalidDateReturnsNull(): void
+    {
+        $data = [
+            ['created' => 'not-a-valid-date'],
+        ];
+
+        $result = iterator_to_array(Transform::cast($data, ['created' => '?date']));
+        self::assertNull($result[0]['created']);
+    }
 }

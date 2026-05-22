@@ -317,4 +317,39 @@ class SpreadTest extends TestCase
         $this->expectExceptionMessage('Phar deserialization is not allowed');
         Spread::getOutputStream('phar://test.phar');
     }
+
+    public function testGetOutputStreamFailure(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to open stream');
+        Spread::getOutputStream('\\invalid\\path\\that\\does\\not\\exist\\file.txt');
+    }
+
+    public function testGetInputStreamFailure(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to open stream');
+        Spread::getInputStream(__DIR__ . '/data/non_existent_file_12345.csv');
+    }
+
+    public function testColumnRange(): void
+    {
+        $result = iterator_to_array(Spread::columnRange('A', 'C'));
+        self::assertSame(['A', 'B', 'C'], $result);
+    }
+
+    public function testSafeXml(): void
+    {
+        $xml = Spread::safeXml('<root><child>value</child></root>');
+        self::assertInstanceOf(\SimpleXMLElement::class, $xml);
+        self::assertSame('value', (string) $xml->child);
+    }
+
+    public function testGetTempFilename(): void
+    {
+        $tempFile = Spread::getTempFilename();
+        self::assertFileExists($tempFile);
+        self::assertStringStartsWith(sys_get_temp_dir() . '\\BSH', $tempFile);
+        unlink($tempFile);
+    }
 }
