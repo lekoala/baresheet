@@ -206,7 +206,7 @@ class BaresheetTest extends TestCase
         self::assertIsResource($stream);
         $contents = stream_get_contents($stream);
         self::assertNotEmpty($contents);
-        self::assertStringStartsWith("PK", $contents); // ZIP magic
+        self::assertStringStartsWith('PK', $contents); // ZIP magic
         fclose($stream);
     }
 }
