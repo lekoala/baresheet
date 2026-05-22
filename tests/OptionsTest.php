@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
-use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
+use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\TestCase;
 
 class OptionsTest extends TestCase
 {
@@ -25,7 +25,7 @@ class OptionsTest extends TestCase
             bom: false,
             escapeFormulas: true,
             skipEmptyLines: true,
-            offset: 5
+            offset: 5,
         );
 
         $reader = new CsvReader();
@@ -79,7 +79,7 @@ class OptionsTest extends TestCase
         $writer = new CsvWriter();
         $writer->eol = "\r\n";
         $writer->bom = false;
-        $csv = $writer->writeString([["a"], ["b"]]);
+        $csv = $writer->writeString([['a'], ['b']]);
 
         self::assertStringContainsString("a\r\n", $csv);
     }
@@ -91,7 +91,7 @@ class OptionsTest extends TestCase
             freezePane: 'A2',
             boldHeaders: true,
             sharedStrings: true,
-            autoWidth: true
+            autoWidth: true,
         );
 
         $writer = new XlsxWriter();
@@ -109,7 +109,7 @@ class OptionsTest extends TestCase
         $opts = new Options(
             assoc: true,
             separator: ';',
-            boldHeaders: true
+            boldHeaders: true,
         );
 
         $reader = new CsvReader($opts);
@@ -164,7 +164,7 @@ class OptionsTest extends TestCase
             boldHeaders: true,
             tempPath: '/tmp',
             sharedStrings: true,
-            autoWidth: true
+            autoWidth: true,
         );
 
         $target = new class {
@@ -175,9 +175,9 @@ class OptionsTest extends TestCase
             public bool $skipEmptyLines = true;
             public int $offset = 0;
             public ?int $limit = null;
-            public string $separator = "auto";
-            public string $enclosure = "\"";
-            public string $escape = "";
+            public string $separator = 'auto';
+            public string $enclosure = '"';
+            public string $escape = '';
             public string $eol = "\r\n";
             public ?string $inputEncoding = null;
             public ?string $outputEncoding = null;
@@ -198,11 +198,14 @@ class OptionsTest extends TestCase
         $opts->applyTo($target);
 
         foreach (get_object_vars($opts) as $k => $v) {
-            self::assertEquals($v, $target->$k, "Property $k was not correctly copied");
+            self::assertEquals($v, $target->$k, "Property {$k} was not correctly copied");
         }
 
         $minimalTarget = new \stdClass();
         $opts->applyTo($minimalTarget);
-        self::assertEmpty(get_object_vars($minimalTarget), "Properties should not be added to target if they don't exist");
+        self::assertEmpty(
+            get_object_vars($minimalTarget),
+            "Properties should not be added to target if they don't exist",
+        );
     }
 }

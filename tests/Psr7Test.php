@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\XlsxWriter;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Spread;
+use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\TestCase;
 
 class Psr7Test extends TestCase
 {
@@ -30,7 +30,7 @@ class Psr7Test extends TestCase
     {
         $writer = new CsvWriter();
         $stream = $writer->writeStream([
-            ["Hello", "World"]
+            ['Hello', 'World'],
         ]);
 
         $this->assertValidStream($stream, 'csv');
@@ -40,7 +40,7 @@ class Psr7Test extends TestCase
     {
         $writer = new XlsxWriter();
         $stream = $writer->writeStream([
-            ["Hello", "World"]
+            ['Hello', 'World'],
         ]);
 
         $this->assertValidStream($stream, 'xlsx');
@@ -50,7 +50,7 @@ class Psr7Test extends TestCase
     {
         $writer = new OdsWriter();
         $stream = $writer->writeStream([
-            ["Hello", "World"]
+            ['Hello', 'World'],
         ]);
 
         $this->assertValidStream($stream, 'ods');
@@ -66,7 +66,7 @@ class Psr7Test extends TestCase
             }
         };
         $stream = $writer->writeStream([
-            ["Hello", "World"]
+            ['Hello', 'World'],
         ]);
 
         $this->assertValidStream($stream, 'xlsx');
@@ -82,7 +82,7 @@ class Psr7Test extends TestCase
             }
         };
         $stream = $writer->writeStream([
-            ["Hello", "World"]
+            ['Hello', 'World'],
         ]);
 
         $this->assertValidStream($stream, 'ods');

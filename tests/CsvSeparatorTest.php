@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\CsvReader;
+use PHPUnit\Framework\TestCase;
 
 class CsvSeparatorTest extends TestCase
 {
@@ -66,12 +66,12 @@ class CsvSeparatorTest extends TestCase
         // Actually the code takes 10 fragments. The 10th fragment contains the rest of the string.
         $lines = [];
         for ($i = 0; $i < 9; $i++) {
-            $lines[] = "a,b";
+            $lines[] = 'a,b';
         }
         // 10th line
-        $lines[] = "a,b";
+        $lines[] = 'a,b';
         // 11th line - this will be part of the 10th fragment
-        $lines[] = "a;b;c;d;e;f;g;h;i;j;k;l;m;n;o;p;q;r;s;t;u";
+        $lines[] = 'a;b;c;d;e;f;g;h;i;j;k;l;m;n;o;p;q;r;s;t;u';
         $sample = implode("\n", $lines);
 
         // Comma count in first 9 lines: 9
@@ -87,7 +87,7 @@ class CsvSeparatorTest extends TestCase
         // Same number of commas and semicolons.
         // Candidates are [',', ';', '|', "\t"]
         // arsort should keep the first one if values are equal.
-        $sample = "a,b;c";
+        $sample = 'a,b;c';
         $this->assertEquals(',', CsvReader::detectSeparator($sample));
     }
 }

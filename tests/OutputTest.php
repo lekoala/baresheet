@@ -6,6 +6,8 @@
  * inside PHPUnit tests in the CLI.
  */
 
+declare(strict_types=1);
+
 namespace LeKoala\Baresheet {
     // Global variable to capture all sent headers
     $GLOBALS['baresheet_mock_headers'] = [];
@@ -22,10 +24,10 @@ namespace LeKoala\Baresheet {
 }
 
 namespace LeKoala\Baresheet\Tests {
-    use PHPUnit\Framework\TestCase;
     use LeKoala\Baresheet\CsvWriter;
-    use LeKoala\Baresheet\XlsxWriter;
     use LeKoala\Baresheet\OdsWriter;
+    use LeKoala\Baresheet\XlsxWriter;
+    use PHPUnit\Framework\TestCase;
 
     class OutputTest extends TestCase
     {
@@ -62,7 +64,10 @@ namespace LeKoala\Baresheet\Tests {
 
             $headers = $this->getMockHeaders();
             $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: text/csv'));
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Buffered output should have Content-Length header');
+            $this->assertTrue(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Buffered output should have Content-Length header',
+            );
         }
 
         public function testCsvWriterOutputStream(): void
@@ -77,7 +82,10 @@ namespace LeKoala\Baresheet\Tests {
 
             $headers = $this->getMockHeaders();
             $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: text/csv'));
-            $this->assertFalse($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Streamed output should not have Content-Length header');
+            $this->assertFalse(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Streamed output should not have Content-Length header',
+            );
         }
 
         public function testXlsxWriterOutput(): void
@@ -92,8 +100,14 @@ namespace LeKoala\Baresheet\Tests {
             $this->assertNotEmpty($output);
 
             $headers = $this->getMockHeaders();
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Buffered output should have Content-Length header');
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ));
+            $this->assertTrue(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Buffered output should have Content-Length header',
+            );
         }
 
         public function testXlsxWriterOutputStream(): void
@@ -107,8 +121,14 @@ namespace LeKoala\Baresheet\Tests {
             $this->assertNotEmpty($output);
 
             $headers = $this->getMockHeaders();
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
-            $this->assertFalse($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Streamed output should not have Content-Length header');
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ));
+            $this->assertFalse(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Streamed output should not have Content-Length header',
+            );
         }
 
         public function testOdsWriterOutput(): void
@@ -123,8 +143,14 @@ namespace LeKoala\Baresheet\Tests {
             $this->assertNotEmpty($output);
 
             $headers = $this->getMockHeaders();
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/vnd.oasis.opendocument.spreadsheet'));
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Buffered output should have Content-Length header');
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Type: application/vnd.oasis.opendocument.spreadsheet',
+            ));
+            $this->assertTrue(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Buffered output should have Content-Length header',
+            );
         }
 
         public function testOdsWriterOutputStream(): void
@@ -138,8 +164,14 @@ namespace LeKoala\Baresheet\Tests {
             $this->assertNotEmpty($output);
 
             $headers = $this->getMockHeaders();
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Type: application/vnd.oasis.opendocument.spreadsheet'));
-            $this->assertFalse($this->hasHeaderPrefix($headers, 'Content-Length:'), 'Streamed output should not have Content-Length header');
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Type: application/vnd.oasis.opendocument.spreadsheet',
+            ));
+            $this->assertFalse(
+                $this->hasHeaderPrefix($headers, 'Content-Length:'),
+                'Streamed output should not have Content-Length header',
+            );
         }
 
         public function testAutoExtensions(): void
@@ -161,7 +193,10 @@ namespace LeKoala\Baresheet\Tests {
             $writer->output($data, 'test');
             ob_end_clean();
             $headers = $this->getMockHeaders();
-            $this->assertTrue($this->hasHeaderPrefix($headers, 'Content-Disposition: attachment; filename="test.xlsx"'));
+            $this->assertTrue($this->hasHeaderPrefix(
+                $headers,
+                'Content-Disposition: attachment; filename="test.xlsx"',
+            ));
             $GLOBALS['baresheet_mock_headers'] = [];
 
             // ODS

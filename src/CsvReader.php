@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use Generator;
-use LeKoala\Baresheet\Bom;
 
 /**
  * Zero-dependency CSV reader using native PHP fgetcsv.
@@ -17,9 +16,9 @@ class CsvReader implements ReaderInterface
     public ?int $limit = null;
     public int $offset = 0;
     public bool $skipEmptyLines = true;
-    public string $separator = "auto";
-    public string $enclosure = "\"";
-    public string $escape = "";
+    public string $separator = 'auto';
+    public string $enclosure = '"';
+    public string $escape = '';
     public string $eol = "\r\n";
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
@@ -83,7 +82,7 @@ class CsvReader implements ReaderInterface
     {
         // Auto-detect separator from first ~4KB before consuming the stream
         // Read a sample for detection
-        $sample = fread($stream, 4096) ?: '';
+        $sample = (string) fread($stream, 4096);
         rewind($stream);
 
         // Auto-detect separator
@@ -103,12 +102,18 @@ class CsvReader implements ReaderInterface
                 $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
-                    throw new \RuntimeException("Failed to append iconv filter for encoding $encoding. Ensure iconv extension is enabled.");
+                    throw new \RuntimeException(
+                        "Failed to append iconv filter for encoding {$encoding}. Ensure iconv extension is enabled.",
+                    );
                 }
                 // BOM takes precedence over manual encoding
                 $this->inputEncoding = null;
             }
-        } elseif (($this->inputEncoding === null || $this->inputEncoding === 'auto') && $this->outputEncoding !== null) {
+        } elseif (
+            ($this->inputEncoding === null
+            || $this->inputEncoding === 'auto')
+            && $this->outputEncoding !== null
+        ) {
             // Fallback detection if we need to convert but have no BOM
             $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
             if ($detected && $detected !== 'UTF-8') {
@@ -126,13 +131,12 @@ class CsvReader implements ReaderInterface
 
         // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
         if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
-            [$columnMap, ] = Spread::buildColumnSelection($this->columns, $this->headers);
+            [$columnMap] = Spread::buildColumnSelection($this->columns, $this->headers);
         }
 
         while (
             !feof($stream)
-            &&
-            ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
+            && ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
         ) {
             // fgetcsv returns [null] for blank lines.
             if ($this->skipEmptyLines && $line === [null]) {
@@ -145,7 +149,7 @@ class CsvReader implements ReaderInterface
                 // resulting in a ~15-20% performance improvement for string encoding over large datasets.
                 foreach ($line as &$v) {
                     if (is_string($v)) {
-                        $v = mb_convert_encoding($v, (string)$this->outputEncoding, (string)$this->inputEncoding);
+                        $v = mb_convert_encoding($v, (string) $this->outputEncoding, (string) $this->inputEncoding);
                     }
                 }
                 unset($v);
@@ -157,7 +161,9 @@ class CsvReader implements ReaderInterface
                     $expectedCols = $colCount;
                 } elseif ($colCount !== $expectedCols) {
                     $rowIdx = $count + 1;
-                    throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expectedCols. Potential malformed data or unclosed quote.");
+                    throw new \RuntimeException(
+                        "Row {$rowIdx} has {$colCount} columns, expected {$expectedCols}. Potential malformed data or unclosed quote.",
+                    );
                 }
             }
 
@@ -170,19 +176,19 @@ class CsvReader implements ReaderInterface
                         $missing = array_diff($this->requiredColumns, $headers);
                         if (!empty($missing)) {
                             throw new \RuntimeException(
-                                'Missing required columns: ' . implode(', ', $missing)
+                                'Missing required columns: ' . implode(', ', $missing),
                             );
                         }
                     }
                     // Build column selection map
-                    [$columnMap, ] = Spread::buildColumnSelection($this->columns, $headers);
+                    [$columnMap] = Spread::buildColumnSelection($this->columns, $headers);
                     continue;
                 }
                 $colCount = count($line);
                 $expected = count($headers);
                 if ($colCount !== $expected) {
                     $rowIdx = $count + 1;
-                    throw new \RuntimeException("Row $rowIdx has $colCount columns, expected $expected");
+                    throw new \RuntimeException("Row {$rowIdx} has {$colCount} columns, expected {$expected}");
                 }
                 // Fast path: skip array_combine when columns are selected — index directly
                 if (!empty($columnMap)) {
@@ -218,7 +224,9 @@ class CsvReader implements ReaderInterface
 
         if (!feof($stream)) {
             $rowIdx = $count + 1;
-            throw new \RuntimeException("Failed to parse CSV row $rowIdx. Potential malformed data or unclosed quote.");
+            throw new \RuntimeException(
+                "Failed to parse CSV row {$rowIdx}. Potential malformed data or unclosed quote.",
+            );
         }
     }
 
@@ -227,7 +235,10 @@ class CsvReader implements ReaderInterface
      */
     public static function detectSeparator(string $sample): string
     {
-        $lines = preg_split('/\r\n|\r|\n/', $sample, 10) ?: [];
+        $lines = preg_split('/\r\n|\r|\n/', $sample, 10);
+        if ($lines === false) {
+            $lines = [];
+        }
         if (empty($lines)) {
             return ',';
         }

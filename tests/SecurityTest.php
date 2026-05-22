@@ -5,10 +5,6 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use Exception;
-use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\OdsReader;
-use LeKoala\Baresheet\OdsWriter;
-use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
@@ -27,7 +23,7 @@ class SecurityTest extends TestCase
         $writer->meta = new \LeKoala\Baresheet\Meta(
             title: 'Normal Title</dc:title><dc:creator>Injected Creator</dc:creator><dc:title>Rest',
             creator: 'Attacker" onclick="alert(1)',
-            description: 'A < B & C > D'
+            description: 'A < B & C > D',
         );
 
         $tempFile = sys_get_temp_dir() . '/test_security_props_' . time() . '.xlsx';
@@ -44,7 +40,10 @@ class SecurityTest extends TestCase
         $this->assertIsString($coreXml);
 
         // Assert that the malicious payload is NOT interpreted as XML nodes
-        $this->assertStringContainsString('Normal Title&lt;/dc:title&gt;&lt;dc:creator&gt;Injected Creator&lt;/dc:creator&gt;&lt;dc:title&gt;Rest', $coreXml);
+        $this->assertStringContainsString(
+            'Normal Title&lt;/dc:title&gt;&lt;dc:creator&gt;Injected Creator&lt;/dc:creator&gt;&lt;dc:title&gt;Rest',
+            $coreXml,
+        );
         $this->assertStringNotContainsString('<dc:creator>Injected Creator</dc:creator>', $coreXml);
 
         // Assert description properly escapes generic entities
@@ -109,21 +108,21 @@ class SecurityTest extends TestCase
     public function testPharDeserializationBlocked(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        $this->expectExceptionMessage('Phar deserialization is not allowed');
         Spread::isSafePath('phar://test.phar');
     }
 
     public function testPharDeserializationBlockedCaseInsensitive(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        $this->expectExceptionMessage('Phar deserialization is not allowed');
         Spread::isSafePath('PHAR://test.phar');
     }
 
     public function testPharDeserializationBlockedNested(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage("Phar deserialization is not allowed");
+        $this->expectExceptionMessage('Phar deserialization is not allowed');
         Spread::isSafePath('php://filter/resource=phar://test.phar');
     }
 }

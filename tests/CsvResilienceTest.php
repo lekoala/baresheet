@@ -6,7 +6,6 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\Options;
 use PHPUnit\Framework\TestCase;
 
 class CsvResilienceTest extends TestCase
@@ -14,7 +13,7 @@ class CsvResilienceTest extends TestCase
     public function testBackslashEnding(): void
     {
         $data = [
-            ['field1' => 'foo\\', 'field2' => 'bar']
+            ['field1' => 'foo\\', 'field2' => 'bar'],
         ];
         $writer = new CsvWriter();
         $csv = $writer->writeString($data);
@@ -30,7 +29,7 @@ class CsvResilienceTest extends TestCase
     public function testBackslashBeforeQuote(): void
     {
         $data = [
-            ['field1' => 'foo\\"', 'field2' => 'bar']
+            ['field1' => 'foo\\"', 'field2' => 'bar'],
         ];
         $writer = new CsvWriter();
         $csv = $writer->writeString($data);
@@ -45,7 +44,7 @@ class CsvResilienceTest extends TestCase
     public function testQuotesAndNewlines(): void
     {
         $data = [
-            ['"quoted"', "line\nbreak", "comma,here", "all\"three\n,together"]
+            ['"quoted"', "line\nbreak", 'comma,here', "all\"three\n,together"],
         ];
         $writer = new CsvWriter();
         $csv = $writer->writeString($data);
@@ -63,7 +62,7 @@ class CsvResilienceTest extends TestCase
     public function testFormulaEscapingRoundTrip(): void
     {
         $data = [
-            ['=SUM(A1:A10)', 'normal text']
+            ['=SUM(A1:A10)', 'normal text'],
         ];
         $writer = new CsvWriter();
         $writer->escapeFormulas = true;
@@ -81,7 +80,7 @@ class CsvResilienceTest extends TestCase
     public function testMixedEdgeCases(): void
     {
         $data = [
-            ['" , \n \ \rb', 'end']
+            ['" , \n \ \rb', 'end'],
         ];
         $writer = new CsvWriter();
         $csv = $writer->writeString($data);

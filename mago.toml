@@ -1,0 +1,73 @@
+#:schema https://mago.carthage.software/1.28.0/schema.json
+# Welcome to Mago!
+# For full documentation, see https://mago.carthage.software/tools/overview
+version = "1"
+php-version = "8.1.2"
+
+[source]
+workspace = "."
+paths = ["src/", "tests/"]
+includes = ["vendor"]
+excludes = []
+
+[source.glob]
+literal-separator = true
+
+[formatter]
+print-width = 120
+tab-width = 4
+use-tabs = false
+preserve-breaking-member-access-chain = true
+preserve-breaking-member-access-chain-first-method-on-same-line = true
+preserve-breaking-argument-list = true
+preserve-breaking-array-like = true
+preserve-breaking-parameter-list = true
+preserve-breaking-attribute-list = true
+preserve-breaking-conditional-expression = true
+preserve-breaking-condition-expression = true
+preserve-redundant-logical-binary-expression-parentheses = true
+
+[linter]
+integrations = ["phpunit"]
+
+[linter.rules]
+# Disabled: unrealistic for a zero-dependency spreadsheet parser
+# These rules fight the domain — parsers are inherently conditional-heavy,
+# Options/Meta use promoted properties, and tests use standard PHPUnit patterns.
+ambiguous-function-call = { enabled = false }
+literal-named-argument = { enabled = false }
+halstead = { enabled = false }
+too-many-methods = { enabled = false }
+too-many-properties = { enabled = false }
+cyclomatic-complexity = { enabled = false }
+kan-defect = { enabled = false }
+excessive-parameter-list = { enabled = false }
+no-error-control-operator = { enabled = false }
+no-global = { enabled = false }
+no-else-clause = { enabled = false }
+prefer-early-continue = { enabled = false }
+no-boolean-flag-parameter = { enabled = false }
+assertion-style = { enabled = false }
+strict-assertions = { enabled = false }
+no-empty = { enabled = false }
+no-isset = { enabled = false }
+excessive-nesting = { enabled = false }
+
+[analyzer]
+plugins = []
+find-unused-definitions = true
+find-unused-expressions = false
+analyze-dead-code = false
+memoize-properties = true
+allow-possibly-undefined-array-keys = true
+check-throws = false
+unchecked-exceptions = ["Error", "LogicException"]
+unchecked-exception-classes = []
+check-missing-override = false
+find-unused-parameters = false
+strict-list-index-checks = false
+strict-array-index-existence = false
+allow-array-truthy-operand = false
+no-boolean-literal-comparison = false
+check-missing-type-hints = false
+register-super-globals = true

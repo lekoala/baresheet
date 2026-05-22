@@ -18,6 +18,7 @@ class Meta
         public ?string $category = null,
         public string $language = 'en-US',
     ) {
+        // no-op: promoted properties only
     }
 
     /**
@@ -25,7 +26,9 @@ class Meta
      */
     public static function fromArray(array $data): self
     {
-        $getString = static fn(string $k): ?string => isset($data[$k]) && is_scalar($data[$k]) ? (string)$data[$k] : null;
+        $getString = static fn(string $k): ?string => isset($data[$k]) && is_scalar($data[$k])
+            ? (string) $data[$k]
+            : null;
 
         return new self(
             title: $getString('title'),

@@ -39,11 +39,11 @@ class Options
         public array $columns = [],
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
-        public string $separator = "auto",
+        public string $separator = 'auto',
         /** @var string The enclosure character for CSV fields. */
-        public string $enclosure = "\"",
+        public string $enclosure = '"',
         /** @var string The escape character for CSV fields. */
-        public string $escape = "",
+        public string $escape = '',
         /** @var string The end-of-line character sequence for CSV files. */
         public string $eol = "\r\n",
         /** @var ?string Source encoding for reading CSV files. */
@@ -81,6 +81,7 @@ class Options
         /** @var bool If true, enables auto column width for XLSX files (faster writing when false). */
         public bool $autoWidth = false,
     ) {
+        // no-op: promoted properties only
     }
 
     /**

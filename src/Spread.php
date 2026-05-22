@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use DateTime;
-use ZipArchive;
 use Exception;
 use Generator;
 use RuntimeException;
+use ZipArchive;
 
 /**
  * Static utility methods shared by readers and writers.
@@ -22,7 +22,7 @@ class Spread
     {
         $result = tempnam(sys_get_temp_dir(), 'BSH');
         if ($result === false) {
-            throw new Exception("Unable to create temp file");
+            throw new Exception('Unable to create temp file');
         }
         return $result;
     }
@@ -33,7 +33,7 @@ class Spread
     public static function isSafePath(string $path): void
     {
         if (str_contains(strtolower($path), 'phar://')) {
-            throw new RuntimeException("Phar deserialization is not allowed");
+            throw new RuntimeException('Phar deserialization is not allowed');
         }
     }
 
@@ -65,7 +65,7 @@ class Spread
         $mb = 4;
         $stream = fopen('php://temp/maxmemory:' . ($mb * 1024 * 1024), 'r+');
         if (!$stream) {
-            throw new RuntimeException("Failed to open stream");
+            throw new RuntimeException('Failed to open stream');
         }
         return $stream;
     }
@@ -78,7 +78,7 @@ class Spread
         self::isSafePath($filename);
         $stream = fopen($filename, 'w');
         if (!$stream) {
-            throw new RuntimeException("Failed to open stream");
+            throw new RuntimeException('Failed to open stream');
         }
         return $stream;
     }
@@ -91,7 +91,7 @@ class Spread
         self::isSafePath($filename);
         $stream = fopen($filename, 'r');
         if (!$stream) {
-            throw new RuntimeException("Failed to open stream");
+            throw new RuntimeException('Failed to open stream');
         }
         return $stream;
     }
@@ -100,7 +100,7 @@ class Spread
     {
         $fileExt = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         if ($fileExt !== strtolower($ext)) {
-            $filename .= ".$ext";
+            $filename .= ".{$ext}";
         }
         return $filename;
     }
@@ -108,14 +108,13 @@ class Spread
     public static function outputHeaders(string $contentType, string $filename, ?int $size = null): void
     {
         if (headers_sent()) {
-            throw new RuntimeException("Headers already sent");
+            throw new RuntimeException('Headers already sent');
         }
 
         header('Content-Type: ' . $contentType);
         header(
-            'Content-Disposition: attachment; ' .
-                'filename="' . rawurlencode($filename) . '"; ' .
-                'filename*=UTF-8\'\'' . rawurlencode($filename)
+            'Content-Disposition: attachment; filename="' . rawurlencode($filename) . '"; filename*=UTF-8\'\''
+                . rawurlencode($filename),
         );
         header('Cache-Control: max-age=0');
         header('Pragma: public');
@@ -153,7 +152,7 @@ class Spread
         $length = strlen($letter);
         $index = 0;
         for ($i = 0; $i < $length; $i++) {
-            $index = $index * 26 + (ord(strtoupper($letter[$i])) - 64);
+            $index = ($index * 26) + (ord(strtoupper($letter[$i])) - 64);
         }
 
         $cache[$letter] = $index;
@@ -216,12 +215,12 @@ class Spread
         if ($days >= 0) {
             $days = '+' . $days;
         }
-        $interval = "$days days";
+        $interval = "{$days} days";
 
         $dt->modify($interval);
 
         if ($partDay > 0) {
-            $totalSeconds = (int) round($partDay * 86400);
+            $totalSeconds = (int) round($partDay * 86_400);
             $hours = intdiv($totalSeconds, 3600);
             $totalSeconds %= 3600;
             $minutes = intdiv($totalSeconds, 60);
@@ -237,7 +236,7 @@ class Spread
             // Cumulative drift formula: 10 days in 1582, increasing by 1 every century not divisible by 400.
             $drift = floor($year / 100) - floor($year / 400) - 2;
             if ($drift > 0) {
-                $dt->modify("- $drift days");
+                $dt->modify("- {$drift} days");
             }
         }
 
@@ -282,7 +281,7 @@ class Spread
             }
         }
 
-        $timeFraction = ($dt->format('H') * 3600 + $dt->format('i') * 60 + $dt->format('s')) / 86400;
+        $timeFraction = (($dt->format('H') * 3600) + ($dt->format('i') * 60) + $dt->format('s')) / 86_400;
         $serial = $days + $timeFraction;
 
         // Inverse Julian-to-Gregorian correction for historical dates
@@ -316,7 +315,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new Exception("Failed to open zip archive, code: " . self::zipError($result));
+                throw new Exception('Failed to open zip archive, code: ' . self::zipError($result));
             }
 
             $props = self::zipGetData($zip, 'docProps/core.xml');
@@ -341,7 +340,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new Exception("Failed to open zip archive, code: " . self::zipError($result));
+                throw new Exception('Failed to open zip archive, code: ' . self::zipError($result));
             }
 
             $meta = self::zipGetData($zip, 'meta.xml');
@@ -353,9 +352,9 @@ class Spread
                 $title = $xml->xpath('//dc:title');
                 $creator = $xml->xpath('//dc:creator');
                 $description = $xml->xpath('//dc:description');
-                $arr['meta']['title'] = $title ? (string)$title[0] : '';
-                $arr['meta']['creator'] = $creator ? (string)$creator[0] : '';
-                $arr['meta']['description'] = $description ? (string)$description[0] : '';
+                $arr['meta']['title'] = $title ? (string) $title[0] : '';
+                $arr['meta']['creator'] = $creator ? (string) $creator[0] : '';
+                $arr['meta']['description'] = $description ? (string) $description[0] : '';
             }
 
             $arr['sheets'] = self::getOdsSheetNames($zip);
@@ -379,7 +378,7 @@ class Spread
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception("Failed to open zip archive, code: " . self::zipError((int)$result));
+            throw new Exception('Failed to open zip archive, code: ' . self::zipError((int) $result));
         }
         $names = match ($ext) {
             'xlsx' => self::getXlsxSheetNames($zip),
@@ -404,7 +403,7 @@ class Spread
         $xml = self::safeXml($wbData);
         $names = [];
         foreach ($xml->sheets->sheet as $sheet) {
-            $names[] = (string)$sheet->attributes()->name;
+            $names[] = (string) $sheet->attributes()->name;
         }
         return $names;
     }
@@ -432,7 +431,7 @@ class Spread
 
         $names = [];
         foreach ($tables as $table) {
-            $names[] = (string)$table->attributes($nsTable)->name;
+            $names[] = (string) $table->attributes($nsTable)->name;
         }
         return $names;
     }
@@ -449,8 +448,8 @@ class Spread
         }
 
         $n = $index - 1;
-        for ($r = ""; $n >= 0; $n = intval($n / 26) - 1) {
-            $r = chr($n % 26 + 0x41) . $r;
+        for ($r = ''; $n >= 0; $n = intval($n / 26) - 1) {
+            $r = chr(($n % 26) + 0x41) . $r;
         }
 
         $cache[$index] = $r;
@@ -517,10 +516,20 @@ class Spread
             return '';
         }
         // Fast path for common plain-text strings: return early if no XML special chars or invalid control chars exist
-        if (strpbrk($str, "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") === false) {
+        if (
+            strpbrk(
+                $str,
+                "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+            ) === false
+        ) {
             return $str;
         }
-        if (strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
+        if (
+            strpbrk(
+                $str,
+                "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+            ) !== false
+        ) {
             $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
         }
         return htmlspecialchars($str, ENT_XML1 | ENT_COMPAT, 'UTF-8');
@@ -535,10 +544,20 @@ class Spread
             return '';
         }
         // Fast path for common plain-text strings: return early if no XML special chars or invalid control chars exist
-        if (strpbrk($str, "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") === false) {
+        if (
+            strpbrk(
+                $str,
+                "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+            ) === false
+        ) {
             return $str;
         }
-        if (strpbrk($str, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F") !== false) {
+        if (
+            strpbrk(
+                $str,
+                "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+            ) !== false
+        ) {
             $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
         }
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
@@ -578,7 +597,7 @@ class Spread
 
             if (!empty($missing)) {
                 throw new RuntimeException(
-                    'Missing required columns: ' . implode(', ', $missing)
+                    'Missing required columns: ' . implode(', ', $missing),
                 );
             }
         }
@@ -609,7 +628,7 @@ class Spread
             } else {
                 // In non-assoc mode, row is keyed by numeric index
                 $idx = $columnMap[$colName] ?? null;
-                $selected[] = ($idx !== null) ? ($row[$idx] ?? null) : null;
+                $selected[] = $idx !== null ? $row[$idx] ?? null : null;
             }
         }
 

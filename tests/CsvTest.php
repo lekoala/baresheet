@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Options;
+use PHPUnit\Framework\TestCase;
 
 class CsvTest extends TestCase
 {
@@ -30,7 +30,7 @@ class CsvTest extends TestCase
     public function testReadCsvFromString(): void
     {
         $reader = new CsvReader();
-        $data = iterator_to_array($reader->readString("john,doe,john.doe@example.com"));
+        $data = iterator_to_array($reader->readString('john,doe,john.doe@example.com'));
         self::assertCount(1, $data);
         self::assertCount(3, $data[0]);
     }
@@ -68,7 +68,7 @@ class CsvTest extends TestCase
     public function testReadCsvFromStream(): void
     {
         $stream = fopen('php://memory', 'r+');
-        fwrite($stream, "john,doe,john.doe@example.com");
+        fwrite($stream, 'john,doe,john.doe@example.com');
         rewind($stream);
 
         $reader = new CsvReader();
@@ -84,7 +84,7 @@ class CsvTest extends TestCase
         $writer = new CsvWriter();
         $writer->bom = false;
         $result = $writer->writeFile([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ], $tempFile);
 
         self::assertTrue($result);
@@ -101,7 +101,7 @@ class CsvTest extends TestCase
     {
         $writer = new CsvWriter();
         $output = $writer->writeString([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ]);
 
         self::assertStringStartsWith("\xef\xbb\xbf", $output);
@@ -112,7 +112,7 @@ class CsvTest extends TestCase
         $writer = new CsvWriter();
         $writer->bom = false;
         $output = $writer->writeString([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ]);
 
         self::assertStringNotContainsString("\xef\xbb\xbf", $output);
@@ -123,7 +123,7 @@ class CsvTest extends TestCase
         $writer = new CsvWriter();
         $writer->bom = false;
         $output = $writer->writeString([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ]);
 
         self::assertStringContainsString('john.doe@example.com', $output);
@@ -134,9 +134,9 @@ class CsvTest extends TestCase
         $writer = new CsvWriter();
         $writer->bom = false;
         $original = [
-            ["name", "email"],
-            ["John Doe", "john@example.com"],
-            ["Jane Doe", "jane@example.com"],
+            ['name',     'email'],
+            ['John Doe', 'john@example.com'],
+            ['Jane Doe', 'jane@example.com'],
         ];
 
         $csv = $writer->writeString($original);
@@ -194,7 +194,7 @@ class CsvTest extends TestCase
         $writer->bom = false;
         $writer->escapeFormulas = true;
         $output = $writer->writeString([
-            ["=SUM(A1:A10)", "+cmd", "-data", "@url", "\ttab", "\rreturn"],
+            ['=SUM(A1:A10)', '+cmd', '-data', '@url', "\ttab", "\rreturn"],
         ]);
 
         self::assertStringContainsString("'=SUM(A1:A10)", $output);
@@ -208,7 +208,7 @@ class CsvTest extends TestCase
         $writer = new CsvWriter();
         $writer->bom = false;
         // Skip escaping for column index 1 (phone numbers), escape everything else
-        $writer->escapeFormulas = function (string $cell, int $colIndex): string {
+        $writer->escapeFormulas = static function (string $cell, int $colIndex): string {
             if ($colIndex === 1) {
                 return $cell; // Don't escape phone column
             }
@@ -221,15 +221,15 @@ class CsvTest extends TestCase
         };
 
         $output = $writer->writeString([
-            ["Name", "Phone", "Formula"],
-            ["John", "+1234567890", "=SUM(A1:A10)"],
-            ["Jane", "+9876543210", "=HYPERLINK(...)"],
+            ['Name', 'Phone',       'Formula'],
+            ['John', '+1234567890', '=SUM(A1:A10)'],
+            ['Jane', '+9876543210', '=HYPERLINK(...)'],
         ]);
 
         // Phone numbers should NOT be escaped (column 1)
-        self::assertStringContainsString("+1234567890", $output);
+        self::assertStringContainsString('+1234567890', $output);
         self::assertStringNotContainsString("'+1234567890", $output);
-        self::assertStringContainsString("+9876543210", $output);
+        self::assertStringContainsString('+9876543210', $output);
         self::assertStringNotContainsString("'+9876543210", $output);
 
         // Formulas in column 2 SHOULD be escaped
@@ -237,7 +237,7 @@ class CsvTest extends TestCase
         self::assertStringContainsString("'=HYPERLINK(...)", $output);
 
         // Header in column 0 should NOT be escaped (doesn't start with formula char)
-        self::assertStringContainsString("Name", $output);
+        self::assertStringContainsString('Name', $output);
     }
 
     public function testFormulaEscapingCallableReceivesCorrectColumnIndex(): void
@@ -246,14 +246,14 @@ class CsvTest extends TestCase
         $writer->bom = false;
 
         $receivedIndices = [];
-        $writer->escapeFormulas = function (string $cell, int $colIndex) use (&$receivedIndices): string {
+        $writer->escapeFormulas = static function (string $cell, int $colIndex) use (&$receivedIndices): string {
             $receivedIndices[] = ['cell' => $cell, 'index' => $colIndex];
             return $cell;
         };
 
         $writer->writeString([
-            ["A", "B", "C"],
-            ["1", "2", "3"],
+            ['A', 'B', 'C'],
+            ['1', '2', '3'],
         ]);
 
         // Should have recorded indices 0, 1, 2 for each row
@@ -272,14 +272,14 @@ class CsvTest extends TestCase
         $writer->bom = false;
 
         $callCount = 0;
-        $writer->escapeFormulas = function (string $cell, int $colIndex) use (&$callCount): string {
+        $writer->escapeFormulas = static function (string $cell, int $colIndex) use (&$callCount): string {
             $callCount++;
             return $cell;
         };
 
         // Write data with mixed types (ints and nulls)
         $writer->writeString([
-            [123, null, "=formula"],
+            [123, null, '=formula'],
         ]);
 
         // Callable should only be invoked for string cells
@@ -292,7 +292,7 @@ class CsvTest extends TestCase
         $writer->separator = ';';
         $writer->bom = false;
         $output = $writer->writeString([
-            ["john", "doe", "john@example.com"]
+            ['john', 'doe', 'john@example.com'],
         ]);
 
         self::assertStringContainsString('john;doe;john@example.com', $output);
@@ -304,7 +304,7 @@ class CsvTest extends TestCase
         $writer->bom = false;
         $writer->headers = ['first', 'last', 'email'];
         $output = $writer->writeString([
-            ["john", "doe", "john@example.com"],
+            ['john', 'doe', 'john@example.com'],
         ]);
 
         self::assertStringStartsWith('first,last,email', $output);
@@ -315,7 +315,7 @@ class CsvTest extends TestCase
         $boms = [
             \LeKoala\Baresheet\Bom::Utf8,
             \LeKoala\Baresheet\Bom::Utf16Le,
-            \LeKoala\Baresheet\Bom::Utf32Be
+            \LeKoala\Baresheet\Bom::Utf32Be,
         ];
 
         foreach ($boms as $bom) {
@@ -342,7 +342,7 @@ class CsvTest extends TestCase
     {
         $boms = [
             \LeKoala\Baresheet\Bom::Utf8,
-            \LeKoala\Baresheet\Bom::Utf16Le
+            \LeKoala\Baresheet\Bom::Utf16Le,
         ];
 
         foreach ($boms as $bom) {
@@ -350,7 +350,7 @@ class CsvTest extends TestCase
             $writer->bom = $bom;
             $writer->headers = ['name', 'email'];
             $output = $writer->writeString([
-                ["john", "john@example.com"],
+                ['john', 'john@example.com'],
             ]);
 
             // The output should start with the exact BOM sequence
@@ -364,7 +364,7 @@ class CsvTest extends TestCase
 
             // Depending on the OS newlines, we can't do exact string equality for the whole payload,
             // but we can check if it contains the encoded "john" string.
-            $encodedJohn = mb_convert_encoding("john", $bom->encoding() ?: 'UTF-8', 'UTF-8');
+            $encodedJohn = mb_convert_encoding('john', $bom->encoding() ?? 'UTF-8', 'UTF-8');
             self::assertStringContainsString($encodedJohn, substr($output, $bom->length()));
         }
     }
@@ -382,7 +382,7 @@ class CsvTest extends TestCase
         $reader = new CsvReader();
         $data = iterator_to_array($reader->readString(
             "name,value,extra\n1,2,3\n4,5,6\n7,8,9",
-            new Options(assoc: true, limit: 1)
+            new Options(assoc: true, limit: 1),
         ));
         self::assertCount(1, $data);
         self::assertArrayHasKey('name', $data[0]);
@@ -411,7 +411,7 @@ class CsvTest extends TestCase
         $writer->bom = false;
         $writer->outputEncoding = 'ISO-8859-1';
         $output = $writer->writeString([
-            ["café", "résumé"],
+            ['café', 'résumé'],
         ]);
 
         // Output should be ISO-8859-1 encoded
@@ -441,7 +441,7 @@ class CsvTest extends TestCase
     {
         $reader = new \LeKoala\Baresheet\CsvReader();
         $reader->offset = 1; // Skip header
-        $reader->limit = 1;  // Only one row
+        $reader->limit = 1; // Only one row
         $data = iterator_to_array($reader->readFile(__DIR__ . '/data/headers.csv'));
         self::assertCount(1, $data);
         self::assertEquals('john', $data[0][0]);

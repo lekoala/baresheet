@@ -44,20 +44,20 @@ class OdsReader implements ReaderInterface
 
         Spread::isSafePath($filename);
         if (!is_file($filename)) {
-            throw new Exception("Invalid file $filename");
+            throw new Exception("Invalid file {$filename}");
         }
         if (!is_readable($filename)) {
-            throw new Exception("File $filename is not readable");
+            throw new Exception("File {$filename} is not readable");
         }
 
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception("Failed to open zip archive, code: " . Spread::zipError($result));
+            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
         if ($zip->locateName('content.xml') === false) {
             $zip->close();
-            throw new Exception("No content.xml found in ODS file");
+            throw new Exception('No content.xml found in ODS file');
         }
         $zip->close();
 
@@ -105,7 +105,11 @@ class OdsReader implements ReaderInterface
         }
 
         while ($reader->read()) {
-            if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'table' && $reader->namespaceURI === self::NS_TABLE) {
+            if (
+                $reader->nodeType === \XMLReader::ELEMENT
+                && $reader->localName === 'table'
+                && $reader->namespaceURI === self::NS_TABLE
+            ) {
                 $name = $reader->getAttributeNs('name', self::NS_TABLE);
                 $isTarget = false;
 
@@ -122,8 +126,14 @@ class OdsReader implements ReaderInterface
                         $tableDepth = $reader->depth;
                         $moved = $reader->read();
                         while ($moved && $reader->depth > $tableDepth) {
-                            if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'table-row' && $reader->namespaceURI === self::NS_TABLE) {
-                                $rowRepeat = (int)($reader->getAttributeNs('number-rows-repeated', self::NS_TABLE) ?: 1);
+                            if (
+                                $reader->nodeType === \XMLReader::ELEMENT
+                                && $reader->localName === 'table-row'
+                                && $reader->namespaceURI === self::NS_TABLE
+                            ) {
+                                $rowRepeat = (int) (
+                                    $reader->getAttributeNs('number-rows-repeated', self::NS_TABLE) ?? '1'
+                                );
                                 if ($rowRepeat > 100) {
                                     $moved = $reader->next();
                                     continue;
@@ -137,8 +147,15 @@ class OdsReader implements ReaderInterface
                                         $rowDepth = $reader->depth;
                                         $moved = $reader->read();
                                         while ($moved && $reader->depth > $rowDepth) {
-                                            if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'table-cell' && $reader->namespaceURI === self::NS_TABLE) {
-                                                $colRepeat = (int)($reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?: 1);
+                                            if (
+                                                $reader->nodeType === \XMLReader::ELEMENT
+                                                && $reader->localName === 'table-cell'
+                                                && $reader->namespaceURI === self::NS_TABLE
+                                            ) {
+                                                $colRepeat = (int) (
+                                                    $reader->getAttributeNs('number-columns-repeated', self::NS_TABLE)
+                                                    ?? '1'
+                                                );
                                                 $colIndex = count($rowData);
 
                                                 // Optimization: Skip parsing unselected cells
@@ -166,10 +183,15 @@ class OdsReader implements ReaderInterface
                                                     continue;
                                                 }
 
-                                                $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
+                                                $valueType =
+                                                    $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
                                                 $value = null;
 
-                                                if ($valueType === 'float' || $valueType === 'currency' || $valueType === 'percentage') {
+                                                if (
+                                                    $valueType === 'float'
+                                                    || $valueType === 'currency'
+                                                    || $valueType === 'percentage'
+                                                ) {
                                                     $value = $reader->getAttributeNs('value', self::NS_OFFICE);
                                                 } elseif ($valueType === 'date') {
                                                     $value = $reader->getAttributeNs('date-value', self::NS_OFFICE);
@@ -183,7 +205,11 @@ class OdsReader implements ReaderInterface
                                                 if (!$reader->isEmptyElement) {
                                                     $cellDepth = $reader->depth;
                                                     while ($reader->read() && $reader->depth > $cellDepth) {
-                                                        if ($reader->nodeType === \XMLReader::ELEMENT && $reader->localName === 'p' && $reader->namespaceURI === self::NS_TEXT) {
+                                                        if (
+                                                            $reader->nodeType === \XMLReader::ELEMENT
+                                                            && $reader->localName === 'p'
+                                                            && $reader->namespaceURI === self::NS_TEXT
+                                                        ) {
                                                             // readString() is much faster and uses less memory than expand()->textContent
                                                             $textP = $reader->readString();
                                                         }
@@ -217,7 +243,9 @@ class OdsReader implements ReaderInterface
 
                                     if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
                                         $colCount = count($rowData);
-                                        throw new \RuntimeException("Row has $colCount columns, expected $totalColumns");
+                                        throw new \RuntimeException(
+                                            "Row has {$colCount} columns, expected {$totalColumns}",
+                                        );
                                     }
 
                                     if ($this->assoc) {
@@ -230,15 +258,22 @@ class OdsReader implements ReaderInterface
                                                 if (!empty($missing)) {
                                                     $reader->close();
                                                     throw new \RuntimeException(
-                                                        'Missing required columns: ' . implode(', ', $missing)
+                                                        'Missing required columns: ' . implode(', ', $missing),
                                                     );
                                                 }
                                             }
-                        // Build column selection map
-                                            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $headers);
+                                            // Build column selection map
+                                            [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
+                                                $this->columns,
+                                                $headers,
+                                            );
                                             continue;
                                         }
-                                        $rowData = array_slice(array_pad($rowData, $totalColumns ?? 0, null), 0, $totalColumns ?? 0);
+                                        $rowData = array_slice(
+                                            array_pad($rowData, $totalColumns ?? 0, null),
+                                            0,
+                                            $totalColumns ?? 0,
+                                        );
                                         $rowData = array_combine($headers, $rowData);
                                     } else {
                                         if ($totalColumns === null) {
@@ -248,7 +283,12 @@ class OdsReader implements ReaderInterface
 
                                     // Apply column selection
                                     if (!empty($columnMap)) {
-                                        $rowData = Spread::applyColumnSelection($rowData, $columnMap, $this->columns, $this->assoc);
+                                        $rowData = Spread::applyColumnSelection(
+                                            $rowData,
+                                            $columnMap,
+                                            $this->columns,
+                                            $this->assoc,
+                                        );
                                     }
 
                                     if ($yieldCount < $this->offset) {

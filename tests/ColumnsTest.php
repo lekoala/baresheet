@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvReader;
-use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\XlsxReader;
+use PHPUnit\Framework\TestCase;
 
 class ColumnsTest extends TestCase
 {
@@ -20,7 +20,7 @@ class ColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            columns: ['name', 'email']
+            columns: ['name', 'email'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -37,7 +37,7 @@ class ColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            columns: ['age', 'email', 'name']
+            columns: ['age', 'email', 'name'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -50,12 +50,12 @@ class ColumnsTest extends TestCase
     public function testCsvColumnsSelectPlain(): void
     {
         $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
-        file_put_contents($tempFile, "john@example.com,John,25\n");  // No header row
+        file_put_contents($tempFile, "john@example.com,John,25\n"); // No header row
 
         $reader = new CsvReader(new Options(
             assoc: false,
             headers: ['email', 'name', 'age'],
-            columns: ['name', 'email']
+            columns: ['name', 'email'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -75,7 +75,7 @@ class ColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            columns: ['email', 'missing_column']
+            columns: ['email', 'missing_column'],
         ));
         iterator_to_array($reader->readFile($tempFile));
 
@@ -89,7 +89,7 @@ class ColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            columns: []
+            columns: [],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -103,12 +103,12 @@ class ColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.xlsx';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25]
+            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
 
         $reader = new XlsxReader(new Options(
             assoc: true,
-            columns: ['name', 'email']
+            columns: ['name', 'email'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -122,12 +122,12 @@ class ColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.xlsx';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25]
+            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
 
         $reader = new XlsxReader(new Options(
             assoc: true,
-            columns: ['age', 'name']
+            columns: ['age', 'name'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -141,12 +141,12 @@ class ColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.ods';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25]
+            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
 
         $reader = new OdsReader(new Options(
             assoc: true,
-            columns: ['name', 'email']
+            columns: ['name', 'email'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -160,12 +160,12 @@ class ColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.ods';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25]
+            ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
 
         $reader = new OdsReader(new Options(
             assoc: true,
-            columns: ['age', 'email']
+            columns: ['age', 'email'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -197,7 +197,7 @@ class ColumnsTest extends TestCase
         $reader = new CsvReader(new Options(
             assoc: true,
             columns: ['name'],
-            limit: 2
+            limit: 2,
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -217,7 +217,7 @@ class ColumnsTest extends TestCase
             assoc: true,
             columns: ['name'],
             offset: 1,
-            limit: 1
+            limit: 1,
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvReader;
-use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\XlsxReader;
+use PHPUnit\Framework\TestCase;
 
 class RequiredColumnsTest extends TestCase
 {
@@ -20,7 +20,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'name']
+            requiredColumns: ['email', 'name'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -40,7 +40,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'price']
+            requiredColumns: ['email', 'price'],
         ));
         iterator_to_array($reader->readFile($tempFile));
 
@@ -57,7 +57,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'name', 'price']
+            requiredColumns: ['email', 'name', 'price'],
         ));
         iterator_to_array($reader->readFile($tempFile));
 
@@ -71,7 +71,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new CsvReader(new Options(
             assoc: true,
-            requiredColumns: []
+            requiredColumns: [],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -84,12 +84,12 @@ class RequiredColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.xlsx';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50]
+            ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50],
         ], $tempFile);
 
         $reader = new XlsxReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'name']
+            requiredColumns: ['email', 'name'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -103,7 +103,7 @@ class RequiredColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.xlsx';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John']
+            ['email' => 'john@example.com', 'name' => 'John'],
         ], $tempFile);
 
         $this->expectException(\RuntimeException::class);
@@ -111,7 +111,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new XlsxReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'price']
+            requiredColumns: ['email', 'price'],
         ));
         iterator_to_array($reader->readFile($tempFile));
 
@@ -122,12 +122,12 @@ class RequiredColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.ods';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50]
+            ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50],
         ], $tempFile);
 
         $reader = new OdsReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'name']
+            requiredColumns: ['email', 'name'],
         ));
         $data = iterator_to_array($reader->readFile($tempFile));
 
@@ -141,7 +141,7 @@ class RequiredColumnsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.ods';
         Baresheet::write([
-            ['email' => 'john@example.com', 'name' => 'John']
+            ['email' => 'john@example.com', 'name' => 'John'],
         ], $tempFile);
 
         $this->expectException(\RuntimeException::class);
@@ -149,7 +149,7 @@ class RequiredColumnsTest extends TestCase
 
         $reader = new OdsReader(new Options(
             assoc: true,
-            requiredColumns: ['email', 'price']
+            requiredColumns: ['email', 'price'],
         ));
         iterator_to_array($reader->readFile($tempFile));
 

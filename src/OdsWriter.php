@@ -58,7 +58,7 @@ class OdsWriter implements WriterInterface
                     $result = stream_copy_to_stream($tmpStream, $stream);
                     fclose($tmpStream);
                     if ($result === false) {
-                        throw new Exception("Failed to copy temp file to stream");
+                        throw new Exception('Failed to copy temp file to stream');
                     }
                 }
             } finally {
@@ -134,7 +134,7 @@ class OdsWriter implements WriterInterface
         if (!class_exists(\ZipStream\ZipStream::class)) {
             throw new Exception(
                 'Streaming ODS requires maennchen/zipstream-php. '
-                    . 'Install it with: composer require maennchen/zipstream-php'
+                . 'Install it with: composer require maennchen/zipstream-php',
             );
         }
 
@@ -190,14 +190,14 @@ class OdsWriter implements WriterInterface
     {
         $destinationDir = dirname($filename);
         if (!is_writable($destinationDir)) {
-            throw new Exception("Directory '$destinationDir' is not writable");
+            throw new Exception("Directory '{$destinationDir}' is not writable");
         }
 
         // Use tempPath when the destination filesystem doesn't support ZipArchive well
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'ods_native');
             if (!$baseName) {
-                throw new Exception("Failed to create temp file in " . $this->tempPath);
+                throw new Exception('Failed to create temp file in ' . $this->tempPath);
             }
         } else {
             $baseName = $filename;
@@ -206,7 +206,7 @@ class OdsWriter implements WriterInterface
         $zip = new ZipArchive();
         $result = $zip->open($baseName, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         if ($result !== true) {
-            throw new Exception("Failed to open zip archive, code: " . Spread::zipError((int)$result));
+            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
         // mimetype must be first entry and stored uncompressed
@@ -220,13 +220,13 @@ class OdsWriter implements WriterInterface
         $contentStream = $this->genContent($data);
         rewind($contentStream);
         $meta = stream_get_meta_data($contentStream);
-        $uri = (string)($meta['uri'] ?? '');
+        $uri = (string) ($meta['uri'] ?? '');
         $zip->addFile($uri, 'content.xml');
 
         $destinationFile = $zip->filename;
         $closeResult = $zip->close();
         if ($closeResult === false) {
-            throw new Exception("Failed to close file '$destinationFile'");
+            throw new Exception("Failed to close file '{$destinationFile}'");
         }
 
         // Copy from temp location to final destination when using tempPath
@@ -253,20 +253,23 @@ class OdsWriter implements WriterInterface
     {
         $fd = tmpfile();
         if ($fd === false) {
-            throw new Exception("Failed to open temp stream");
+            throw new Exception('Failed to open temp stream');
         }
 
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $sheetName = Spread::escapeXmlAttr($sheetVal);
 
         fwrite($fd, '<?xml version="1.0" encoding="UTF-8"?>' . "\n");
-        fwrite($fd, '<office:document-content'
+        fwrite(
+            $fd,
+            '<office:document-content'
             . ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
             . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
             . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
             . ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"'
             . ' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
-            . ' office:version="1.3">');
+            . ' office:version="1.3">',
+        );
 
         // Styles block (mandatory for some readers like OpenSpout)
         fwrite($fd, '<office:automatic-styles>');
@@ -291,42 +294,62 @@ class OdsWriter implements WriterInterface
             $r++;
             $buffer .= '<table:table-row>';
 
-            $rowCellStyle = ($isFirstRow && $boldHeadersOpt) ? ' table:style-name="bold"' : '';
+            $rowCellStyle = $isFirstRow && $boldHeadersOpt ? ' table:style-name="bold"' : '';
 
             foreach ($row as $value) {
                 if ($value instanceof DateTimeInterface) {
                     $isoDate = $value->format('Y-m-d\TH:i:s');
                     $display = $value->format('Y-m-d H:i:s');
-                    $buffer .= '<table:table-cell' . $rowCellStyle
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
                         . ' office:value-type="date"'
-                        . ' office:date-value="' . $isoDate . '">'
-                        . '<text:p>' . $display . '</text:p>'
+                        . ' office:date-value="'
+                        . $isoDate
+                        . '">'
+                        . '<text:p>'
+                        . $display
+                        . '</text:p>'
                         . '</table:table-cell>';
                 } elseif ($value === null || $value === '') {
                     $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
                 } elseif (
                     is_numeric($value)
-                    && (!is_string($value) || $value === '0' || (isset($value[0]) && $value[0] !== '0' || str_contains($value, '.')))
+                    && (!is_string($value)
+                    || $value === '0'
+                    || (isset($value[0])
+                    && $value[0] !== '0'
+                    || str_contains($value, '.')))
                 ) {
-                    $buffer .= '<table:table-cell' . $rowCellStyle
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
                         . ' office:value-type="float"'
-                        . ' office:value="' . $value . '">'
-                        . '<text:p>' . $value . '</text:p>'
+                        . ' office:value="'
+                        . $value
+                        . '">'
+                        . '<text:p>'
+                        . $value
+                        . '</text:p>'
                         . '</table:table-cell>';
                 } else {
-                    $escaped = Spread::escapeXml((string)$value);
-                    $buffer .= '<table:table-cell' . $rowCellStyle
+                    $escaped = Spread::escapeXml((string) $value);
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
                         . ' office:value-type="string">'
-                        . '<text:p>' . $escaped . '</text:p>'
+                        . '<text:p>'
+                        . $escaped
+                        . '</text:p>'
                         . '</table:table-cell>';
                 }
             }
             $isFirstRow = false;
             $buffer .= '</table:table-row>';
-            if ($r % $bufferSizeOpt === 0) {
+            if (($r % $bufferSizeOpt) === 0) {
                 $res = fwrite($fd, $buffer);
                 if ($res === false) {
-                    throw new \RuntimeException("Failed to write to buffer");
+                    throw new \RuntimeException('Failed to write to buffer');
                 }
                 $buffer = '';
             }
@@ -335,7 +358,7 @@ class OdsWriter implements WriterInterface
         if ($buffer !== '') {
             $res = fwrite($fd, $buffer);
             if ($res === false) {
-                throw new \RuntimeException("Failed to write to buffer");
+                throw new \RuntimeException('Failed to write to buffer');
             }
         }
 
@@ -375,49 +398,49 @@ class OdsWriter implements WriterInterface
     private function genManifest(): string
     {
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">
-    <manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>
-    <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
-    <manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>
-    <manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
-</manifest:manifest>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">
+                <manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>
+                <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+                <manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>
+                <manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
+            </manifest:manifest>
+            XML;
     }
 
     private function genMeta(): string
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
-        $creator = Spread::escapeXml($metaObj->creator ?? "");
+        $creator = Spread::escapeXml($metaObj->creator ?? '');
         $titleVal = $metaObj?->title;
         $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal) . '</dc:title>' : '';
         $date = date('Y-m-d\TH:i:s');
 
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
-    xmlns:dc="http://purl.org/dc/elements/1.1/"
-    xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
-    office:version="1.3">
-    <office:meta>
-        <meta:initial-creator>{$creator}</meta:initial-creator>
-        <dc:creator>{$creator}</dc:creator>
-        {$title}
-        <meta:creation-date>{$date}</meta:creation-date>
-        <dc:date>{$date}</dc:date>
-    </office:meta>
-</office:document-meta>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:dc="http://purl.org/dc/elements/1.1/"
+                xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+                office:version="1.3">
+                <office:meta>
+                    <meta:initial-creator>{$creator}</meta:initial-creator>
+                    <dc:creator>{$creator}</dc:creator>
+                    {$title}
+                    <meta:creation-date>{$date}</meta:creation-date>
+                    <dc:date>{$date}</dc:date>
+                </office:meta>
+            </office:document-meta>
+            XML;
     }
 
     private function genStyles(): string
     {
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
-    xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
-    office:version="1.3">
-</office:document-styles>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+                office:version="1.3">
+            </office:document-styles>
+            XML;
     }
 }

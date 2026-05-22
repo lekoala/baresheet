@@ -105,7 +105,7 @@ class Baresheet
             self::EXT_CSV => new CsvReader(),
             self::EXT_XLSX => new XlsxReader(),
             self::EXT_ODS => new OdsReader(),
-            default => throw new Exception("Unsupported format: $ext"),
+            default => throw new Exception("Unsupported format: {$ext}"),
         };
     }
 
@@ -118,7 +118,7 @@ class Baresheet
             self::EXT_CSV => new CsvWriter(),
             self::EXT_XLSX => new XlsxWriter(),
             self::EXT_ODS => new OdsWriter(),
-            default => throw new Exception("Unsupported format: $ext"),
+            default => throw new Exception("Unsupported format: {$ext}"),
         };
     }
 
@@ -132,9 +132,9 @@ class Baresheet
                 if ($header !== false) {
                     return Spread::getExtensionForContent($header);
                 }
-                throw new Exception("Cannot determine format: file has no extension and content could not be read");
+                throw new Exception('Cannot determine format: file has no extension and content could not be read');
             }
-            throw new Exception("Cannot determine format: file has no extension and does not exist at '$filename'");
+            throw new Exception("Cannot determine format: file has no extension and does not exist at '{$filename}'");
         }
         return $ext;
     }

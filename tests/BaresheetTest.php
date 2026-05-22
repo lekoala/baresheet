@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\Options;
+use PHPUnit\Framework\TestCase;
 
 class BaresheetTest extends TestCase
 {
@@ -69,9 +69,13 @@ class BaresheetTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_auto_' . time() . '.csv';
         $opts = new Options(bom: false);
-        $result = Baresheet::write([
-            ["john", "doe", "john.doe@example.com"]
-        ], $tempFile, $opts);
+        $result = Baresheet::write(
+            [
+                ['john', 'doe', 'john.doe@example.com'],
+            ],
+            $tempFile,
+            $opts,
+        );
 
         self::assertTrue($result);
         self::assertTrue(is_file($tempFile));
@@ -86,7 +90,7 @@ class BaresheetTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_auto_' . time() . '.xlsx';
         $result = Baresheet::write([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ], $tempFile);
 
         self::assertTrue($result);
@@ -101,9 +105,13 @@ class BaresheetTest extends TestCase
     public function testWriteStringCsv(): void
     {
         $opts = new Options(bom: false);
-        $output = Baresheet::writeString([
-            ["john", "doe", "john.doe@example.com"]
-        ], 'csv', $opts);
+        $output = Baresheet::writeString(
+            [
+                ['john', 'doe', 'john.doe@example.com'],
+            ],
+            'csv',
+            $opts,
+        );
 
         self::assertStringContainsString('john.doe@example.com', $output);
     }
@@ -111,7 +119,7 @@ class BaresheetTest extends TestCase
     public function testWriteStringXlsx(): void
     {
         $output = Baresheet::writeString([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ], 'xlsx');
 
         self::assertStringContainsString('[Content_Types].xml', $output);

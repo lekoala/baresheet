@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
+use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxWriter;
-use LeKoala\Baresheet\OdsWriter;
+use PHPUnit\Framework\TestCase;
 
 class SpreadTest extends TestCase
 {
@@ -18,9 +18,9 @@ class SpreadTest extends TestCase
         $writer->meta = new \LeKoala\Baresheet\Meta(
             creator: 'TestCreator',
             title: 'TestTitle',
-            subject: 'TestSubject'
+            subject: 'TestSubject',
         );
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         $props = Spread::getProperties($tempFile);
         self::assertEquals('xlsx', $props['format']);
@@ -38,7 +38,7 @@ class SpreadTest extends TestCase
         $writer = new OdsWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'OdsCreator', title: 'OdsTitle');
         $writer->sheet = 'MySheet';
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         $props = Spread::getProperties($tempFile);
         self::assertEquals('ods', $props['format']);
@@ -54,7 +54,7 @@ class SpreadTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.ods';
         $writer = new OdsWriter();
         $writer->sheet = 'TestSheet';
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         $names = Spread::getSheetNames($tempFile);
         self::assertEquals(['TestSheet'], $names);
@@ -96,11 +96,11 @@ class SpreadTest extends TestCase
 
         // Modern date
         $dtModern = new \DateTime('2023-10-15 12:00:00');
-        self::assertEquals(45214.5, Spread::dateToExcel($dtModern));
+        self::assertEquals(45_214.5, Spread::dateToExcel($dtModern));
 
         // Quarter day
         $dtQuarter = new \DateTime('2024-01-01 06:00:00');
-        self::assertEquals(45292.25, Spread::dateToExcel($dtQuarter));
+        self::assertEquals(45_292.25, Spread::dateToExcel($dtQuarter));
     }
 
     public function testEnsureExtension(): void
@@ -122,7 +122,7 @@ class SpreadTest extends TestCase
         self::assertEquals('BA', Spread::columnLetter(53));
         self::assertEquals('ZZ', Spread::columnLetter(702));
         self::assertEquals('AAA', Spread::columnLetter(703));
-        self::assertEquals('XFD', Spread::columnLetter(16384));
+        self::assertEquals('XFD', Spread::columnLetter(16_384));
     }
 
     public function testColumnIndex(): void
@@ -134,7 +134,7 @@ class SpreadTest extends TestCase
         self::assertEquals(53, Spread::columnIndex('BA'));
         self::assertEquals(702, Spread::columnIndex('ZZ'));
         self::assertEquals(703, Spread::columnIndex('AAA'));
-        self::assertEquals(16384, Spread::columnIndex('XFD'));
+        self::assertEquals(16_384, Spread::columnIndex('XFD'));
         // Test case sensitivity
         self::assertEquals(1, Spread::columnIndex('a'));
     }
@@ -144,7 +144,7 @@ class SpreadTest extends TestCase
         for ($i = 1; $i <= 2000; $i++) {
             $letter = Spread::columnLetter($i);
             $index = Spread::columnIndex($letter);
-            self::assertEquals($i, $index, "Failed for index $i (Letter: $letter)");
+            self::assertEquals($i, $index, "Failed for index {$i} (Letter: {$letter})");
         }
     }
 

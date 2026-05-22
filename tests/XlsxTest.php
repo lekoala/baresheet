@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\TestCase;
 
 class XlsxTest extends TestCase
 {
@@ -17,7 +17,7 @@ class XlsxTest extends TestCase
         $contents = file_get_contents(__DIR__ . '/data/basic.xlsx');
         self::assertIsString($contents);
         /** @var array<array<mixed>> $data */
-        $data = iterator_to_array($reader->readString((string)$contents));
+        $data = iterator_to_array($reader->readString((string) $contents));
         self::assertCount(1, $data);
         self::assertCount(3, $data[0]);
         self::assertEquals('john', $data[0][0]);
@@ -27,11 +27,12 @@ class XlsxTest extends TestCase
         $options = new Options();
         $options->assoc = true;
         /** @var array<array<string, mixed>> $dataAssoc */
-        $dataAssoc = iterator_to_array($reader->readString((string)$contentsHeader, $options));
+        $dataAssoc = iterator_to_array($reader->readString((string) $contentsHeader, $options));
         self::assertTrue($reader->assoc);
         self::assertNotEmpty($dataAssoc);
         self::assertArrayHasKey('email', $dataAssoc[0]);
     }
+
     public function testReadXlsxFromFile(): void
     {
         $reader = new XlsxReader();
@@ -76,24 +77,24 @@ class XlsxTest extends TestCase
         self::assertCount(3, $data);
 
         $row1 = [
-            "Title" => "My title",
-            "Date" => "2020-09-24",
-            "Start" => "08:00",
-            "Duration" => "610",
-            "Names" => null,
-            "Boolean" => "1",
-            "Extra column" => "",
+            'Title' => 'My title',
+            'Date' => '2020-09-24',
+            'Start' => '08:00',
+            'Duration' => '610',
+            'Names' => null,
+            'Boolean' => '1',
+            'Extra column' => '',
         ];
         self::assertEquals($row1, $data[0]);
 
         $row3 = [
-            "Title" => "",
-            "Date" => "2020-10-07",
-            "Start" => "16:20",
-            "Duration" => "40",
-            "Names" => 'smith, john',
-            "Boolean" => "0",
-            "Extra column" => "My title",
+            'Title' => '',
+            'Date' => '2020-10-07',
+            'Start' => '16:20',
+            'Duration' => '40',
+            'Names' => 'smith, john',
+            'Boolean' => '0',
+            'Extra column' => 'My title',
         ];
         self::assertEquals($row3, $data[2]);
     }
@@ -107,13 +108,13 @@ class XlsxTest extends TestCase
         self::assertCount(2, $data);
 
         $row1 = [
-            "Title" => "My Title",
-            "Date" => "2020-09-24",
-            "Start" => "08:00",
-            "Duration" => "610",
-            "Names" => null,
-            "Boolean" => "1",
-            "Extra Title" => null,
+            'Title' => 'My Title',
+            'Date' => '2020-09-24',
+            'Start' => '08:00',
+            'Duration' => '610',
+            'Names' => null,
+            'Boolean' => '1',
+            'Extra Title' => null,
         ];
         self::assertEquals($row1, $data[0]);
     }
@@ -124,26 +125,29 @@ class XlsxTest extends TestCase
         $reader->assoc = true;
         $data = iterator_to_array($reader->readFile(__DIR__ . '/data/empty-col.xlsx'));
 
-        self::assertEquals([
+        self::assertEquals(
             [
-                'col1' => "v1",
-                'col2' => "v2",
-                'col3' => null,
-                'col4' => "v4",
+                [
+                    'col1' => 'v1',
+                    'col2' => 'v2',
+                    'col3' => null,
+                    'col4' => 'v4',
+                ],
+                [
+                    'col1' => 'v1',
+                    'col2' => null,
+                    'col3' => null,
+                    'col4' => 'v4',
+                ],
+                [
+                    'col1' => null,
+                    'col2' => 'v2',
+                    'col3' => 'v3',
+                    'col4' => null,
+                ],
             ],
-            [
-                'col1' => "v1",
-                'col2' => null,
-                'col3' => null,
-                'col4' => "v4",
-            ],
-            [
-                'col1' => null,
-                'col2' => "v2",
-                'col3' => "v3",
-                'col4' => null,
-            ]
-        ], $data);
+            $data,
+        );
     }
 
     public function testReadEmptyCol2Xlsx(): void
@@ -152,35 +156,38 @@ class XlsxTest extends TestCase
         $reader->assoc = true;
         $data = iterator_to_array($reader->readFile(__DIR__ . '/data/empty-col-2.xlsx'));
 
-        self::assertEquals([
+        self::assertEquals(
             [
-                'col1' => "v1",
-                'col2' => "v2",
-                'col3' => null,
-                'col4' => "v4",
-                'col5' => null,
-                'col6' => null,
-                'col7' => null,
+                [
+                    'col1' => 'v1',
+                    'col2' => 'v2',
+                    'col3' => null,
+                    'col4' => 'v4',
+                    'col5' => null,
+                    'col6' => null,
+                    'col7' => null,
+                ],
+                [
+                    'col1' => 'v1',
+                    'col2' => null,
+                    'col3' => null,
+                    'col4' => 'v4',
+                    'col5' => null,
+                    'col6' => null,
+                    'col7' => null,
+                ],
+                [
+                    'col1' => null,
+                    'col2' => 'v2',
+                    'col3' => 'v3',
+                    'col4' => null,
+                    'col5' => null,
+                    'col6' => null,
+                    'col7' => null,
+                ],
             ],
-            [
-                'col1' => "v1",
-                'col2' => null,
-                'col3' => null,
-                'col4' => "v4",
-                'col5' => null,
-                'col6' => null,
-                'col7' => null,
-            ],
-            [
-                'col1' => null,
-                'col2' => "v2",
-                'col3' => "v3",
-                'col4' => null,
-                'col5' => null,
-                'col6' => null,
-                'col7' => null,
-            ]
-        ], $data);
+            $data,
+        );
     }
 
     public function testReadEmptyXlsx(): void
@@ -225,7 +232,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_test_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $result = $writer->writeFile([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ], $tempFile);
 
         self::assertTrue($result);
@@ -243,7 +250,7 @@ class XlsxTest extends TestCase
     {
         $writer = new XlsxWriter();
         $output = $writer->writeString([
-            ["john", "doe", "john.doe@example.com"]
+            ['john', 'doe', 'john.doe@example.com'],
         ]);
 
         self::assertStringContainsString('[Content_Types].xml', $output);
@@ -254,8 +261,8 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_roundtrip_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $original = [
-            ["John Doe", "john@example.com", "42"],
-            ["Jane Doe", "jane@example.com", "99"],
+            ['John Doe', 'john@example.com', '42'],
+            ['Jane Doe', 'jane@example.com', '99'],
         ];
 
         $writer->writeFile($original, $tempFile);
@@ -263,8 +270,8 @@ class XlsxTest extends TestCase
         $reader = new XlsxReader();
         $readBack = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(2, $readBack);
-        self::assertEquals("John Doe", $readBack[0][0]);
-        self::assertEquals("john@example.com", $readBack[0][1]);
+        self::assertEquals('John Doe', $readBack[0][0]);
+        self::assertEquals('john@example.com', $readBack[0][1]);
 
         unlink($tempFile);
     }
@@ -274,12 +281,12 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_creator_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'TestApp');
-        $writer->writeFile([["hello"]], $tempFile);
+        $writer->writeFile([['hello']], $tempFile);
 
         $reader = new XlsxReader();
         $data = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(1, $data);
-        self::assertEquals("hello", $data[0][0]);
+        self::assertEquals('hello', $data[0][0]);
 
         unlink($tempFile);
     }
@@ -289,16 +296,16 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_num_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->writeFile([
-            ["42", "3.14", "0", "007", "text"],
+            ['42', '3.14', '0', '007', 'text'],
         ], $tempFile);
 
         $reader = new XlsxReader();
         $data = iterator_to_array($reader->readFile($tempFile));
-        self::assertEquals("42", $data[0][0]);
-        self::assertEquals("3.14", $data[0][1]);
-        self::assertEquals("0", $data[0][2]);
-        self::assertEquals("007", $data[0][3]);
-        self::assertEquals("text", $data[0][4]);
+        self::assertEquals('42', $data[0][0]);
+        self::assertEquals('3.14', $data[0][1]);
+        self::assertEquals('0', $data[0][2]);
+        self::assertEquals('007', $data[0][3]);
+        self::assertEquals('text', $data[0][4]);
 
         unlink($tempFile);
     }
@@ -308,7 +315,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_date_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $dt = new \DateTime('2024-01-15 10:30:00');
-        $writer->writeFile([[$dt, "label"]], $tempFile);
+        $writer->writeFile([[$dt, 'label']], $tempFile);
 
         $reader = new XlsxReader();
         $data = iterator_to_array($reader->readFile($tempFile));
@@ -324,7 +331,7 @@ class XlsxTest extends TestCase
         $writer = new XlsxWriter();
         $writer->autoWidth = true;
         $writer->writeFile([
-            ["Short", "A much longer string that should cause wider column"],
+            ['Short', 'A much longer string that should cause wider column'],
         ], $tempFile);
 
         $reader = new XlsxReader();
@@ -345,14 +352,14 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_empty_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->writeFile([
-            ["", "data", ""],
-            ["hello", "", "world"],
+            ['',      'data', ''],
+            ['hello', '',     'world'],
         ], $tempFile);
 
         $reader = new XlsxReader();
         $data = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(2, $data);
-        self::assertEquals("data", $data[0][1]);
+        self::assertEquals('data', $data[0][1]);
 
         unlink($tempFile);
     }
@@ -362,11 +369,11 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_limit_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->writeFile([
-            ["row1"],
-            ["row2"],
-            ["row3"],
-            ["row4"],
-            ["row5"],
+            ['row1'],
+            ['row2'],
+            ['row3'],
+            ['row4'],
+            ['row5'],
         ], $tempFile);
 
         $reader = new XlsxReader();
@@ -383,8 +390,8 @@ class XlsxTest extends TestCase
         $writer = new XlsxWriter();
         $writer->autofilter = 'A1:B1';
         $writer->writeFile([
-            ["Name", "Email"],
-            ["John", "john@example.com"],
+            ['Name', 'Email'],
+            ['John', 'john@example.com'],
         ], $tempFile);
 
         $zip = new \ZipArchive();
@@ -402,8 +409,8 @@ class XlsxTest extends TestCase
         $writer = new XlsxWriter();
         $writer->freezePane = 'A2';
         $writer->writeFile([
-            ["Header1", "Header2"],
-            ["Data1", "Data2"],
+            ['Header1', 'Header2'],
+            ['Data1',   'Data2'],
         ], $tempFile);
 
         $zip = new \ZipArchive();
@@ -421,7 +428,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_sn_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->sheet = 'MySheet';
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         $zip = new \ZipArchive();
         $zip->open($tempFile);
@@ -438,8 +445,8 @@ class XlsxTest extends TestCase
         $writer = new XlsxWriter();
         $writer->boldHeaders = true;
         $writer->writeFile([
-            ["Name", "Email"],
-            ["John", "john@example.com"],
+            ['Name', 'Email'],
+            ['John', 'john@example.com'],
         ], $tempFile);
 
         $zip = new \ZipArchive();
@@ -475,7 +482,7 @@ class XlsxTest extends TestCase
         $writer = new XlsxWriter();
         $writer->headers = ['Name', 'Email'];
         $writer->writeFile([
-            ["John", "john@example.com"],
+            ['John', 'john@example.com'],
         ], $tempFile);
 
         $reader = new XlsxReader();
@@ -491,7 +498,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->sheet = 'Reports';
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         $names = \LeKoala\Baresheet\Spread::getSheetNames($tempFile);
         self::assertCount(1, $names);
@@ -506,7 +513,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_readsheet_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->sheet = 'Data';
-        $writer->writeFile([["hello"]], $tempFile);
+        $writer->writeFile([['hello']], $tempFile);
 
         $reader = new XlsxReader();
         $reader->sheet = 'Data';
@@ -522,7 +529,7 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_opts_' . time() . '.xlsx';
         $opts = new Options(meta: new \LeKoala\Baresheet\Meta(creator: 'OptsCreator'), sheet: 'ViaOpts');
         $writer = new XlsxWriter();
-        $writer->writeFile([["data"]], $tempFile, $opts);
+        $writer->writeFile([['data']], $tempFile, $opts);
 
         $zip = new \ZipArchive();
         $zip->open($tempFile);

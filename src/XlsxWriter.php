@@ -62,7 +62,7 @@ class XlsxWriter implements WriterInterface
                     $result = stream_copy_to_stream($tmpStream, $stream);
                     fclose($tmpStream);
                     if ($result === false) {
-                        throw new Exception("Failed to copy temp file to stream");
+                        throw new Exception('Failed to copy temp file to stream');
                     }
                 }
             } finally {
@@ -138,7 +138,7 @@ class XlsxWriter implements WriterInterface
         if (!class_exists(\ZipStream\ZipStream::class)) {
             throw new Exception(
                 'Streaming XLSX requires maennchen/zipstream-php. '
-                    . 'Install it with: composer require maennchen/zipstream-php'
+                . 'Install it with: composer require maennchen/zipstream-php',
             );
         }
 
@@ -218,7 +218,7 @@ class XlsxWriter implements WriterInterface
     {
         $destinationDir = dirname($filename);
         if (!is_writable($destinationDir)) {
-            throw new Exception("Directory '$destinationDir' is not writable");
+            throw new Exception("Directory '{$destinationDir}' is not writable");
         }
 
         $mode = ZipArchive::CREATE | ZipArchive::OVERWRITE;
@@ -226,7 +226,7 @@ class XlsxWriter implements WriterInterface
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'xlsx_native');
             if (!$baseName) {
-                throw new Exception("Failed to create temp file in " . $this->tempPath);
+                throw new Exception('Failed to create temp file in ' . $this->tempPath);
             }
         } else {
             $baseName = $filename;
@@ -235,13 +235,13 @@ class XlsxWriter implements WriterInterface
         $zip = new ZipArchive();
         $result = $zip->open($baseName, $mode);
         if ($result !== true) {
-            throw new Exception("Failed to open zip archive, code: " . Spread::zipError((int)$result));
+            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
         $stream = $this->writeToZip($zip, $data);
         $destinationFile = $zip->filename;
         $closeResult = $zip->close();
         if ($closeResult === false) {
-            throw new Exception("Failed to close file '$destinationFile'");
+            throw new Exception("Failed to close file '{$destinationFile}'");
         }
 
         // Copy from temp location to final destination when using tempPath
@@ -290,7 +290,7 @@ class XlsxWriter implements WriterInterface
         }
 
         $meta = stream_get_meta_data($worksheetStream);
-        $uri = (string)($meta['uri'] ?? '');
+        $uri = (string) ($meta['uri'] ?? '');
         $zip->addFile($uri, 'xl/worksheets/sheet1.xml');
         // Do not fclose() here otherwise the temp file is deleted before the zip is closed/built!
         return $worksheetStream;
@@ -334,7 +334,7 @@ class XlsxWriter implements WriterInterface
         // calculate column widths and write the <cols> section before <sheetData>.
         $dataStream = tmpfile();
         if (!$dataStream) {
-            throw new Exception("Failed to get temp file for sheet data");
+            throw new Exception('Failed to get temp file for sheet data');
         }
 
         $r = 0;
@@ -352,8 +352,8 @@ class XlsxWriter implements WriterInterface
         foreach ($wrappedData as $dataRow) {
             $r++;
             $i = 0;
-            $cellStyle = ($isFirstRow && $boldStyle) ? $boldStyle : '';
-            $buffer .= "<row r=\"$r\">";
+            $cellStyle = $isFirstRow && $boldStyle ? $boldStyle : '';
+            $buffer .= "<row r=\"{$r}\">";
             foreach ($dataRow as $value) {
                 if (!isset($colCache[$i])) {
                     $colCache[$i] = Spread::columnLetter($i + 1);
@@ -364,22 +364,22 @@ class XlsxWriter implements WriterInterface
                     $excelDate = Spread::dateToExcel($value);
                     $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                     $vl = 16;
-                } elseif ($value === null || $value === '' || (!is_scalar($value) && !($value instanceof \Stringable))) { // @phpstan-ignore-line
+                } elseif ($value === null || $value === '' || (!is_scalar($value) && !$value instanceof \Stringable)) { // @phpstan-ignore-line
                     $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } else {
                     $isNumeric = false;
                     if (is_int($value) || is_float($value)) {
                         $isNumeric = true;
-                        $strValue = (string)$value;
+                        $strValue = (string) $value;
                     } else {
-                        $strValue = (string)$value;
+                        $strValue = (string) $value;
                         if ($strValue === '0') {
                             $isNumeric = true;
                         } elseif (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue)) {
                             $isNumeric = true;
                         } elseif (is_numeric($strValue)) {
-                            $isNumeric = (bool)preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
+                            $isNumeric = (bool) preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
                         }
                     }
 
@@ -409,7 +409,14 @@ class XlsxWriter implements WriterInterface
                             }
                             $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
                         } else {
-                            $buffer .= '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
+                            $buffer .=
+                                '<c r="'
+                                . $cn
+                                . '" t="inlineStr"'
+                                . $cellStyle
+                                . '><is><t>'
+                                . $escaped
+                                . '</t></is></c>';
                         }
                     }
                 }
@@ -422,7 +429,7 @@ class XlsxWriter implements WriterInterface
                 $i++;
             }
             $buffer .= "</row>\r\n";
-            if ($r % $bufferSizeOpt === 0) {
+            if (($r % $bufferSizeOpt) === 0) {
                 fwrite($dataStream, $buffer);
                 $buffer = '';
             }
@@ -437,7 +444,7 @@ class XlsxWriter implements WriterInterface
         $worksheetStream = tmpfile();
         if (!$worksheetStream) {
             fclose($dataStream);
-            throw new Exception("Failed to get temp file for worksheet");
+            throw new Exception('Failed to get temp file for worksheet');
         }
 
         $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
@@ -487,7 +494,7 @@ class XlsxWriter implements WriterInterface
         $xml = '<cols>';
         foreach ($colWidths as $i => $len) {
             $colNum = $i + 1;
-            $width = max(8, round($len * 1.2 + 2, 2));
+            $width = max(8, round(($len * 1.2) + 2, 2));
             $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $width . '" customWidth="true"/>';
         }
         $xml .= '</cols>';
@@ -501,7 +508,12 @@ class XlsxWriter implements WriterInterface
     {
         $count = count($sharedStrings);
         $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
-        $xml .= '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' . $count . '" uniqueCount="' . $count . '">';
+        $xml .=
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'
+            . $count
+            . '" uniqueCount="'
+            . $count
+            . '">';
         foreach ($sharedStrings as $str) {
             $xml .= '<si><t>' . $str . '</t></si>';
         }
@@ -514,100 +526,100 @@ class XlsxWriter implements WriterInterface
     private function genRels(): string
     {
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
-    <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
-</Relationships>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+                <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+                <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+            </Relationships>
+            XML;
     }
 
     private function genAppXml(): string
     {
         return <<<XML
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
-    xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-    <TotalTime>0</TotalTime>
-    <Company></Company>
-</Properties>
-XML;
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+                xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+                <TotalTime>0</TotalTime>
+                <Company></Company>
+            </Properties>
+            XML;
     }
 
     private function genCoreXml(): string
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
         $created = gmdate('Y-m-d\TH:i:s\Z');
-        $title = Spread::escapeXml($metaObj->title ?? "");
-        $subject = Spread::escapeXml($metaObj->subject ?? "");
-        $creator = Spread::escapeXml($metaObj->creator ?? "");
-        $keywords = Spread::escapeXml($metaObj->keywords ?? "");
-        $description = Spread::escapeXml($metaObj->description ?? "");
-        $category = Spread::escapeXml($metaObj->category ?? "");
-        $language = Spread::escapeXml($metaObj->language ?? "en-US");
+        $title = Spread::escapeXml($metaObj->title ?? '');
+        $subject = Spread::escapeXml($metaObj->subject ?? '');
+        $creator = Spread::escapeXml($metaObj->creator ?? '');
+        $keywords = Spread::escapeXml($metaObj->keywords ?? '');
+        $description = Spread::escapeXml($metaObj->description ?? '');
+        $category = Spread::escapeXml($metaObj->category ?? '');
+        $language = Spread::escapeXml($metaObj->language ?? 'en-US');
 
         return <<<XML
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
-    xmlns:dc="http://purl.org/dc/elements/1.1/"
-    xmlns:dcmitype="http://purl.org/dc/dcmitype/"
-    xmlns:dcterms="http://purl.org/dc/terms/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <dcterms:created xsi:type="dcterms:W3CDTF">$created</dcterms:created>
-    <dc:title>$title</dc:title>
-    <dc:subject>$subject</dc:subject>
-    <dc:creator>$creator</dc:creator>
-    <cp:keywords>$keywords</cp:keywords>
-    <dc:description>$description</dc:description>
-    <cp:category>$category</cp:category>
-    <dc:language>$language</dc:language>
-    <cp:revision>0</cp:revision>
-</cp:coreProperties>
-XML;
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+                xmlns:dc="http://purl.org/dc/elements/1.1/"
+                xmlns:dcmitype="http://purl.org/dc/dcmitype/"
+                xmlns:dcterms="http://purl.org/dc/terms/"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+                <dcterms:created xsi:type="dcterms:W3CDTF">{$created}</dcterms:created>
+                <dc:title>{$title}</dc:title>
+                <dc:subject>{$subject}</dc:subject>
+                <dc:creator>{$creator}</dc:creator>
+                <cp:keywords>{$keywords}</cp:keywords>
+                <dc:description>{$description}</dc:description>
+                <cp:category>{$category}</cp:category>
+                <dc:language>{$language}</dc:language>
+                <cp:revision>0</cp:revision>
+            </cp:coreProperties>
+            XML;
     }
 
     private function genStyles(): string
     {
         // fontId 0 = normal, fontId 1 = bold (for boldHeaders)
         return <<<'XML'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="2">
-    <numFmt numFmtId="164" formatCode="GENERAL" />
-    <numFmt numFmtId="165" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
-</numFmts>
-<fonts count="2">
-    <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
-    <font><b/><name val="Arial"/><family val="2"/><sz val="10"/></font>
-</fonts>
-<fills count="2">
-    <fill><patternFill patternType="none" /></fill>
-    <fill><patternFill patternType="gray125" /></fill>
-</fills>
-<borders count="1">
-<border><left/><right/><top/><bottom/><diagonal/></border>
-</borders>
-<cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
-</cellStyleXfs>
-<cellXfs count="3">
-    <xf applyAlignment="false" applyBorder="false" applyFont="true" applyProtection="false" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0">
-        <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/>
-        <protection locked="true" hidden="false"/>
-    </xf>
-    <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0">
-        <alignment horizontal="general" vertical="bottom"/>
-    </xf>
-    <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="164" xfId="0">
-        <alignment horizontal="general" vertical="bottom"/>
-    </xf>
-</cellXfs>
-<cellStyles count="1">
-    <cellStyle name="Normal" xfId="0" builtinId="0"/>
-</cellStyles>
-</styleSheet>
-XML;
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+            <numFmts count="2">
+                <numFmt numFmtId="164" formatCode="GENERAL" />
+                <numFmt numFmtId="165" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
+            </numFmts>
+            <fonts count="2">
+                <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
+                <font><b/><name val="Arial"/><family val="2"/><sz val="10"/></font>
+            </fonts>
+            <fills count="2">
+                <fill><patternFill patternType="none" /></fill>
+                <fill><patternFill patternType="gray125" /></fill>
+            </fills>
+            <borders count="1">
+            <border><left/><right/><top/><bottom/><diagonal/></border>
+            </borders>
+            <cellStyleXfs count="1">
+                <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
+            </cellStyleXfs>
+            <cellXfs count="3">
+                <xf applyAlignment="false" applyBorder="false" applyFont="true" applyProtection="false" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0">
+                    <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/>
+                    <protection locked="true" hidden="false"/>
+                </xf>
+                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0">
+                    <alignment horizontal="general" vertical="bottom"/>
+                </xf>
+                <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="164" xfId="0">
+                    <alignment horizontal="general" vertical="bottom"/>
+                </xf>
+            </cellXfs>
+            <cellStyles count="1">
+                <cellStyle name="Normal" xfId="0" builtinId="0"/>
+            </cellStyles>
+            </styleSheet>
+            XML;
     }
 
     private function genWorkbook(): string
@@ -615,15 +627,15 @@ XML;
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $name = Spread::escapeXmlAttr($sheetVal);
         return <<<XML
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-    <fileVersion appName="LeKoala\Baresheet"/>
-    <sheets>
-        <sheet name="$name" sheetId="1" state="visible" r:id="rId1"/>
-    </sheets>
-</workbook>
-XML;
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                <fileVersion appName="LeKoala\Baresheet"/>
+                <sheets>
+                    <sheet name="{$name}" sheetId="1" state="visible" r:id="rId1"/>
+                </sheets>
+            </workbook>
+            XML;
     }
 
     private function genWorkbookRels(): string
@@ -634,13 +646,13 @@ XML;
             . 'Target="sharedStrings.xml"/>'
             : '';
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-$sharedStrings
-</Relationships>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+                <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+            {$sharedStrings}
+            </Relationships>
+            XML;
     }
 
     private function genContentTypes(): string
@@ -650,17 +662,17 @@ XML;
             . 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>'
             : '';
         return <<<XML
-<?xml version="1.0" encoding="UTF-8"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-    <Override PartName="/_rels/.rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-    <Override PartName="/xl/_rels/workbook.xml.rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-    <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-    <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-    <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-$sharedStrings
-    <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
-    <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
-</Types>
-XML;
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+                <Override PartName="/_rels/.rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                <Override PartName="/xl/_rels/workbook.xml.rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+                <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+                <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+            {$sharedStrings}
+                <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+                <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+            </Types>
+            XML;
     }
 }

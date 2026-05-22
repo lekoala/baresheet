@@ -61,10 +61,13 @@
     },
     "scripts": {
         "test": [
+            "@mago",
             "@phpunit",
             "@phpcs",
             "@phpstan"
         ],
+        "mago": "mago lint",
+        "mago-fmt": "mago format",
         "phpunit": "phpunit",
         "phpcs": "phpcs",
         "phpcbf": "phpcbf",

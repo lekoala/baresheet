@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\CsvReader;
-use LeKoala\Baresheet\Options;
 use PHPUnit\Framework\TestCase;
 
 class CsvEncodingTest extends TestCase
@@ -33,7 +32,7 @@ class CsvEncodingTest extends TestCase
     public function testAutoEncodingDetection(): void
     {
         // ISO-8859-1 CSV: "é,à" (UTF-8 would be \xc3\xa9, \xc3\xa0)
-        $isoCsv = iconv('UTF-8', 'ISO-8859-1', "é,à");
+        $isoCsv = iconv('UTF-8', 'ISO-8859-1', 'é,à');
         $stream = fopen('php://temp', 'r+');
         fwrite($stream, $isoCsv);
         rewind($stream);

@@ -40,16 +40,16 @@ class XlsxReader implements ReaderInterface
 
         Spread::isSafePath($filename);
         if (!is_file($filename)) {
-            throw new Exception("Invalid file $filename");
+            throw new Exception("Invalid file {$filename}");
         }
         if (!is_readable($filename)) {
-            throw new Exception("File $filename is not readable");
+            throw new Exception("File {$filename} is not readable");
         }
 
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception("Failed to open zip archive, code: " . Spread::zipError($result));
+            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
         // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
@@ -61,12 +61,12 @@ class XlsxReader implements ReaderInterface
             if (isset($ssXml->si)) {
                 foreach ($ssXml->si as $si) {
                     if (isset($si->t)) {
-                        $sharedStrings[] = (string)$si->t;
+                        $sharedStrings[] = (string) $si->t;
                     } elseif (isset($si->r)) {
                         // Rich text: concatenate all <r><t> runs into a single string.
                         $t = '';
                         foreach ($si->r as $r) {
-                            $t .= (string)$r->t;
+                            $t .= (string) $r->t;
                         }
                         $sharedStrings[] = $t;
                     } else {
@@ -86,18 +86,18 @@ class XlsxReader implements ReaderInterface
             if (isset($stylesXml->numFmts)) {
                 foreach ($stylesXml->numFmts->children() as $fmt) {
                     $attrs = $fmt->attributes();
-                    $numericalFormats[(string)$attrs->numFmtId] = (string)$attrs->formatCode;
+                    $numericalFormats[(string) $attrs->numFmtId] = (string) $attrs->formatCode;
                 }
             }
 
             if (isset($stylesXml->cellXfs->xf)) {
                 foreach ($stylesXml->cellXfs->xf as $v) {
-                    $fmtId = (string)($v['numFmtId'] ?? '0');
+                    $fmtId = (string) ($v['numFmtId'] ?? '0');
 
                     $cellFormat = $numericalFormats[$fmtId] ?? null;
 
                     if ($cellFormat === null) {
-                        $cellFormat = self::getBuiltInFormatCode((int)$fmtId);
+                        $cellFormat = self::getBuiltInFormatCode((int) $fmtId);
                         // Cache built-in formats too to avoid redundant match/lookup
                         $numericalFormats[$fmtId] = $cellFormat;
                     }
@@ -113,8 +113,8 @@ class XlsxReader implements ReaderInterface
         if ($wbData) {
             $wbXml = Spread::safeXml($wbData);
             if (isset($wbXml->workbookPr)) {
-                $date1904 = (string)$wbXml->workbookPr['date1904'];
-                $is1904 = ($date1904 === '1' || strtolower($date1904) === 'true');
+                $date1904 = (string) $wbXml->workbookPr['date1904'];
+                $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
             }
         }
 
@@ -123,7 +123,7 @@ class XlsxReader implements ReaderInterface
         $wsIdx = $zip->locateName($wsPath);
         if ($wsIdx === false) {
             $zip->close();
-            throw new Exception("No data");
+            throw new Exception('No data');
         }
         $zip->close();
 
@@ -208,7 +208,10 @@ class XlsxReader implements ReaderInterface
                                             $isDepth = $reader->depth;
                                             $v = '';
                                             while ($reader->read() && $reader->depth > $isDepth) {
-                                                if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 't') {
+                                                if (
+                                                    $reader->nodeType === \XMLReader::ELEMENT
+                                                    && $reader->name === 't'
+                                                ) {
                                                     $v .= $reader->readString();
                                                 }
                                             }
@@ -225,14 +228,14 @@ class XlsxReader implements ReaderInterface
                             }
 
                             if ($t === 's') {
-                                $idx = (int)$v;
+                                $idx = (int) $v;
                                 $v = $sharedStrings[$idx] ?? '';
                             }
 
                             $excelFormat = null;
                             $isDateFormat = false;
                             if ($s !== '') {
-                                $excelFormat = $cellFormats[(int)$s] ?? null;
+                                $excelFormat = $cellFormats[(int) $s] ?? null;
                                 if ($excelFormat) {
                                     if (!isset($isDateCache[$excelFormat])) {
                                         $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
@@ -287,7 +290,7 @@ class XlsxReader implements ReaderInterface
                             if (!empty($missing)) {
                                 $reader->close();
                                 throw new \RuntimeException(
-                                    'Missing required columns: ' . implode(', ', $missing)
+                                    'Missing required columns: ' . implode(', ', $missing),
                                 );
                             }
                         }
@@ -359,8 +362,8 @@ class XlsxReader implements ReaderInterface
         $idx = 0;
         foreach ($wbXml->sheets->sheet as $s) {
             $attrs = $s->attributes();
-            $name = (string)$attrs->name;
-            $rId = (string)$s->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')->id;
+            $name = (string) $attrs->name;
+            $rId = (string) $s->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')->id;
             $sheets[] = ['name' => $name, 'rId' => $rId, 'index' => $idx];
             $idx++;
         }
@@ -386,8 +389,8 @@ class XlsxReader implements ReaderInterface
         if ($relsData) {
             $relsXml = Spread::safeXml($relsData);
             foreach ($relsXml->Relationship as $rel) {
-                if ((string)$rel['Id'] === $target) {
-                    return 'xl/' . (string)$rel['Target'];
+                if ((string) $rel['Id'] === $target) {
+                    return 'xl/' . (string) $rel['Target'];
                 }
             }
         }
@@ -468,23 +471,23 @@ class XlsxReader implements ReaderInterface
 
         // Standard markers
         if (
-            str_contains($cleanCode, 'yy') ||
-            str_contains($cleanCode, 'dd') ||
-            str_contains($cleanCode, 'mm') ||
-            str_contains($cleanCode, 'hh') ||
-            str_contains($cleanCode, 'ss')
+            str_contains($cleanCode, 'yy')
+            || str_contains($cleanCode, 'dd')
+            || str_contains($cleanCode, 'mm')
+            || str_contains($cleanCode, 'hh')
+            || str_contains($cleanCode, 'ss')
         ) {
             return true;
         }
 
         // Single letter markers with separators
         if (
-            str_contains($cleanCode, 'd/m') ||
-            str_contains($cleanCode, 'm/d') ||
-            str_contains($cleanCode, 'h:m') ||
-            str_contains($cleanCode, 'm:s') ||
-            str_contains($cleanCode, 'am/pm') ||
-            str_contains($cleanCode, 'a/p')
+            str_contains($cleanCode, 'd/m')
+            || str_contains($cleanCode, 'm/d')
+            || str_contains($cleanCode, 'h:m')
+            || str_contains($cleanCode, 'm:s')
+            || str_contains($cleanCode, 'am/pm')
+            || str_contains($cleanCode, 'a/p')
         ) {
             return true;
         }

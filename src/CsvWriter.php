@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use RuntimeException;
-use LeKoala\Baresheet\Bom;
 
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
@@ -14,9 +13,9 @@ class CsvWriter implements WriterInterface
 {
     public const MIMETYPE = 'text/csv';
 
-    public string $separator = ",";
-    public string $enclosure = "\"";
-    public string $escape = "";
+    public string $separator = ',';
+    public string $enclosure = '"';
+    public string $escape = '';
     public string $eol = "\r\n";
     public bool|Bom|string $bom = true;
     public bool $stream = true;
@@ -120,16 +119,16 @@ class CsvWriter implements WriterInterface
         } elseif ($this->bom instanceof Bom) {
             $bomToWrite = $this->bom;
         } elseif (is_string($this->bom) && $this->bom !== '') {
-            $result = fputs($stream, $this->bom);
+            $result = fwrite($stream, $this->bom);
             if ($result === false) {
-                throw new RuntimeException("Failed to write BOM to stream");
+                throw new RuntimeException('Failed to write BOM to stream');
             }
         }
 
         if ($bomToWrite !== null) {
-            $result = fputs($stream, $bomToWrite->value);
+            $result = fwrite($stream, $bomToWrite->value);
             if ($result === false) {
-                throw new RuntimeException("Failed to write BOM to stream");
+                throw new RuntimeException('Failed to write BOM to stream');
             }
 
             // If we are writing a non-UTF-8 BOM, we assume the user intends
@@ -143,14 +142,14 @@ class CsvWriter implements WriterInterface
 
         $separator = $this->separator;
         // For writer, "auto" means php default separator
-        if ($separator === "auto") {
-            $separator = ",";
+        if ($separator === 'auto') {
+            $separator = ',';
         }
         $escapeFormulas = $this->escapeFormulas;
         $outputEncoding = $this->outputEncoding;
 
         // Determine processing needs to avoid repetitive checks in the loop
-        $hasEncoding = ($outputEncoding !== null && $outputEncoding !== '');
+        $hasEncoding = $outputEncoding !== null && $outputEncoding !== '';
         $isCallable = is_callable($escapeFormulas);
 
         // NOTE: We intentionally inline the processing logic for both headers and data rows
@@ -192,7 +191,7 @@ class CsvWriter implements WriterInterface
             /** @var array<int|string, bool|float|int|string|null> $row */
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
-                throw new RuntimeException("Failed to write headers to stream");
+                throw new RuntimeException('Failed to write headers to stream');
             }
         }
 
@@ -224,7 +223,7 @@ class CsvWriter implements WriterInterface
             /** @var array<int|string, bool|float|int|string|null> $row */
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
-                throw new RuntimeException("Failed to write line");
+                throw new RuntimeException('Failed to write line');
             }
         }
     }

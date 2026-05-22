@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
 use LeKoala\Baresheet\Bom;
+use PHPUnit\Framework\TestCase;
 use ValueError;
 
 class BomTest extends TestCase
@@ -32,7 +32,7 @@ class BomTest extends TestCase
     {
         $this->expectException(ValueError::class);
         $this->expectExceptionMessage('No recognized BOM sequence found in string.');
-        Bom::fromSequence("not a bom");
+        Bom::fromSequence('not a bom');
     }
 
     public function testLength(): void
@@ -81,6 +81,6 @@ class BomTest extends TestCase
         self::assertSame(Bom::Utf8, Bom::tryFromSequence("\xEF\xBB\xBF"));
         self::assertSame(Bom::Utf32Be, Bom::tryFromSequence("\x00\x00\xFE\xFF"));
         self::assertSame(Bom::Utf16Be, Bom::tryFromSequence("\xFE\xFF"));
-        self::assertNull(Bom::tryFromSequence("not a bom"));
+        self::assertNull(Bom::tryFromSequence('not a bom'));
     }
 }

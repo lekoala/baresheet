@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use PHPUnit\Framework\TestCase;
-use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
-use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\Options;
+use PHPUnit\Framework\TestCase;
 
 class OdsTest extends TestCase
 {
@@ -16,8 +16,8 @@ class OdsTest extends TestCase
     {
         $writer = new OdsWriter();
         $original = [
-            ["Alice", "alice@example.com", "24"],
-            ["Bob", "bob@example.com", "35"],
+            ['Alice', 'alice@example.com', '24'],
+            ['Bob',   'bob@example.com',   '35'],
         ];
 
         $output = $writer->writeString($original);
@@ -26,9 +26,9 @@ class OdsTest extends TestCase
         $readBack = iterator_to_array($reader->readString($output));
 
         self::assertCount(2, $readBack);
-        self::assertEquals("Alice", $readBack[0][0]);
-        self::assertEquals("bob@example.com", $readBack[1][1]);
-        self::assertEquals("35", $readBack[1][2]);
+        self::assertEquals('Alice', $readBack[0][0]);
+        self::assertEquals('bob@example.com', $readBack[1][1]);
+        self::assertEquals('35', $readBack[1][2]);
     }
 
     public function testWriteAndReadBack(): void
@@ -36,8 +36,8 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_' . time() . '.ods';
         $writer = new OdsWriter();
         $original = [
-            ["John Doe", "john@example.com", "42"],
-            ["Jane Doe", "jane@example.com", "99"],
+            ['John Doe', 'john@example.com', '42'],
+            ['Jane Doe', 'jane@example.com', '99'],
         ];
 
         $writer->writeFile($original, $tempFile);
@@ -46,10 +46,10 @@ class OdsTest extends TestCase
         $reader = new OdsReader();
         $readBack = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(2, $readBack);
-        self::assertEquals("John Doe", $readBack[0][0]);
-        self::assertEquals("john@example.com", $readBack[0][1]);
-        self::assertEquals("42", $readBack[0][2]);
-        self::assertEquals("99", $readBack[1][2]);
+        self::assertEquals('John Doe', $readBack[0][0]);
+        self::assertEquals('john@example.com', $readBack[0][1]);
+        self::assertEquals('42', $readBack[0][2]);
+        self::assertEquals('99', $readBack[1][2]);
 
         unlink($tempFile);
     }
@@ -58,7 +58,7 @@ class OdsTest extends TestCase
     {
         $writer = new OdsWriter();
         $output = $writer->writeString([
-            ["hello", "world"]
+            ['hello', 'world'],
         ]);
 
         $ext = \LeKoala\Baresheet\Spread::getExtensionForContent($output);
@@ -71,8 +71,8 @@ class OdsTest extends TestCase
         $writer = new OdsWriter();
         $writer->headers = ['name', 'email'];
         $writer->writeFile([
-            ["John", "john@example.com"],
-            ["Jane", "jane@example.com"],
+            ['John', 'john@example.com'],
+            ['Jane', 'jane@example.com'],
         ], $tempFile);
 
         $reader = new OdsReader();
@@ -80,7 +80,7 @@ class OdsTest extends TestCase
         $data = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(2, $data);
         self::assertArrayHasKey('name', $data[0]);
-        self::assertEquals("John", $data[0]['name']);
+        self::assertEquals('John', $data[0]['name']);
 
         unlink($tempFile);
     }
@@ -90,7 +90,7 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_meta_' . time() . '.ods';
         $writer = new OdsWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'TestCreator', title: 'TestTitle');
-        $writer->writeFile([["data"]], $tempFile);
+        $writer->writeFile([['data']], $tempFile);
 
         // Verify the meta.xml contains creator
         $zip = new \ZipArchive();
@@ -109,7 +109,7 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_sheet_' . time() . '.ods';
         $writer = new OdsWriter();
         $writer->sheet = 'MyData';
-        $writer->writeFile([["test"]], $tempFile);
+        $writer->writeFile([['test']], $tempFile);
 
         $zip = new \ZipArchive();
         $zip->open($tempFile);
@@ -126,10 +126,10 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_limit_' . time() . '.ods';
         $writer = new OdsWriter();
         $writer->writeFile([
-            ["row1"],
-            ["row2"],
-            ["row3"],
-            ["row4"],
+            ['row1'],
+            ['row2'],
+            ['row3'],
+            ['row4'],
         ], $tempFile);
 
         $reader = new OdsReader();
@@ -144,7 +144,7 @@ class OdsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_facade_' . time() . '.ods';
         $original = [
-            ["Alpha", "Beta"],
+            ['Alpha', 'Beta'],
         ];
 
         Baresheet::write($original, $tempFile);
@@ -152,7 +152,7 @@ class OdsTest extends TestCase
 
         $readBack = iterator_to_array(Baresheet::read($tempFile));
         self::assertCount(1, $readBack);
-        self::assertEquals("Alpha", $readBack[0][0]);
+        self::assertEquals('Alpha', $readBack[0][0]);
 
         unlink($tempFile);
     }
@@ -162,14 +162,14 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_num_' . time() . '.ods';
         $writer = new OdsWriter();
         $writer->writeFile([
-            [1, 2.5, "text"],
+            [1, 2.5, 'text'],
         ], $tempFile);
 
         $reader = new OdsReader();
         $data = iterator_to_array($reader->readFile($tempFile));
-        self::assertEquals("1", $data[0][0]);
-        self::assertEquals("2.5", $data[0][1]);
-        self::assertEquals("text", $data[0][2]);
+        self::assertEquals('1', $data[0][0]);
+        self::assertEquals('2.5', $data[0][1]);
+        self::assertEquals('text', $data[0][2]);
 
         unlink($tempFile);
     }
@@ -180,7 +180,7 @@ class OdsTest extends TestCase
         $writer = new OdsWriter();
         $dt = new \DateTime('2025-06-15 10:30:00');
         $writer->writeFile([
-            [$dt, "text"],
+            [$dt, 'text'],
         ], $tempFile);
 
         $reader = new OdsReader();
@@ -194,7 +194,7 @@ class OdsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_detect_' . time() . '.ods';
         $writer = new OdsWriter();
-        $writer->writeFile([["test"]], $tempFile);
+        $writer->writeFile([['test']], $tempFile);
 
         $contents = file_get_contents($tempFile);
         $ext = \LeKoala\Baresheet\Spread::getExtensionForContent($contents);
@@ -207,10 +207,10 @@ class OdsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_opts_' . time() . '.ods';
         $writer = new OdsWriter();
-        $writer->writeFile([["data"]], $tempFile, new Options(
+        $writer->writeFile([['data']], $tempFile, new Options(
             meta: new \LeKoala\Baresheet\Meta(
                 title: 'OptTitle',
-                creator: 'OptCreator'
+                creator: 'OptCreator',
             ),
             sheet: 'OptSheet',
         ));
@@ -227,6 +227,7 @@ class OdsTest extends TestCase
 
         unlink($tempFile);
     }
+
     // -- Fixture-based tests (real ODS files in tests/data/) --
 
     public function testReadDateFixture(): void
@@ -277,7 +278,10 @@ class OdsTest extends TestCase
         $props = \LeKoala\Baresheet\Spread::getProperties(__DIR__ . '/data/empty-with-props.ods');
         self::assertEquals('ods', $props['format']);
         // File should have metadata set
-        self::assertNotEmpty(($props['meta']['creator'] ?? '') . ($props['meta']['title'] ?? ''), 'Expected at least creator or title to be set');
+        self::assertNotEmpty(
+            ($props['meta']['creator'] ?? '') . ($props['meta']['title'] ?? ''),
+            'Expected at least creator or title to be set',
+        );
     }
 
     public function testSkipEmptyLinesByDefault(): void
@@ -303,7 +307,7 @@ class OdsTest extends TestCase
     {
         $writer = new OdsWriter();
         // boldHeaders is false by default
-        $output = $writer->writeString([["test"]]);
+        $output = $writer->writeString([['test']]);
 
         $tempFile = sys_get_temp_dir() . '/test_styles_' . time() . '.ods';
         file_put_contents($tempFile, $output);
@@ -323,7 +327,7 @@ class OdsTest extends TestCase
     {
         $writer = new OdsWriter();
         $writer->boldHeaders = true;
-        $output = $writer->writeString([["Header"], ["Value"]]);
+        $output = $writer->writeString([['Header'], ['Value']]);
 
         $tempFile = sys_get_temp_dir() . '/test_bold_ref_' . time() . '.ods';
         file_put_contents($tempFile, $output);
@@ -340,6 +344,9 @@ class OdsTest extends TestCase
         // Second row should NOT have the bold style (in that specific context)
         self::assertStringContainsString('<text:p>Value</text:p>', $content);
         // We can check it doesn't have it right before Value
-        self::assertStringNotContainsString('table:style-name="bold" office:value-type="string"><text:p>Value</text:p>', $content);
+        self::assertStringNotContainsString(
+            'table:style-name="bold" office:value-type="string"><text:p>Value</text:p>',
+            $content,
+        );
     }
 }
