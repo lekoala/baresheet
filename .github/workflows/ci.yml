@@ -31,19 +31,22 @@ jobs:
       - name: Composer install
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
-      - name: Install Mago
-        run: curl -LsSf https://carthage.software | sh
+      - name: Setup Mago
+        uses: nhedger/setup-mago@v1
 
       - name: Mago Format Check
         run: mago format --check
 
       - name: Mago Lint
+        if: success() || failure()
         run: mago lint
 
       - name: PHP Code Sniffer
+        if: success() || failure()
         run: vendor/bin/phpcs --standard=phpcs.xml.dist src/
 
       - name: PHPStan
+        if: success() || failure()
         run: vendor/bin/phpstan analyse src/
 
   test:
