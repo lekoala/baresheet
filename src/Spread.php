@@ -15,6 +15,8 @@ use ZipArchive;
  */
 class Spread
 {
+    private const MAX_DATE_CACHE_SIZE = 10_000;
+
     /**
      * @return string
      */
@@ -183,6 +185,15 @@ class Spread
             }
         }
 
+        $cacheKey = $floatValue . '|' . $format . '|' . ($is1904 ? '1' : '0');
+
+        /** @var array<string, string> */
+        static $dateCache = [];
+
+        if (isset($dateCache[$cacheKey])) {
+            return $dateCache[$cacheKey];
+        }
+
         /** @var array<string, \DateTime> */
         static $base1904 = [];
         /** @var array<string, \DateTime> */
@@ -240,7 +251,15 @@ class Spread
             }
         }
 
-        return $dt->format($format);
+        $result = $dt->format($format);
+
+        if (count($dateCache) >= self::MAX_DATE_CACHE_SIZE) {
+            $dateCache = [];
+        }
+
+        $dateCache[$cacheKey] = $result;
+
+        return $result;
     }
 
     /**

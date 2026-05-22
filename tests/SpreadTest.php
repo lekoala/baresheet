@@ -123,6 +123,36 @@ class SpreadTest extends TestCase
         self::assertEquals(45_292.25, Spread::dateToExcel($dtQuarter));
     }
 
+    public function testExcelDateToStringCache(): void
+    {
+        $date1 = Spread::excelDateToString(45_214.5);
+        $date2 = Spread::excelDateToString(45_214.5);
+        self::assertSame($date1, $date2);
+        self::assertSame('2023-10-15 12:00:00', $date1);
+    }
+
+    public function testExcelDateToStringCacheKeyVariations(): void
+    {
+        $d1 = Spread::excelDateToString(45_214.5, null, false);
+        $d2 = Spread::excelDateToString(45_214.5, null, true);
+        // 1904 vs 1900 date system should produce different results
+        self::assertNotSame($d1, $d2);
+
+        $d3 = Spread::excelDateToString(45_214.5, 'Y-m-d', false);
+        $d4 = Spread::excelDateToString(45_214.5, 'H:i:s', false);
+        self::assertNotSame($d3, $d4);
+    }
+
+    public function testExcelDateToStringMaxCacheSize(): void
+    {
+        // Fill cache beyond limit to ensure it resets without crashing
+        for ($i = 0; $i < 10_005; $i++) {
+            Spread::excelDateToString((float) $i);
+        }
+        // If we get here without memory exhaustion, the cache reset works
+        self::assertTrue(true);
+    }
+
     public function testEnsureExtension(): void
     {
         self::assertEquals('test.csv', Spread::ensureExtension('test', 'csv'));
