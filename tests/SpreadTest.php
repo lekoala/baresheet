@@ -16,17 +16,25 @@ class SpreadTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_props_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(
-            creator: 'TestCreator',
-            title: 'TestTitle',
-            subject: 'TestSubject',
+            title: 'XlsxTitle',
+            subject: 'XlsxSubject',
+            creator: 'XlsxCreator',
+            keywords: 'xlsx,test',
+            description: 'XlsxDescription',
+            category: 'XlsxCategory',
+            language: 'en-GB',
         );
         $writer->writeFile([['data']], $tempFile);
 
         $props = Spread::getProperties($tempFile);
         self::assertEquals('xlsx', $props['format']);
-        self::assertEquals('TestCreator', $props['meta']['creator'] ?? null);
-        self::assertEquals('TestTitle', $props['meta']['title'] ?? null);
-        self::assertEquals('TestSubject', $props['meta']['subject'] ?? null);
+        self::assertEquals('XlsxTitle', $props['meta']['title'] ?? null);
+        self::assertEquals('XlsxSubject', $props['meta']['subject'] ?? null);
+        self::assertEquals('XlsxCreator', $props['meta']['creator'] ?? null);
+        self::assertEquals('xlsx,test', $props['meta']['keywords'] ?? null);
+        self::assertEquals('XlsxDescription', $props['meta']['description'] ?? null);
+        self::assertEquals('XlsxCategory', $props['meta']['category'] ?? null);
+        self::assertEquals('en-GB', $props['meta']['language'] ?? null);
         self::assertContains('Sheet1', $props['sheets']);
 
         unlink($tempFile);
@@ -36,14 +44,26 @@ class SpreadTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_props_' . time() . '.ods';
         $writer = new OdsWriter();
-        $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'OdsCreator', title: 'OdsTitle');
+        $writer->meta = new \LeKoala\Baresheet\Meta(
+            title: 'OdsTitle',
+            subject: 'OdsSubject',
+            creator: 'OdsCreator',
+            keywords: 'ods, test',
+            description: 'OdsDescription',
+            language: 'fr-FR',
+        );
         $writer->sheet = 'MySheet';
         $writer->writeFile([['data']], $tempFile);
 
         $props = Spread::getProperties($tempFile);
         self::assertEquals('ods', $props['format']);
-        self::assertEquals('OdsCreator', $props['meta']['creator'] ?? null);
         self::assertEquals('OdsTitle', $props['meta']['title'] ?? null);
+        self::assertEquals('OdsSubject', $props['meta']['subject'] ?? null);
+        self::assertEquals('OdsCreator', $props['meta']['creator'] ?? null);
+        self::assertEquals('ods, test', $props['meta']['keywords'] ?? null);
+        self::assertEquals('OdsDescription', $props['meta']['description'] ?? null);
+        self::assertEquals('fr-FR', $props['meta']['language'] ?? null);
+        self::assertArrayNotHasKey('category', $props['meta']);
         self::assertContains('MySheet', $props['sheets']);
 
         unlink($tempFile);

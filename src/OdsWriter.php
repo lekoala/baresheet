@@ -414,6 +414,22 @@ class OdsWriter implements WriterInterface
         $creator = Spread::escapeXml($metaObj->creator ?? '');
         $titleVal = $metaObj?->title;
         $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal) . '</dc:title>' : '';
+        $subjectVal = $metaObj?->subject;
+        $subject = $subjectVal ? '<dc:subject>' . Spread::escapeXml($subjectVal) . '</dc:subject>' : '';
+        $keywordsVal = $metaObj?->keywords;
+        $keywords = '';
+        if ($keywordsVal !== null && $keywordsVal !== '') {
+            $parts = array_filter(array_map('trim', explode(',', $keywordsVal)));
+            foreach ($parts as $part) {
+                $keywords .= '<meta:keyword>' . Spread::escapeXml($part) . '</meta:keyword>';
+            }
+        }
+        $descriptionVal = $metaObj?->description;
+        $description = $descriptionVal
+            ? '<dc:description>' . Spread::escapeXml($descriptionVal) . '</dc:description>'
+            : '';
+        $languageVal = $metaObj?->language;
+        $language = $languageVal ? '<dc:language>' . Spread::escapeXml($languageVal) . '</dc:language>' : '';
         $date = date('Y-m-d\TH:i:s');
 
         return <<<XML
@@ -426,6 +442,10 @@ class OdsWriter implements WriterInterface
                     <meta:initial-creator>{$creator}</meta:initial-creator>
                     <dc:creator>{$creator}</dc:creator>
                     {$title}
+                    {$subject}
+                    {$keywords}
+                    {$description}
+                    {$language}
                     <meta:creation-date>{$date}</meta:creation-date>
                     <dc:date>{$date}</dc:date>
                 </office:meta>

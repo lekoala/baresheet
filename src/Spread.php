@@ -325,7 +325,8 @@ class Spread
                 if ($res !== false && $res > 0) {
                     $combine = array_combine($matches[1], $matches[2]);
                     if ($combine) {
-                        foreach (['title', 'subject', 'creator', 'description'] as $key) {
+                        $keys = ['title', 'subject', 'creator', 'keywords', 'description', 'category', 'language'];
+                        foreach ($keys as $key) {
                             if (isset($combine[$key])) {
                                 $arr['meta'][$key] = $combine[$key];
                             }
@@ -350,11 +351,31 @@ class Spread
                 $xml->registerXPathNamespace('meta', 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0');
 
                 $title = $xml->xpath('//dc:title');
+                $subject = $xml->xpath('//dc:subject');
                 $creator = $xml->xpath('//dc:creator');
+                $keywords = $xml->xpath('//meta:keyword');
                 $description = $xml->xpath('//dc:description');
-                $arr['meta']['title'] = $title ? (string) $title[0] : '';
-                $arr['meta']['creator'] = $creator ? (string) $creator[0] : '';
-                $arr['meta']['description'] = $description ? (string) $description[0] : '';
+                $language = $xml->xpath('//dc:language');
+
+                if ($title) {
+                    $arr['meta']['title'] = (string) $title[0];
+                }
+                if ($subject) {
+                    $arr['meta']['subject'] = (string) $subject[0];
+                }
+                if ($creator) {
+                    $arr['meta']['creator'] = (string) $creator[0];
+                }
+                if ($keywords) {
+                    $keywordStrings = array_map(static fn($k) => (string) $k, $keywords);
+                    $arr['meta']['keywords'] = implode(', ', $keywordStrings);
+                }
+                if ($description) {
+                    $arr['meta']['description'] = (string) $description[0];
+                }
+                if ($language) {
+                    $arr['meta']['language'] = (string) $language[0];
+                }
             }
 
             $arr['sheets'] = self::getOdsSheetNames($zip);

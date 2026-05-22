@@ -104,6 +104,41 @@ class OdsTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testWithAllMetaProperties(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_ods_full_meta_' . time() . '.ods';
+        $writer = new OdsWriter();
+        $writer->meta = new \LeKoala\Baresheet\Meta(
+            title: 'MyTitle',
+            subject: 'MySubject',
+            creator: 'MyCreator',
+            keywords: 'php, spreadsheet ,test',
+            description: 'MyDescription',
+            language: 'fr-FR',
+        );
+        $writer->writeFile([['data']], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $meta = $zip->getFromName('meta.xml');
+        $zip->close();
+
+        self::assertStringContainsString('MyTitle', $meta);
+        self::assertStringContainsString('MySubject', $meta);
+        self::assertStringContainsString('MyCreator', $meta);
+        self::assertStringContainsString('<meta:keyword>php</meta:keyword>', $meta);
+        self::assertStringContainsString('<meta:keyword>spreadsheet</meta:keyword>', $meta);
+        self::assertStringContainsString('<meta:keyword>test</meta:keyword>', $meta);
+        self::assertStringContainsString('MyDescription', $meta);
+        self::assertStringContainsString('fr-FR', $meta);
+
+        // Verify getProperties reads back keywords correctly
+        $props = \LeKoala\Baresheet\Spread::getProperties($tempFile);
+        self::assertEquals('php, spreadsheet, test', $props['meta']['keywords'] ?? null);
+
+        unlink($tempFile);
+    }
+
     public function testSheetName(): void
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_sheet_' . time() . '.ods';
