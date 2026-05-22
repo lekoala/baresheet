@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\CsvWriter;
+use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\XlsxWriter;
 use PHPUnit\Framework\TestCase;
 
 class BaresheetTest extends TestCase
@@ -123,5 +126,36 @@ class BaresheetTest extends TestCase
         ], 'xlsx');
 
         self::assertStringContainsString('[Content_Types].xml', $output);
+    }
+
+    public function testGetWriterCsv(): void
+    {
+        $writer = Baresheet::getWriter('csv');
+        self::assertInstanceOf(CsvWriter::class, $writer);
+    }
+
+    public function testGetWriterXlsx(): void
+    {
+        $writer = Baresheet::getWriter('xlsx');
+        self::assertInstanceOf(XlsxWriter::class, $writer);
+    }
+
+    public function testGetWriterOds(): void
+    {
+        $writer = Baresheet::getWriter('ods');
+        self::assertInstanceOf(OdsWriter::class, $writer);
+    }
+
+    public function testGetWriterCaseInsensitive(): void
+    {
+        $writer = Baresheet::getWriter('CSV');
+        self::assertInstanceOf(CsvWriter::class, $writer);
+    }
+
+    public function testGetWriterUnsupported(): void
+    {
+        $this->expectException(\Exception::class);
+        $this->expectExceptionMessage('Unsupported format: pdf');
+        Baresheet::getWriter('pdf');
     }
 }

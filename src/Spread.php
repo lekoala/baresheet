@@ -556,6 +556,22 @@ class Spread
     }
 
     /**
+     * Strip invalid XML control characters (\x00-\x1F except tab, LF, CR).
+     */
+    private static function stripControlChars(string $str): string
+    {
+        if (
+            strpbrk(
+                $str,
+                "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+            ) !== false
+        ) {
+            return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
+        }
+        return $str;
+    }
+
+    /**
      * Escape string for XML, stripping control chars (\x00-\x1F) except tab, LF, CR.
      */
     public static function escapeXml(string $str): string
@@ -572,14 +588,7 @@ class Spread
         ) {
             return $str;
         }
-        if (
-            strpbrk(
-                $str,
-                "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-            ) !== false
-        ) {
-            $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
-        }
+        $str = self::stripControlChars($str);
         return htmlspecialchars($str, ENT_XML1 | ENT_COMPAT, 'UTF-8');
     }
 
@@ -600,14 +609,7 @@ class Spread
         ) {
             return $str;
         }
-        if (
-            strpbrk(
-                $str,
-                "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-            ) !== false
-        ) {
-            $str = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $str) ?? $str;
-        }
+        $str = self::stripControlChars($str);
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
     }
 

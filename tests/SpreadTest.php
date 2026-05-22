@@ -213,4 +213,108 @@ class SpreadTest extends TestCase
         $this->expectExceptionMessageMatches('/Failed to open zip archive/');
         Spread::getSheetNames($nonExistentFile);
     }
+
+    public function testEscapeXmlEmptyString(): void
+    {
+        self::assertSame('', Spread::escapeXml(''));
+    }
+
+    public function testEscapeXmlFastPath(): void
+    {
+        $plain = 'Hello World';
+        self::assertSame($plain, Spread::escapeXml($plain));
+    }
+
+    public function testEscapeXmlSpecialChars(): void
+    {
+        self::assertSame('foo&amp;bar', Spread::escapeXml('foo&bar'));
+        self::assertSame('foo&lt;bar', Spread::escapeXml('foo<bar'));
+        self::assertSame('foo&gt;bar', Spread::escapeXml('foo>bar'));
+    }
+
+    public function testEscapeXmlStripsControlChars(): void
+    {
+        $dirty = "Hello\x00World\x0B";
+        self::assertSame('HelloWorld', Spread::escapeXml($dirty));
+    }
+
+    public function testEscapeXmlPreservesAllowedControls(): void
+    {
+        $allowed = "Tab\tLine\nReturn\r";
+        self::assertSame($allowed, Spread::escapeXml($allowed));
+    }
+
+    public function testEscapeXmlAttrEmptyString(): void
+    {
+        self::assertSame('', Spread::escapeXmlAttr(''));
+    }
+
+    public function testEscapeXmlAttrFastPath(): void
+    {
+        $plain = 'Hello World';
+        self::assertSame($plain, Spread::escapeXmlAttr($plain));
+    }
+
+    public function testEscapeXmlAttrEscapesQuotes(): void
+    {
+        self::assertSame('&quot;foo&apos;bar&quot;', Spread::escapeXmlAttr('"foo\'bar"'));
+    }
+
+    public function testEscapeXmlAttrEscapesSpecialChars(): void
+    {
+        self::assertSame('foo&amp;bar', Spread::escapeXmlAttr('foo&bar'));
+        self::assertSame('foo&lt;bar', Spread::escapeXmlAttr('foo<bar'));
+        self::assertSame('foo&gt;bar', Spread::escapeXmlAttr('foo>bar'));
+    }
+
+    public function testEscapeXmlAttrStripsControlChars(): void
+    {
+        $dirty = "Hello\x00World\x0B";
+        self::assertSame('HelloWorld', Spread::escapeXmlAttr($dirty));
+    }
+
+    public function testBuildColumnSelectionBasic(): void
+    {
+        [$map, $indices] = Spread::buildColumnSelection(['name', 'age'], ['id', 'name', 'age', 'city']);
+        self::assertSame(['name' => 1, 'age' => 2], $map);
+        self::assertSame([1 => true, 2 => true], $indices);
+    }
+
+    public function testBuildColumnSelectionEmpty(): void
+    {
+        [$map, $indices] = Spread::buildColumnSelection([], ['a', 'b']);
+        self::assertSame([], $map);
+        self::assertSame([], $indices);
+    }
+
+    public function testBuildColumnSelectionMissing(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Missing required columns: missing');
+        Spread::buildColumnSelection(['name', 'missing'], ['name', 'age']);
+    }
+
+    public function testBuildColumnSelectionDuplicateHeaders(): void
+    {
+        [$map, $indices] = Spread::buildColumnSelection(['a'], ['a', 'b', 'a']);
+        self::assertSame(['a' => 0], $map);
+    }
+
+    public function testGetOutputStream(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_output_' . time() . '.txt';
+        $stream = Spread::getOutputStream($tempFile);
+        self::assertIsResource($stream);
+        fwrite($stream, 'hello');
+        fclose($stream);
+        self::assertStringEqualsFile($tempFile, 'hello');
+        unlink($tempFile);
+    }
+
+    public function testGetOutputStreamPharBlocked(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Phar deserialization is not allowed');
+        Spread::getOutputStream('phar://test.phar');
+    }
 }
