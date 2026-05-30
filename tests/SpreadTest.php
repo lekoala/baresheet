@@ -322,7 +322,7 @@ class SpreadTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to open stream');
-        Spread::getOutputStream('\\invalid\\path\\that\\does\\not\\exist\\file.txt');
+        Spread::getOutputStream(__DIR__ . '/does_not_exist/file.txt');
     }
 
     public function testGetMaxMemTempStream(): void
@@ -367,7 +367,7 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(sys_get_temp_dir() . '\\BSH', $tempFile);
+        self::assertStringStartsWith(rtrim(sys_get_temp_dir(), '\\/') . DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
     }
 }
