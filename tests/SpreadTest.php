@@ -325,6 +325,24 @@ class SpreadTest extends TestCase
         Spread::getOutputStream('\\invalid\\path\\that\\does\\not\\exist\\file.txt');
     }
 
+    public function testGetMaxMemTempStream(): void
+    {
+        $stream = Spread::getMaxMemTempStream();
+        self::assertIsResource($stream);
+        self::assertEquals('stream', get_resource_type($stream));
+
+        // Verify we can write and read from it
+        fwrite($stream, 'test data');
+        rewind($stream);
+        self::assertEquals('test data', stream_get_contents($stream));
+
+        // Verify it's a php://temp stream by checking metadata
+        $meta = stream_get_meta_data($stream);
+        self::assertEquals('php://temp/maxmemory:4194304', $meta['uri']);
+
+        fclose($stream);
+    }
+
     public function testGetInputStreamFailure(): void
     {
         $this->expectException(\RuntimeException::class);
