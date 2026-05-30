@@ -322,7 +322,7 @@ class SpreadTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to open stream');
-        Spread::getOutputStream('\\invalid\\path\\that\\does\\not\\exist\\file.txt');
+        Spread::getOutputStream('/invalid/path/that/does/not/exist/file.txt');
     }
 
     public function testGetInputStreamFailure(): void
@@ -349,7 +349,51 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(sys_get_temp_dir() . '\\BSH', $tempFile);
+        self::assertStringStartsWith(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
+    }
+
+    public function testApplyColumnSelectionEmptyMap(): void
+    {
+        $row = ['a', 'b', 'c'];
+        $result = Spread::applyColumnSelection($row, [], ['col1', 'col2'], false);
+        self::assertSame($row, $result);
+    }
+
+    public function testApplyColumnSelectionAssoc(): void
+    {
+        $row = ['id' => 1, 'name' => 'Alice', 'age' => 30];
+        $columnMap = ['id' => 0, 'name' => 1, 'age' => 2];
+        $columns = ['name', 'id', 'missing_col'];
+
+        // In assoc mode, row is expected to be keyed by column name already
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
+
+        // Expected to return map of selected columns to values, missing columns are null
+        self::assertSame([
+            'name' => 'Alice',
+            'id' => 1,
+            'missing_col' => null,
+        ], $result);
+    }
+
+    public function testApplyColumnSelectionNonAssoc(): void
+    {
+        // In non-assoc mode, row is just numeric array
+        $row = [1, 'Alice', 30];
+        $columnMap = ['id' => 0, 'name' => 1, 'age' => 2, 'missing_in_row' => 3];
+        $columns = ['name', 'id', 'missing_in_row', 'missing_in_map'];
+
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, false);
+
+        // Expected to return selected columns sequentially based on $columns order
+        // missing_in_row corresponds to index 3, which is not in $row -> null
+        // missing_in_map corresponds to no index -> null
+        self::assertSame([
+            'Alice',
+            1,
+            null,
+            null,
+        ], $result);
     }
 }
