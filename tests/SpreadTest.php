@@ -370,11 +370,14 @@ class SpreadTest extends TestCase
         $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
 
         // Expected to return map of selected columns to values, missing columns are null
-        self::assertSame([
-            'name' => 'Alice',
-            'id' => 1,
-            'missing_col' => null,
-        ], $result);
+        self::assertSame(
+            [
+                'name' => 'Alice',
+                'id' => 1,
+                'missing_col' => null,
+            ],
+            $result,
+        );
     }
 
     public function testApplyColumnSelectionNonAssoc(): void
@@ -389,11 +392,14 @@ class SpreadTest extends TestCase
         // Expected to return selected columns sequentially based on $columns order
         // missing_in_row corresponds to index 3, which is not in $row -> null
         // missing_in_map corresponds to no index -> null
-        self::assertSame([
-            'Alice',
-            1,
-            null,
-            null,
-        ], $result);
+        self::assertSame(
+            [
+                'Alice',
+                1,
+                null,
+                null,
+            ],
+            $result,
+        );
     }
 }

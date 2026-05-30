@@ -32,7 +32,7 @@ jobs:
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Setup Mago
-        uses: nhedger/setup-mago@v1
+        uses: carthage-software/setup-mago@v1
 
       - name: Mago Format Check
         run: mago format --check
