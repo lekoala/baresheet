@@ -102,7 +102,10 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
  */
 function measureWriteMemory(string $key, string $format, int $rowCount): float
 {
-    $tempFile = sys_get_temp_dir() . '/bench_mem_' . $key . '_' . $rowCount . '.' . $format;
+    $baseTemp = tempnam(sys_get_temp_dir(), 'bench_mem_');
+    $tempFile = $baseTemp . '.' . $format;
+    rename($baseTemp, $tempFile);
+
     $cmd = PHP_BINARY . ' ' . escapeshellarg(__FILE__) . ' --memory ' . escapeshellarg($key) . ' ' . escapeshellarg($tempFile) . ' ' . escapeshellarg((string)$rowCount);
     $bytes = (int) trim((string) shell_exec($cmd));
     return $bytes / 1024 / 1024;
@@ -200,7 +203,9 @@ foreach ($rowCounts as $rowCount) {
             $times = [];
 
             for ($i = 0; $i < $reps; $i++) {
-                $tempFile = sys_get_temp_dir() . '/bench_' . time() . '_' . $i . '.' . $format;
+                $baseTemp = tempnam(sys_get_temp_dir(), 'bench_');
+                $tempFile = $baseTemp . '.' . $format;
+                rename($baseTemp, $tempFile);
 
                 $start = microtime(true);
                 ($config['fn'])($tempFile, $genData);
