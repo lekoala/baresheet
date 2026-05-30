@@ -164,7 +164,33 @@ class CsvWriter implements WriterInterface
         // Headers: inline processing
         if (!empty($this->headers)) {
             $row = $this->headers;
-            if ($escapeFormulas) {
+            if ($escapeFormulas && $hasEncoding) {
+                if ($escapeFn !== null) {
+                    $colIndex = 0;
+                    foreach ($row as &$cell) {
+                        // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
+                        if (is_string($cell)) {
+                            /** @var string $outputEncoding */
+                            $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
+                        }
+                        $colIndex++;
+                    }
+                    unset($cell);
+                } else {
+                    $chars = "=+-@\t\r";
+                    foreach ($row as &$cell) {
+                        // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
+                        if (is_string($cell)) {
+                            if ($cell !== '' && str_contains($chars, $cell[0])) {
+                                $cell = "'" . $cell;
+                            }
+                            /** @var string $outputEncoding */
+                            $cell = mb_convert_encoding($cell, $outputEncoding);
+                        }
+                    }
+                    unset($cell);
+                }
+            } elseif ($escapeFormulas) {
                 if ($escapeFn !== null) {
                     $colIndex = 0;
                     foreach ($row as &$cell) {
@@ -178,9 +204,9 @@ class CsvWriter implements WriterInterface
                 } else {
                     $row = self::escapeRow($row);
                 }
-            }
-            if ($hasEncoding) {
+            } elseif ($hasEncoding) {
                 foreach ($row as &$v) {
+                    // @phpstan-ignore-next-line - $v is mixed from array<mixed>, check is needed
                     if (is_string($v)) {
                         /** @var string $outputEncoding */
                         $v = mb_convert_encoding($v, $outputEncoding);
@@ -197,7 +223,31 @@ class CsvWriter implements WriterInterface
 
         // Data rows: inline processing
         foreach ($data as $row) {
-            if ($escapeFormulas) {
+            if ($escapeFormulas && $hasEncoding) {
+                if ($escapeFn !== null) {
+                    $colIndex = 0;
+                    foreach ($row as &$cell) {
+                        if (is_string($cell)) {
+                            /** @var string $outputEncoding */
+                            $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
+                        }
+                        $colIndex++;
+                    }
+                    unset($cell);
+                } else {
+                    $chars = "=+-@\t\r";
+                    foreach ($row as &$cell) {
+                        if (is_string($cell)) {
+                            if ($cell !== '' && str_contains($chars, $cell[0])) {
+                                $cell = "'" . $cell;
+                            }
+                            /** @var string $outputEncoding */
+                            $cell = mb_convert_encoding($cell, $outputEncoding);
+                        }
+                    }
+                    unset($cell);
+                }
+            } elseif ($escapeFormulas) {
                 if ($escapeFn !== null) {
                     $colIndex = 0;
                     foreach ($row as &$cell) {
@@ -210,8 +260,7 @@ class CsvWriter implements WriterInterface
                 } else {
                     $row = self::escapeRow($row);
                 }
-            }
-            if ($hasEncoding) {
+            } elseif ($hasEncoding) {
                 foreach ($row as &$v) {
                     if (is_string($v)) {
                         /** @var string $outputEncoding */
