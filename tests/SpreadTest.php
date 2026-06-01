@@ -352,4 +352,27 @@ class SpreadTest extends TestCase
         self::assertStringStartsWith(sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
     }
+
+    public function testZipGetData(): void
+    {
+        $tempZip = sys_get_temp_dir() . '/test_zipgetdata_' . time() . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($tempZip, \ZipArchive::CREATE);
+        $zip->addFromString('test.txt', 'Hello World');
+        $zip->close();
+
+        $zip = new \ZipArchive();
+        $zip->open($tempZip);
+
+        // Happy path
+        $content = Spread::zipGetData($zip, 'test.txt');
+        self::assertSame('Hello World', $content);
+
+        // Missing file
+        $missing = Spread::zipGetData($zip, 'missing.txt');
+        self::assertNull($missing);
+
+        $zip->close();
+        unlink($tempZip);
+    }
 }
