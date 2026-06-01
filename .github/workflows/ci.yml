@@ -32,7 +32,7 @@ jobs:
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Setup Mago
-        uses: nhedger/setup-mago@v1
+        run: curl -sL https://github.com/carthage-software/mago/releases/download/1.29.0/mago-1.29.0-x86_64-unknown-linux-musl.tar.gz | tar xz && sudo mv mago-*/mago /usr/local/bin/mago
 
       - name: Mago Format Check
         run: mago format --check

@@ -359,4 +359,14 @@ class TransformTest extends TestCase
         $result = iterator_to_array(Transform::cast($data, ['created' => '?date']));
         self::assertNull($result[0]['created']);
     }
+
+    public function testCastDateErrorPathReturnsNull(): void
+    {
+        $data = [
+            ['created' => 'not-a-valid-date'],
+        ];
+
+        $result = iterator_to_array(Transform::cast($data, ['created' => 'date']));
+        self::assertNull($result[0]['created']);
+    }
 }

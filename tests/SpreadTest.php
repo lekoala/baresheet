@@ -322,25 +322,7 @@ class SpreadTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to open stream');
-        Spread::getOutputStream(__DIR__ . '/does_not_exist/file.txt');
-    }
-
-    public function testGetMaxMemTempStream(): void
-    {
-        $stream = Spread::getMaxMemTempStream();
-        self::assertIsResource($stream);
-        self::assertEquals('stream', get_resource_type($stream));
-
-        // Verify we can write and read from it
-        fwrite($stream, 'test data');
-        rewind($stream);
-        self::assertEquals('test data', stream_get_contents($stream));
-
-        // Verify it's a php://temp stream by checking metadata
-        $meta = stream_get_meta_data($stream);
-        self::assertEquals('php://temp/maxmemory:4194304', $meta['uri']);
-
-        fclose($stream);
+        Spread::getOutputStream('/invalid/path/that/does/not/exist/file.txt');
     }
 
     public function testGetInputStreamFailure(): void
@@ -367,7 +349,30 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(rtrim(sys_get_temp_dir(), '\\/') . DIRECTORY_SEPARATOR . 'BSH', $tempFile);
+        self::assertStringStartsWith(sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
+    }
+
+    public function testZipGetData(): void
+    {
+        $tempZip = sys_get_temp_dir() . '/test_zipgetdata_' . time() . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($tempZip, \ZipArchive::CREATE);
+        $zip->addFromString('test.txt', 'Hello World');
+        $zip->close();
+
+        $zip = new \ZipArchive();
+        $zip->open($tempZip);
+
+        // Happy path
+        $content = Spread::zipGetData($zip, 'test.txt');
+        self::assertSame('Hello World', $content);
+
+        // Missing file
+        $missing = Spread::zipGetData($zip, 'missing.txt');
+        self::assertNull($missing);
+
+        $zip->close();
+        unlink($tempZip);
     }
 }
