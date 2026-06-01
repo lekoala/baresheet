@@ -322,9 +322,21 @@ class SpreadTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to open stream');
-        $invalidPath = DIRECTORY_SEPARATOR . 'invalid' . DIRECTORY_SEPARATOR . 'path' . DIRECTORY_SEPARATOR
-            . 'that' . DIRECTORY_SEPARATOR . 'does' . DIRECTORY_SEPARATOR . 'not' . DIRECTORY_SEPARATOR
-            . 'exist' . DIRECTORY_SEPARATOR . 'file.txt';
+        $invalidPath =
+            DIRECTORY_SEPARATOR
+            . 'invalid'
+            . DIRECTORY_SEPARATOR
+            . 'path'
+            . DIRECTORY_SEPARATOR
+            . 'that'
+            . DIRECTORY_SEPARATOR
+            . 'does'
+            . DIRECTORY_SEPARATOR
+            . 'not'
+            . DIRECTORY_SEPARATOR
+            . 'exist'
+            . DIRECTORY_SEPARATOR
+            . 'file.txt';
         Spread::getOutputStream($invalidPath);
     }
 
