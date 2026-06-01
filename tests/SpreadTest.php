@@ -322,22 +322,7 @@ class SpreadTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Failed to open stream');
-        $invalidPath =
-            DIRECTORY_SEPARATOR
-            . 'invalid'
-            . DIRECTORY_SEPARATOR
-            . 'path'
-            . DIRECTORY_SEPARATOR
-            . 'that'
-            . DIRECTORY_SEPARATOR
-            . 'does'
-            . DIRECTORY_SEPARATOR
-            . 'not'
-            . DIRECTORY_SEPARATOR
-            . 'exist'
-            . DIRECTORY_SEPARATOR
-            . 'file.txt';
-        Spread::getOutputStream($invalidPath);
+        Spread::getOutputStream('/invalid/path/that/does/not/exist/file.txt');
     }
 
     public function testGetInputStreamFailure(): void
@@ -364,7 +349,30 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'BSH', $tempFile);
+        self::assertStringStartsWith(sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
+    }
+
+    public function testZipGetData(): void
+    {
+        $tempZip = sys_get_temp_dir() . '/test_zipgetdata_' . time() . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($tempZip, \ZipArchive::CREATE);
+        $zip->addFromString('test.txt', 'Hello World');
+        $zip->close();
+
+        $zip = new \ZipArchive();
+        $zip->open($tempZip);
+
+        // Happy path
+        $content = Spread::zipGetData($zip, 'test.txt');
+        self::assertSame('Hello World', $content);
+
+        // Missing file
+        $missing = Spread::zipGetData($zip, 'missing.txt');
+        self::assertNull($missing);
+
+        $zip->close();
+        unlink($tempZip);
     }
 }
