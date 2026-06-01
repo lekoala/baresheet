@@ -349,8 +349,30 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'BSH', $tempFile);
+        self::assertStringStartsWith(sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
+    }
+
+    public function testZipGetData(): void
+    {
+        $tempZip = sys_get_temp_dir() . '/test_zipgetdata_' . time() . '.zip';
+        $zip = new \ZipArchive();
+        $zip->open($tempZip, \ZipArchive::CREATE);
+        $zip->addFromString('test.txt', 'Hello World');
+        $zip->close();
+
+        $zip->open($tempZip);
+
+        // Test normal extraction
+        $data = Spread::zipGetData($zip, 'test.txt');
+        self::assertEquals('Hello World', $data);
+
+        // Test fallback (e.g. for SimpleXML needs)
+        $dataFallback = Spread::zipGetData($zip, 'test.txt', 1024);
+        self::assertEquals('Hello World', $dataFallback);
+
+        $zip->close();
+        unlink($tempZip);
     }
 
     public function testApplyColumnSelectionEmptyMap(): void
