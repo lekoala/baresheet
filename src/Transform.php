@@ -236,13 +236,35 @@ class Transform
     }
 
     /**
+     * Cache for parsed dates to avoid object allocation overhead.
+     * @var array<string, ?DateTimeInterface>
+     */
+    private static array $dateCache = [];
+
+    /**
      * Parse a string as a date.
      */
     private static function castDate(string $value): ?DateTimeInterface
     {
+        if (isset(self::$dateCache[$value])) {
+            return clone self::$dateCache[$value];
+        }
+
+        if (array_key_exists($value, self::$dateCache)) {
+            return null;
+        }
+
+        // Limit cache size to prevent memory leaks from millions of unique dates
+        if (count(self::$dateCache) > 10000) {
+            self::$dateCache = [];
+        }
+
         try {
-            return new DateTime($value);
+            $date = new DateTime($value);
+            self::$dateCache[$value] = clone $date;
+            return $date;
         } catch (\Exception) {
+            self::$dateCache[$value] = null;
             return null;
         }
     }
