@@ -8,6 +8,7 @@ use DateTime;
 use Exception;
 use Generator;
 use RuntimeException;
+use XMLReader;
 use ZipArchive;
 
 /**
@@ -614,7 +615,30 @@ class Spread
     }
 
     /**
-     * Build column selection maps and validate required columns exist.
+     * Validate that all required columns are present in the headers.
+     *
+     * @param string[] $requiredColumns
+     * @param string[] $headers
+     * @param XMLReader|null $reader Optional reader to close before throwing exception
+     * @throws RuntimeException
+     */
+    public static function checkRequiredColumns(array $requiredColumns, array $headers, ?XMLReader $reader = null): void
+    {
+        if (!empty($requiredColumns)) {
+            $missing = array_diff($requiredColumns, $headers);
+            if (!empty($missing)) {
+                if ($reader !== null) {
+                    $reader->close();
+                }
+                throw new RuntimeException(
+                    'Missing required columns: ' . implode(', ', $missing),
+                );
+            }
+        }
+    }
+
+    /**
+     * Build map of column names to indices.
      *
      * @param string[] $columns Columns to select
      * @param string[] $headers Available headers (file or explicit)

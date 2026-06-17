@@ -172,14 +172,7 @@ class CsvReader implements ReaderInterface
                 if ($headers === null) {
                     $headers = array_map('strval', $line);
                     // Validate required columns
-                    if (!empty($this->requiredColumns)) {
-                        $missing = array_diff($this->requiredColumns, $headers);
-                        if (!empty($missing)) {
-                            throw new \RuntimeException(
-                                'Missing required columns: ' . implode(', ', $missing),
-                            );
-                        }
-                    }
+                    Spread::checkRequiredColumns($this->requiredColumns, $headers);
                     // Build column selection map
                     [$columnMap] = Spread::buildColumnSelection($this->columns, $headers);
                     continue;

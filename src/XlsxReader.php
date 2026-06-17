@@ -275,15 +275,7 @@ class XlsxReader implements ReaderInterface
                     }
                     $totalColumns = count($headers);
                     // Validate required columns
-                    if (!empty($this->requiredColumns)) {
-                        $missing = array_diff($this->requiredColumns, $headers);
-                        if (!empty($missing)) {
-                            $reader->close();
-                            throw new \RuntimeException(
-                                'Missing required columns: ' . implode(', ', $missing),
-                            );
-                        }
-                    }
+                    Spread::checkRequiredColumns($this->requiredColumns, $headers, $reader);
                     // Build column selection map
                     [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
                         $this->columns,
