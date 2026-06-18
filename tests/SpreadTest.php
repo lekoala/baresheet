@@ -314,7 +314,7 @@ class SpreadTest extends TestCase
     public function testGetOutputStreamPharBlocked(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Phar deserialization is not allowed');
+        $this->expectExceptionMessage('Invalid stream wrapper: phar is not allowed');
         Spread::getOutputStream('phar://test.phar');
     }
 

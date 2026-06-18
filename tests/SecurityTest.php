@@ -108,14 +108,14 @@ class SecurityTest extends TestCase
     public function testPharDeserializationBlocked(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Phar deserialization is not allowed');
+        $this->expectExceptionMessage('Invalid stream wrapper: phar is not allowed');
         Spread::isSafePath('phar://test.phar');
     }
 
     public function testPharDeserializationBlockedCaseInsensitive(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Phar deserialization is not allowed');
+        $this->expectExceptionMessage('Invalid stream wrapper: phar is not allowed');
         Spread::isSafePath('PHAR://test.phar');
     }
 

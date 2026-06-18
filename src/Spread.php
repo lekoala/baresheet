@@ -34,6 +34,14 @@ class Spread
      */
     public static function isSafePath(string $path): void
     {
+        if (preg_match('/^([a-zA-Z0-9+\-.]+):\/\//', $path, $matches)) {
+            $scheme = strtolower($matches[1]);
+            $allowedSchemes = ['php', 'file', 'zip'];
+            if (!in_array($scheme, $allowedSchemes, true)) {
+                throw new RuntimeException('Invalid stream wrapper: ' . $scheme . ' is not allowed');
+            }
+        }
+
         if (str_contains(strtolower($path), 'phar://')) {
             throw new RuntimeException('Phar deserialization is not allowed');
         }
