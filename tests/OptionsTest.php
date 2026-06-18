@@ -208,4 +208,26 @@ class OptionsTest extends TestCase
             "Properties should not be added to target if they don't exist",
         );
     }
+
+    public function testApplyToMockObjectSkippingMissingProperties(): void
+    {
+        $opts = new Options(
+            assoc: true,
+            strict: true,
+            separator: ',',
+        );
+
+        // Create a mock object that only has a subset of properties
+        // We use an anonymous class to provide specific partial properties
+        $mock = new class {
+            public bool $assoc = false;
+        };
+
+        // This should apply 'assoc' but skip 'strict', 'separator', etc., without throwing exceptions
+        $opts->applyTo($mock);
+
+        self::assertTrue($mock->assoc, "Existing property 'assoc' should be updated");
+        self::assertFalse(property_exists($mock, 'strict'), "Missing property 'strict' should be skipped");
+        self::assertFalse(property_exists($mock, 'separator'), "Missing property 'separator' should be skipped");
+    }
 }
