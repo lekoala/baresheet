@@ -76,10 +76,17 @@ class CsvBomHandlingTest extends TestCase
 
     public function testNonSeekableStreamThrowsWhenSampleIsNeeded(): void
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $this->markTestSkipped('Non-seekable stream test via proc_open is not supported on Windows.');
+        }
+
         $descriptorspec = [
             1 => ['pipe', 'w'],
         ];
         $process = proc_open('printf "\xEF\xBB\xBFcol1\nval1"', $descriptorspec, $pipes);
+        if (!is_resource($process)) {
+            $this->markTestSkipped('Failed to open process.');
+        }
         $fp = $pipes[1];
 
         $reader = new CsvReader();
@@ -99,10 +106,17 @@ class CsvBomHandlingTest extends TestCase
 
     public function testNonSeekableStreamDoesNotLoseDataWhenNoSampleIsNeeded(): void
     {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $this->markTestSkipped('Non-seekable stream test via proc_open is not supported on Windows.');
+        }
+
         $descriptorspec = [
             1 => ['pipe', 'w'],
         ];
         $process = proc_open('printf "col1,col2\nval1,val2"', $descriptorspec, $pipes);
+        if (!is_resource($process)) {
+            $this->markTestSkipped('Failed to open process.');
+        }
         $fp = $pipes[1];
 
         $reader = new CsvReader();

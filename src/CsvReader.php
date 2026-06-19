@@ -51,6 +51,9 @@ class CsvReader implements ReaderInterface
     /**
      * @param resource $stream
      * @return Generator<mixed>
+     * @throws \RuntimeException If the stream is not seekable and BOM/separator detection is required.
+     *                          To read a non-seekable stream, disable BOM skipping/transcoding and
+     *                          provide an explicit separator.
      */
     public function readStream($stream, ?Options $options = null): Generator
     {
@@ -103,10 +106,7 @@ class CsvReader implements ReaderInterface
             // Auto-detect separator from first ~4KB before consuming the stream
             // Read a sample for detection
             $sample = (string) fread($stream, 4096);
-            /** @phpstan-ignore-next-line */
-            if ($isSeekable) {
-                rewind($stream);
-            }
+            rewind($stream);
             // Check for a BOM in the sample
             $inputBOM = Bom::tryFromSequence($sample);
         }
