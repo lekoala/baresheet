@@ -7,7 +7,7 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 ## Requirements
 
 - PHP 8.1+
-- ext-mbstring (Required for all formats; Symfony polyfill is a valid alternative)
+- ext-mbstring (Required for all formats)
 
 ### Format Specific (Required for XLSX/ODS)
 
