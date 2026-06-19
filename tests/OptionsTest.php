@@ -181,6 +181,8 @@ class OptionsTest extends TestCase
             public string $eol = "\r\n";
             public ?string $inputEncoding = null;
             public ?string $outputEncoding = null;
+            public bool $skipInputBOM = false;
+            public bool $transcodeBomInput = false;
             public bool|\LeKoala\Baresheet\Bom|string $bom = true;
             public bool $escapeFormulas = false;
             public \LeKoala\Baresheet\Meta|array|null $meta = null;

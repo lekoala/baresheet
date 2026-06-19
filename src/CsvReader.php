@@ -22,6 +22,8 @@ class CsvReader implements ReaderInterface
     public string $eol = "\r\n";
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
+    public bool $skipInputBOM = true;
+    public bool $transcodeBomInput = true;
     /** @var string[] */
     public array $headers = [];
     /** @var string[] */
@@ -80,25 +82,33 @@ class CsvReader implements ReaderInterface
      */
     private function parseStream($stream): Generator
     {
+        $isSeekable = (bool) stream_get_meta_data($stream)['seekable'];
+
+        if (!$isSeekable && ($this->separator === 'auto' || $this->skipInputBOM)) {
+            throw new \RuntimeException(
+                'CsvReader requires a seekable stream when BOM detection or separator auto-detection is enabled.',
+            );
+        }
+
         // Auto-detect separator from first ~4KB before consuming the stream
         // Read a sample for detection
         $sample = (string) fread($stream, 4096);
-        rewind($stream);
-
-        // Auto-detect separator
-        if ($this->separator === 'auto') {
-            $this->separator = self::detectSeparator($sample);
+        if ($isSeekable) {
+            rewind($stream);
         }
 
         // Check for a BOM in the sample
         $inputBOM = Bom::tryFromSequence($sample);
 
+        $normalizedSample = $sample;
         if ($inputBOM !== null) {
-            // Seek past the BOM
-            fseek($stream, $inputBOM->length());
+            if ($this->skipInputBOM) {
+                // Seek past the BOM
+                fseek($stream, $inputBOM->length());
+            }
 
             // If it's not UTF-8, transcode the stream
-            if (!$inputBOM->isUtf8()) {
+            if ($this->transcodeBomInput && !$inputBOM->isUtf8()) {
                 $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
@@ -109,10 +119,25 @@ class CsvReader implements ReaderInterface
                 // BOM takes precedence over manual encoding
                 $this->inputEncoding = null;
             }
-        } elseif (
-            ($this->inputEncoding === null
-            || $this->inputEncoding === 'auto')
-            && $this->outputEncoding !== null
+
+            // Prepare normalized sample for separator detection
+            $normalizedSample = substr($sample, $inputBOM->length());
+            if ($this->transcodeBomInput && !$inputBOM->isUtf8()) {
+                $converted = mb_convert_encoding($normalizedSample, 'UTF-8', $inputBOM->encoding());
+                $normalizedSample = (string) $converted;
+            }
+        }
+
+        // Auto-detect separator
+        if ($this->separator === 'auto') {
+            $this->separator = self::detectSeparator((string) $normalizedSample);
+        }
+
+        if (
+            $inputBOM === null &&
+            ($this->inputEncoding === null ||
+            $this->inputEncoding === 'auto') &&
+            $this->outputEncoding !== null
         ) {
             // Fallback detection if we need to convert but have no BOM
             $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);

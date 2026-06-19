@@ -50,6 +50,10 @@ class Options
         public ?string $inputEncoding = null,
         /** @var ?string Target encoding for writing CSV files. */
         public ?string $outputEncoding = null,
+        /** @var bool If true, skip the BOM sequence at the beginning of the CSV input. */
+        public bool $skipInputBOM = true,
+        /** @var bool If true, transcode the CSV input according to the detected BOM. */
+        public bool $transcodeBomInput = true,
         /** @var bool|\LeKoala\Baresheet\Bom|string If true, writes a UTF-8 BOM, otherwise accepts a specific Bom enum or sequence string. */
         public bool|\LeKoala\Baresheet\Bom|string $bom = true,
         /**
