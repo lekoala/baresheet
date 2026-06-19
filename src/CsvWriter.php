@@ -150,7 +150,7 @@ class CsvWriter implements WriterInterface
 
         if ($bomToWrite instanceof Bom && !$bomToWrite->isUtf8() && $outputEncoding) {
             throw new RuntimeException(
-                'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.'
+                'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.',
             );
         }
 
