@@ -22,6 +22,8 @@ class CsvReader implements ReaderInterface
     public string $eol = "\r\n";
     public ?string $inputEncoding = null;
     public ?string $outputEncoding = null;
+    public bool $skipInputBOM = true;
+    public bool $transcodeBomInput = true;
     /** @var string[] */
     public array $headers = [];
     /** @var string[] */
@@ -49,6 +51,9 @@ class CsvReader implements ReaderInterface
     /**
      * @param resource $stream
      * @return Generator<mixed>
+     * @throws \RuntimeException If the stream is not seekable and BOM/separator detection is required.
+     *                          To read a non-seekable stream, disable BOM skipping/transcoding and
+     *                          provide an explicit separator.
      */
     public function readStream($stream, ?Options $options = null): Generator
     {
@@ -80,25 +85,47 @@ class CsvReader implements ReaderInterface
      */
     private function parseStream($stream): Generator
     {
-        // Auto-detect separator from first ~4KB before consuming the stream
-        // Read a sample for detection
-        $sample = (string) fread($stream, 4096);
-        rewind($stream);
+        $isSeekable = (bool) stream_get_meta_data($stream)['seekable'];
 
-        // Auto-detect separator
-        if ($this->separator === 'auto') {
-            $this->separator = self::detectSeparator($sample);
+        $needsEncodingDetection =
+            ($this->inputEncoding === null || $this->inputEncoding === 'auto') && $this->outputEncoding !== null;
+
+        $needsSample =
+            $this->separator === 'auto' || $this->skipInputBOM || $this->transcodeBomInput || $needsEncodingDetection;
+
+        if (!$isSeekable && $needsSample) {
+            throw new \RuntimeException(
+                'CsvReader requires a seekable stream when BOM detection, transcoding, encoding detection, or separator auto-detection is enabled.',
+            );
         }
 
-        // Check for a BOM in the sample
-        $inputBOM = Bom::tryFromSequence($sample);
+        $sample = '';
+        $inputBOM = null;
 
+        if ($needsSample) {
+            // Auto-detect separator from first ~4KB before consuming the stream
+            // Read a sample for detection
+            $sample = (string) fread($stream, 4096);
+            rewind($stream);
+            // Check for a BOM in the sample
+            $inputBOM = Bom::tryFromSequence($sample);
+        }
+
+        $normalizedSample = $sample;
         if ($inputBOM !== null) {
-            // Seek past the BOM
-            fseek($stream, $inputBOM->length());
+            if ($this->skipInputBOM) {
+                // Seek past the BOM
+                fseek($stream, $inputBOM->length());
+            }
 
             // If it's not UTF-8, transcode the stream
             if (!$inputBOM->isUtf8()) {
+                if (!$this->transcodeBomInput) {
+                    throw new \RuntimeException(
+                        "Cannot parse {$inputBOM->encoding()} CSV without transcoding to UTF-8. Please enable transcodeBomInput.",
+                    );
+                }
+
                 $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
@@ -109,8 +136,23 @@ class CsvReader implements ReaderInterface
                 // BOM takes precedence over manual encoding
                 $this->inputEncoding = null;
             }
-        } elseif (
-            ($this->inputEncoding === null
+
+            // Prepare normalized sample for separator detection
+            $normalizedSample = substr($sample, $inputBOM->length());
+            if ($this->transcodeBomInput && !$inputBOM->isUtf8()) {
+                $converted = mb_convert_encoding($normalizedSample, 'UTF-8', $inputBOM->encoding());
+                $normalizedSample = (string) $converted;
+            }
+        }
+
+        // Auto-detect separator
+        if ($this->separator === 'auto') {
+            $this->separator = self::detectSeparator((string) $normalizedSample);
+        }
+
+        if (
+            $inputBOM === null
+            && ($this->inputEncoding === null
             || $this->inputEncoding === 'auto')
             && $this->outputEncoding !== null
         ) {

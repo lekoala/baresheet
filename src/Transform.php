@@ -255,7 +255,7 @@ class Transform
         }
 
         // Limit cache size to prevent memory leaks from millions of unique dates
-        if (count(self::$dateCache) > 10000) {
+        if (count(self::$dateCache) > 10_000) {
             self::$dateCache = [];
         }
 
