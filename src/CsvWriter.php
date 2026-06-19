@@ -148,6 +148,12 @@ class CsvWriter implements WriterInterface
         $escapeFormulas = $this->escapeFormulas;
         $outputEncoding = $this->outputEncoding;
 
+        if ($bomToWrite instanceof Bom && !$bomToWrite->isUtf8() && $outputEncoding) {
+            throw new RuntimeException(
+                'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.'
+            );
+        }
+
         // Determine processing needs to avoid repetitive checks in the loop
         $hasEncoding = $outputEncoding !== null && $outputEncoding !== '';
         $isCallable = is_callable($escapeFormulas);

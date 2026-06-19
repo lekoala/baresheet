@@ -163,7 +163,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `escape`          | string            | `""`     | Read (CSV)                |
 | `eol`             | string            | `\r\n`   | Write (CSV)               |
 | `inputEncoding`   | ?string           | `null`   | Read (CSV)                |
-| `outputEncoding`  | ?string           | `null`   | Read (CSV)                |
+| `outputEncoding`  | ?string           | `null`   | Read/Write (CSV)          |
 | `bom`             | bool\|string\|Bom | `true`   | Write (CSV)               |
 | `escapeFormulas`  | bool/callable     | `false`  | Write (CSV)               |
 | `meta`            | array/Meta        | `null`   | Write (XLSX, ODS)         |
