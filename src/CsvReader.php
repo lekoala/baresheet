@@ -134,10 +134,10 @@ class CsvReader implements ReaderInterface
         }
 
         if (
-            $inputBOM === null &&
-            ($this->inputEncoding === null ||
-            $this->inputEncoding === 'auto') &&
-            $this->outputEncoding !== null
+            $inputBOM === null
+            && ($this->inputEncoding === null
+            || $this->inputEncoding === 'auto')
+            && $this->outputEncoding !== null
         ) {
             // Fallback detection if we need to convert but have no BOM
             $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
