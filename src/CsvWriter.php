@@ -113,20 +113,17 @@ class CsvWriter implements WriterInterface
      */
     private function writeInternal($stream, iterable $data): void
     {
-        $bomToWrite = null;
-        if ($this->bom === true) {
-            $bomToWrite = Bom::Utf8;
-        } elseif ($this->bom instanceof Bom) {
-            $bomToWrite = $this->bom;
-        } elseif (is_string($this->bom) && $this->bom !== '') {
-            $result = fwrite($stream, $this->bom);
-            if ($result === false) {
-                throw new RuntimeException('Failed to write BOM to stream');
-            }
-        }
+        $bomToWrite = $this->resolveBomToWrite();
+        $outputEncoding = $this->outputEncoding;
+
+        $this->assertValidEncodingOptions($bomToWrite, $outputEncoding);
 
         if ($bomToWrite !== null) {
-            $result = fwrite($stream, $bomToWrite->value);
+            if ($bomToWrite instanceof Bom) {
+                $result = fwrite($stream, $bomToWrite->value);
+            } else {
+                $result = fwrite($stream, $bomToWrite);
+            }
             if ($result === false) {
                 throw new RuntimeException('Failed to write BOM to stream');
             }
@@ -135,7 +132,7 @@ class CsvWriter implements WriterInterface
             // the entire file to be encoded as such. We apply a stream filter
             // so fputcsv (which expects single-byte ASCII compatible sequences)
             // writes UTF-8 internally, but the filter transcodes it before it hits the stream.
-            if (!$bomToWrite->isUtf8()) {
+            if ($bomToWrite instanceof Bom && !$bomToWrite->isUtf8()) {
                 stream_filter_append($stream, 'convert.iconv.UTF-8/' . $bomToWrite->encoding(), STREAM_FILTER_WRITE);
             }
         }
@@ -146,7 +143,6 @@ class CsvWriter implements WriterInterface
             $separator = ',';
         }
         $escapeFormulas = $this->escapeFormulas;
-        $outputEncoding = $this->outputEncoding;
 
         // Determine processing needs to avoid repetitive checks in the loop
         $hasEncoding = $outputEncoding !== null && $outputEncoding !== '';
@@ -292,5 +288,49 @@ class CsvWriter implements WriterInterface
             }
         }
         return $row;
+    }
+
+    private function resolveBomToWrite(): Bom|string|null
+    {
+        if ($this->bom === true) {
+            return Bom::Utf8;
+        }
+        if ($this->bom instanceof Bom) {
+            return $this->bom;
+        }
+        if (is_string($this->bom) && $this->bom !== '') {
+            return $this->bom;
+        }
+        return null;
+    }
+
+    private function assertValidEncodingOptions(Bom|string|null $bomToWrite, ?string $outputEncoding): void
+    {
+        if ($outputEncoding === null || $outputEncoding === '') {
+            return;
+        }
+        if (!$bomToWrite instanceof Bom) {
+            return;
+        }
+        if ($bomToWrite->isUtf8()) {
+            if (!self::isUtf8Encoding($outputEncoding)) {
+                throw new RuntimeException(
+                    'Do not combine a UTF-8 BOM with a non-UTF-8 outputEncoding. Disable the BOM or use UTF-8 output.',
+                );
+            }
+            return;
+        }
+        throw new RuntimeException(
+            'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.',
+        );
+    }
+
+    private static function isUtf8Encoding(string $encoding): bool
+    {
+        return in_array(
+            strtoupper(str_replace(['_', '-'], '', $encoding)),
+            ['UTF8'],
+            true,
+        );
     }
 }
