@@ -170,10 +170,16 @@ class OdsWriter implements WriterInterface
         $zip->addFile(fileName: 'styles.xml', data: $this->genStyles());
 
         $contentStream = $this->genContent($data);
-        rewind($contentStream);
-        $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
+        try {
+            rewind($contentStream);
+            $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
 
-        $zip->finish();
+            $zip->finish();
+        } finally {
+            if (is_resource($contentStream)) {
+                fclose($contentStream);
+            }
+        }
     }
 
     protected function canStream(): bool
@@ -218,15 +224,21 @@ class OdsWriter implements WriterInterface
         $zip->addFromString('styles.xml', $this->genStyles());
 
         $contentStream = $this->genContent($data);
-        rewind($contentStream);
-        $meta = stream_get_meta_data($contentStream);
-        $uri = (string) ($meta['uri'] ?? '');
-        $zip->addFile($uri, 'content.xml');
+        try {
+            rewind($contentStream);
+            $meta = stream_get_meta_data($contentStream);
+            $uri = (string) ($meta['uri'] ?? '');
+            $zip->addFile($uri, 'content.xml');
 
-        $destinationFile = $zip->filename;
-        $closeResult = $zip->close();
-        if ($closeResult === false) {
-            throw new Exception("Failed to close file '{$destinationFile}'");
+            $destinationFile = $zip->filename;
+            $closeResult = $zip->close();
+            if ($closeResult === false) {
+                throw new Exception("Failed to close file '{$destinationFile}'");
+            }
+        } finally {
+            if (is_resource($contentStream)) {
+                fclose($contentStream);
+            }
         }
 
         // Copy from temp location to final destination when using tempPath
