@@ -193,14 +193,17 @@ class XlsxWriter implements WriterInterface
         $sharedStrings = [];
         $sharedStringKeys = [];
         $worksheetStream = $this->genWorksheet($data, $sharedStrings, $sharedStringKeys);
-        rewind($worksheetStream);
+        try {
+            rewind($worksheetStream);
 
-        if ($this->sharedStrings) {
-            $zip->addFile(fileName: 'xl/sharedStrings.xml', data: $this->genSharedStrings($sharedStrings));
-        }
-        $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
-        if (is_resource($worksheetStream)) {
-            fclose($worksheetStream);
+            if ($this->sharedStrings) {
+                $zip->addFile(fileName: 'xl/sharedStrings.xml', data: $this->genSharedStrings($sharedStrings));
+            }
+            $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
+        } finally {
+            if (is_resource($worksheetStream)) {
+                fclose($worksheetStream);
+            }
         }
     }
 
@@ -238,10 +241,16 @@ class XlsxWriter implements WriterInterface
             throw new Exception('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
         $stream = $this->writeToZip($zip, $data);
-        $destinationFile = $zip->filename;
-        $closeResult = $zip->close();
-        if ($closeResult === false) {
-            throw new Exception("Failed to close file '{$destinationFile}'");
+        try {
+            $destinationFile = $zip->filename;
+            $closeResult = $zip->close();
+            if ($closeResult === false) {
+                throw new Exception("Failed to close file '{$destinationFile}'");
+            }
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
 
         // Copy from temp location to final destination when using tempPath
