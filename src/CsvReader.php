@@ -84,21 +84,32 @@ class CsvReader implements ReaderInterface
     {
         $isSeekable = (bool) stream_get_meta_data($stream)['seekable'];
 
-        if (!$isSeekable && ($this->separator === 'auto' || $this->skipInputBOM)) {
+        $needsEncodingDetection =
+            ($this->inputEncoding === null || $this->inputEncoding === 'auto') && $this->outputEncoding !== null;
+
+        $needsSample =
+            $this->separator === 'auto' || $this->skipInputBOM || $this->transcodeBomInput || $needsEncodingDetection;
+
+        if (!$isSeekable && $needsSample) {
             throw new \RuntimeException(
-                'CsvReader requires a seekable stream when BOM detection or separator auto-detection is enabled.',
+                'CsvReader requires a seekable stream when BOM detection, transcoding, encoding detection, or separator auto-detection is enabled.',
             );
         }
 
-        // Auto-detect separator from first ~4KB before consuming the stream
-        // Read a sample for detection
-        $sample = (string) fread($stream, 4096);
-        if ($isSeekable) {
-            rewind($stream);
-        }
+        $sample = '';
+        $inputBOM = null;
 
-        // Check for a BOM in the sample
-        $inputBOM = Bom::tryFromSequence($sample);
+        if ($needsSample) {
+            // Auto-detect separator from first ~4KB before consuming the stream
+            // Read a sample for detection
+            $sample = (string) fread($stream, 4096);
+            /** @phpstan-ignore-next-line */
+            if ($isSeekable) {
+                rewind($stream);
+            }
+            // Check for a BOM in the sample
+            $inputBOM = Bom::tryFromSequence($sample);
+        }
 
         $normalizedSample = $sample;
         if ($inputBOM !== null) {
@@ -108,7 +119,13 @@ class CsvReader implements ReaderInterface
             }
 
             // If it's not UTF-8, transcode the stream
-            if ($this->transcodeBomInput && !$inputBOM->isUtf8()) {
+            if (!$inputBOM->isUtf8()) {
+                if (!$this->transcodeBomInput) {
+                    throw new \RuntimeException(
+                        "Cannot parse {$inputBOM->encoding()} CSV without transcoding to UTF-8. Please enable transcodeBomInput.",
+                    );
+                }
+
                 $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
