@@ -263,7 +263,8 @@ class Transform
             $date = new DateTime($value);
             self::$dateCache[$value] = clone $date;
             return $date;
-        } catch (\Exception) {
+        } catch (\Exception $e) {
+            error_log('Failed to parse date: ' . $e->getMessage());
             self::$dateCache[$value] = null;
             return null;
         }
