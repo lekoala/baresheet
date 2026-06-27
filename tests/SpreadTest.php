@@ -69,6 +69,19 @@ class SpreadTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testGetSheetNamesXlsx(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->sheet = 'TestSheet';
+        $writer->writeFile([['data']], $tempFile);
+
+        $names = Spread::getSheetNames($tempFile);
+        self::assertEquals(['TestSheet'], $names);
+
+        unlink($tempFile);
+    }
+
     public function testGetSheetNamesOds(): void
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.ods';
