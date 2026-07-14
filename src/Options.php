@@ -92,13 +92,17 @@ class Options
             throw new \InvalidArgumentException('Limit must be >= 0 or null, got ' . $this->limit);
         }
         if ($this->separator !== 'auto' && strlen($this->separator) !== 1) {
-            throw new \InvalidArgumentException('Separator must be a single character or "auto", got "' . $this->separator . '"');
+            throw new \InvalidArgumentException(
+                'Separator must be a single character or "auto", got "' . $this->separator . '"',
+            );
         }
         if (strlen($this->enclosure) !== 1) {
             throw new \InvalidArgumentException('Enclosure must be a single character, got "' . $this->enclosure . '"');
         }
         if ($this->escape !== '' && strlen($this->escape) !== 1) {
-            throw new \InvalidArgumentException('Escape must be a single character or empty, got "' . $this->escape . '"');
+            throw new \InvalidArgumentException(
+                'Escape must be a single character or empty, got "' . $this->escape . '"',
+            );
         }
     }
 
