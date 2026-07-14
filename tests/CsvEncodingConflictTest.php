@@ -6,7 +6,6 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Bom;
 use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\Options;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 

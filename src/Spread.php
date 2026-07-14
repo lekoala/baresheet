@@ -226,7 +226,7 @@ class Spread
             $dt = clone $base1904[$tz];
         } else {
             // Excel day 60 = Feb 29 1900 (non-existent) — Lotus 1-2-3 bug compensation
-            $dt = clone($floatValue < 60 && $floatValue > 0 ? $base1899_31[$tz] : $base1899_30[$tz]);
+            $dt = clone ($floatValue < 60 && $floatValue > 0 ? $base1899_31[$tz] : $base1899_30[$tz]);
         }
 
         $days = (int) floor($floatValue);
