@@ -85,7 +85,21 @@ class Options
         /** @var bool If true, enables auto column width for XLSX files (faster writing when false). */
         public bool $autoWidth = false,
     ) {
-        // no-op: promoted properties only
+        if ($this->offset < 0) {
+            throw new \InvalidArgumentException('Offset must be >= 0, got ' . $this->offset);
+        }
+        if ($this->limit !== null && $this->limit < 0) {
+            throw new \InvalidArgumentException('Limit must be >= 0 or null, got ' . $this->limit);
+        }
+        if ($this->separator !== 'auto' && strlen($this->separator) !== 1) {
+            throw new \InvalidArgumentException('Separator must be a single character or "auto", got "' . $this->separator . '"');
+        }
+        if (strlen($this->enclosure) !== 1) {
+            throw new \InvalidArgumentException('Enclosure must be a single character, got "' . $this->enclosure . '"');
+        }
+        if ($this->escape !== '' && strlen($this->escape) !== 1) {
+            throw new \InvalidArgumentException('Escape must be a single character or empty, got "' . $this->escape . '"');
+        }
     }
 
     /**

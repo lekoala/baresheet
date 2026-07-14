@@ -211,6 +211,58 @@ class OptionsTest extends TestCase
         );
     }
 
+    public function testInvalidOffsetThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Offset must be >= 0');
+
+        new Options(offset: -1);
+    }
+
+    public function testInvalidLimitThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Limit must be >= 0');
+
+        new Options(limit: -5);
+    }
+
+    public function testInvalidSeparatorThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Separator must be a single character');
+
+        new Options(separator: ';;');
+    }
+
+    public function testInvalidEnclosureThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Enclosure must be a single character');
+
+        new Options(enclosure: '""');
+    }
+
+    public function testInvalidEscapeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Escape must be a single character');
+
+        new Options(escape: '\\\\');
+    }
+
+    public function testValidEdgeCases(): void
+    {
+        // These should not throw
+        $opts = new Options(offset: 0, limit: null, separator: 'auto', enclosure: "'", escape: '');
+        self::assertSame(0, $opts->offset);
+        self::assertNull($opts->limit);
+
+        $opts = new Options(offset: 100, limit: 0, separator: '|', enclosure: '"', escape: '\\');
+        self::assertSame(100, $opts->offset);
+        self::assertSame(0, $opts->limit);
+    }
+
     public function testApplyToMockObjectSkippingMissingProperties(): void
     {
         $opts = new Options(
