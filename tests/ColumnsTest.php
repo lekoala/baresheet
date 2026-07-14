@@ -226,4 +226,120 @@ class ColumnsTest extends TestCase
 
         unlink($tempFile);
     }
+
+    // ─── Injected headers (file without header row) ───────────────
+
+    public function testCsvHeadersInjectedAssoc(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        file_put_contents($tempFile, "1,john,john@example.com\n2,jane,jane@example.com\n");
+
+        $reader = new CsvReader(new Options(
+            assoc: true,
+            headers: ['id', 'name', 'email'],
+        ));
+        $data = iterator_to_array($reader->readFile($tempFile));
+
+        self::assertCount(2, $data);
+        self::assertSame(['id' => '1', 'name' => 'john', 'email' => 'john@example.com'], $data[0]);
+        self::assertSame(['id' => '2', 'name' => 'jane', 'email' => 'jane@example.com'], $data[1]);
+
+        unlink($tempFile);
+    }
+
+    public function testCsvHeadersInjectedAssocColumns(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        file_put_contents($tempFile, "1,john,john@example.com\n");
+
+        $reader = new CsvReader(new Options(
+            assoc: true,
+            headers: ['id', 'name', 'email'],
+            columns: ['name', 'id'],
+        ));
+        $data = iterator_to_array($reader->readFile($tempFile));
+
+        self::assertCount(1, $data);
+        self::assertSame(['name' => 'john', 'id' => '1'], $data[0]);
+
+        unlink($tempFile);
+    }
+
+    public function testCsvHeadersInjectedAssocRequiredColumns(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        file_put_contents($tempFile, "1,john,john@example.com\n");
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Missing required columns: missing_column');
+
+        $reader = new CsvReader(new Options(
+            assoc: true,
+            headers: ['id', 'name', 'email'],
+            requiredColumns: ['id', 'missing_column'],
+        ));
+        iterator_to_array($reader->readFile($tempFile));
+
+        unlink($tempFile);
+    }
+
+    public function testCsvHeadersInjectedAssocStrictMismatch(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        // 3 headers but only 2 fields on data row
+        file_put_contents($tempFile, "1,john\n");
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('has 2 columns, expected 3');
+
+        $reader = new CsvReader(new Options(
+            assoc: true,
+            strict: true,
+            headers: ['id', 'name', 'email'],
+        ));
+        iterator_to_array($reader->readFile($tempFile));
+
+        unlink($tempFile);
+    }
+
+    public function testXlsxHeadersInjectedAssoc(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.xlsx';
+        // Write data without header row
+        Baresheet::write([
+            [1, 'john', 'john@example.com'],
+            [2, 'jane', 'jane@example.com'],
+        ], $tempFile);
+
+        $reader = new XlsxReader(new Options(
+            assoc: true,
+            headers: ['id', 'name', 'email'],
+        ));
+        $data = iterator_to_array($reader->readFile($tempFile));
+
+        self::assertCount(2, $data);
+        self::assertSame(['id' => '1', 'name' => 'john', 'email' => 'john@example.com'], $data[0]);
+        self::assertSame(['id' => '2', 'name' => 'jane', 'email' => 'jane@example.com'], $data[1]);
+
+        unlink($tempFile);
+    }
+
+    public function testOdsHeadersInjectedAssoc(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.ods';
+        Baresheet::write([
+            [1, 'john', 'john@example.com'],
+        ], $tempFile);
+
+        $reader = new OdsReader(new Options(
+            assoc: true,
+            headers: ['id', 'name', 'email'],
+        ));
+        $data = iterator_to_array($reader->readFile($tempFile));
+
+        self::assertCount(1, $data);
+        self::assertSame(['id' => '1', 'name' => 'john', 'email' => 'john@example.com'], $data[0]);
+
+        unlink($tempFile);
+    }
 }

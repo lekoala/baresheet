@@ -155,6 +155,10 @@ class Transform
      */
     public static function chunk(iterable $data, int $size): Generator
     {
+        if ($size <= 0) {
+            throw new \InvalidArgumentException('Chunk size must be a positive integer, got ' . $size);
+        }
+
         $chunk = [];
         foreach ($data as $row) {
             $chunk[] = $row;
@@ -165,6 +169,34 @@ class Transform
         }
         if (!empty($chunk)) {
             yield $chunk;
+        }
+    }
+
+    /**
+     * Cast columns to specific types, throwing on invalid values.
+     *
+     * Same interface as cast(), but throws InvalidArgumentException with
+     * the row number, column, value, and expected type when a value
+     * cannot be cast.
+     *
+     * @param iterable<array<mixed>> $data
+     * @param array<int|string, string> $types
+     * @return Generator<array<mixed>>
+     * @throws \InvalidArgumentException
+     */
+    public static function castStrict(iterable $data, array $types): Generator
+    {
+        $rowNum = 0;
+        foreach ($data as $row) {
+            $casted = [];
+            foreach ($row as $k => $v) {
+                if (isset($types[$k])) {
+                    $v = self::castValueStrict($v, $types[$k], $rowNum, $k);
+                }
+                $casted[$k] = $v;
+            }
+            yield $casted;
+            $rowNum++;
         }
     }
 
@@ -209,6 +241,81 @@ class Transform
             'date' => self::castDate($str),
             default => $value,
         };
+    }
+
+    /**
+     * Cast a single value in strict mode, throwing on invalid input.
+     */
+    private static function castValueStrict(mixed $value, string $type, int $rowNum, int|string $col): mixed
+    {
+        $isNullable = str_starts_with($type, '?');
+        $baseType = $isNullable ? substr($type, 1) : $type;
+
+        if ($value === null || $value === '') {
+            if ($isNullable || $baseType === 'date') {
+                return null;
+            }
+            throw new \InvalidArgumentException(
+                "Row {$rowNum}: Column '{$col}' cannot be null/empty for type {$type}",
+            );
+        }
+
+        $str = is_scalar($value) || $value instanceof \Stringable
+            ? (string) $value
+            : '';
+
+        return match ($baseType) {
+            'int' => self::castIntStrict($str, $rowNum, $col),
+            'float' => self::castFloatStrict($str, $rowNum, $col),
+            'bool' => self::castBoolStrict($str, $rowNum, $col),
+            'string' => $str,
+            'date' => self::castDateStrict($str, $rowNum, $col),
+            default => throw new \InvalidArgumentException(
+                "Row {$rowNum}: Column '{$col}' has unknown type '{$type}'",
+            ),
+        };
+    }
+
+    private static function castIntStrict(string $str, int $rowNum, int|string $col): int
+    {
+        if (is_numeric($str)) {
+            return (int) $str;
+        }
+        throw new \InvalidArgumentException(
+            "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid integer",
+        );
+    }
+
+    private static function castFloatStrict(string $str, int $rowNum, int|string $col): float
+    {
+        if (is_numeric($str)) {
+            return (float) $str;
+        }
+        throw new \InvalidArgumentException(
+            "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid float",
+        );
+    }
+
+    private static function castBoolStrict(string $str, int $rowNum, int|string $col): bool
+    {
+        $result = filter_var($str, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($result !== null) {
+            return $result;
+        }
+        throw new \InvalidArgumentException(
+            "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid boolean",
+        );
+    }
+
+    private static function castDateStrict(string $value, int $rowNum, int|string $col): \DateTimeInterface
+    {
+        try {
+            return new DateTime($value);
+        } catch (\Exception) {
+            throw new \InvalidArgumentException(
+                "Row {$rowNum}: Column '{$col}' value '{$value}' is not a valid date",
+            );
+        }
     }
 
     /**

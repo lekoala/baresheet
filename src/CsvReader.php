@@ -163,7 +163,7 @@ class CsvReader implements ReaderInterface
             }
         }
 
-        $headers = null;
+        $headers = !empty($this->headers) ? $this->headers : null;
         $separator = $this->separator;
         $count = 0;
         $yieldCount = 0;
@@ -171,9 +171,14 @@ class CsvReader implements ReaderInterface
         $doEncode = $this->inputEncoding && $this->outputEncoding;
         $columnMap = [];
 
-        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
-        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
-            [$columnMap] = Spread::buildColumnSelection($this->columns, $this->headers);
+        // Pre-build column map and validate required columns from injected headers
+        if (!empty($this->headers)) {
+            if (!empty($this->requiredColumns)) {
+                Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+            }
+            if (!empty($this->columns)) {
+                [$columnMap] = Spread::buildColumnSelection($this->columns, $this->headers);
+            }
         }
 
         while (

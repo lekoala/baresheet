@@ -348,18 +348,39 @@ class Spread
 
             $props = self::zipGetData($zip, 'docProps/core.xml');
             if ($props) {
-                $matches = [];
-                $res = preg_match_all("/<(?:dc|cp):([\w]*)>(.*)<\/(?:dc|cp):([\w]*)>/", $props, $matches);
-                if ($res !== false && $res > 0) {
-                    $combine = array_combine($matches[1], $matches[2]);
-                    if ($combine) {
-                        $keys = ['title', 'subject', 'creator', 'keywords', 'description', 'category', 'language'];
-                        foreach ($keys as $key) {
-                            if (isset($combine[$key])) {
-                                $arr['meta'][$key] = $combine[$key];
-                            }
-                        }
-                    }
+                $xml = self::safeXml($props);
+                $xml->registerXPathNamespace('dc', 'http://purl.org/dc/elements/1.1/');
+                $xml->registerXPathNamespace('cp', 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties');
+
+                $title = $xml->xpath('//dc:title');
+                $subject = $xml->xpath('//dc:subject');
+                $creator = $xml->xpath('//dc:creator');
+                $keywords = $xml->xpath('//cp:keywords');
+                $description = $xml->xpath('//dc:description');
+                $category = $xml->xpath('//cp:category');
+                $language = $xml->xpath('//dc:language');
+
+                if ($title) {
+                    $arr['meta']['title'] = (string) $title[0];
+                }
+                if ($subject) {
+                    $arr['meta']['subject'] = (string) $subject[0];
+                }
+                if ($creator) {
+                    $arr['meta']['creator'] = (string) $creator[0];
+                }
+                if ($keywords) {
+                    $keywordStrings = array_map(static fn($k) => (string) $k, $keywords);
+                    $arr['meta']['keywords'] = implode(', ', $keywordStrings);
+                }
+                if ($description) {
+                    $arr['meta']['description'] = (string) $description[0];
+                }
+                if ($category) {
+                    $arr['meta']['category'] = (string) $category[0];
+                }
+                if ($language) {
+                    $arr['meta']['language'] = (string) $language[0];
                 }
             }
 

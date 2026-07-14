@@ -112,18 +112,23 @@ class XlsxReader implements ReaderInterface
         $reader = new \XMLReader();
         $reader->open('zip://' . $filename . '#' . $wsPath, null, LIBXML_NONET);
 
-        $headers = null;
+        $headers = !empty($this->headers) ? $this->headers : null;
         $rowCount = 0;
         $yieldCount = 0;
         $startRow = $this->assoc ? 1 : 0;
-        $totalColumns = null;
+        $totalColumns = $headers !== null ? count($headers) : null;
         $colRefCache = [];
         $columnMap = [];
         $selectedIndices = []; // Set of column indices to parse (empty = all)
 
-        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
-        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
-            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+        // Pre-build column map and validate required columns from injected headers
+        if (!empty($this->headers)) {
+            if (!empty($this->requiredColumns)) {
+                Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+            }
+            if (!empty($this->columns)) {
+                [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+            }
         }
 
         while ($reader->read()) {

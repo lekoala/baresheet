@@ -316,6 +316,22 @@ class TransformTest extends TestCase
         self::assertCount(3, $result[0]);
     }
 
+    public function testChunkInvalidSizeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Chunk size must be a positive integer');
+
+        iterator_to_array(Transform::chunk([['a']], 0));
+    }
+
+    public function testChunkNegativeSizeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Chunk size must be a positive integer');
+
+        iterator_to_array(Transform::chunk([['a']], -1));
+    }
+
     public function testChaining(): void
     {
         $data = [
@@ -348,6 +364,133 @@ class TransformTest extends TestCase
         $gen->next();
         $second = $gen->current();
         self::assertEquals(['name' => 'jane'], $second);
+    }
+
+    public function testCastStrictInt(): void
+    {
+        $data = [
+            ['qty' => '42', 'name' => 'item'],
+        ];
+
+        $result = iterator_to_array(Transform::castStrict($data, ['qty' => 'int']));
+        self::assertSame(42, $result[0]['qty']);
+    }
+
+    public function testCastStrictInvalidIntThrows(): void
+    {
+        $data = [
+            ['qty' => 'abc'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Row 0: Column \'qty\' value \'abc\' is not a valid integer');
+
+        iterator_to_array(Transform::castStrict($data, ['qty' => 'int']));
+    }
+
+    public function testCastStrictInvalidFloatThrows(): void
+    {
+        $data = [
+            ['price' => 'not-a-number'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Row 0: Column \'price\' value \'not-a-number\' is not a valid float');
+
+        iterator_to_array(Transform::castStrict($data, ['price' => 'float']));
+    }
+
+    public function testCastStrictInvalidBoolThrows(): void
+    {
+        $data = [
+            ['active' => 'perhaps'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Row 0: Column \'active\' value \'perhaps\' is not a valid boolean');
+
+        iterator_to_array(Transform::castStrict($data, ['active' => 'bool']));
+    }
+
+    public function testCastStrictValidBool(): void
+    {
+        $data = [
+            ['active' => 'false', 'flag' => '1'],
+        ];
+
+        $result = iterator_to_array(Transform::castStrict($data, ['active' => 'bool', 'flag' => 'bool']));
+        self::assertFalse($result[0]['active']);
+        self::assertTrue($result[0]['flag']);
+    }
+
+    public function testCastStrictInvalidDateThrows(): void
+    {
+        $data = [
+            ['created' => 'clearly-not-a-date'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Row 0: Column \'created\' value \'clearly-not-a-date\' is not a valid date');
+
+        iterator_to_array(Transform::castStrict($data, ['created' => 'date']));
+    }
+
+    public function testCastStrictNullableAllowsNull(): void
+    {
+        $data = [
+            ['qty' => null, 'price' => ''],
+        ];
+
+        $result = iterator_to_array(Transform::castStrict($data, ['qty' => '?int', 'price' => '?float']));
+        self::assertNull($result[0]['qty']);
+        self::assertNull($result[0]['price']);
+    }
+
+    public function testCastStrictNullableInvalidThrows(): void
+    {
+        $data = [
+            ['qty' => 'abc'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('is not a valid integer');
+
+        iterator_to_array(Transform::castStrict($data, ['qty' => '?int']));
+    }
+
+    public function testCastStrictUnknownTypeThrows(): void
+    {
+        $data = [
+            ['col' => 'value'],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('unknown type');
+
+        iterator_to_array(Transform::castStrict($data, ['col' => 'unknown']));
+    }
+
+    public function testCastStrictByIndex(): void
+    {
+        $data = [
+            ['42', 'item'],
+        ];
+
+        $result = iterator_to_array(Transform::castStrict($data, [0 => 'int']));
+        self::assertSame(42, $result[0][0]);
+        self::assertSame('item', $result[0][1]);
+    }
+
+    public function testCastStrictEmptyStringNonNullableThrows(): void
+    {
+        $data = [
+            ['qty' => ''],
+        ];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot be null/empty');
+
+        iterator_to_array(Transform::castStrict($data, ['qty' => 'int']));
     }
 
     public function testCastInvalidDateReturnsNull(): void

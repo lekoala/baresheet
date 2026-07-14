@@ -92,15 +92,20 @@ class OdsReader implements ReaderInterface
         $reader->open($xmlFile, null, LIBXML_NONET);
 
         $tableIndex = 0;
-        $headers = null;
-        $totalColumns = null;
+        $headers = !empty($this->headers) ? $this->headers : null;
+        $totalColumns = $headers !== null ? count($headers) : null;
         $yieldCount = 0;
         $columnMap = [];
         $selectedIndices = []; // Set of column indices to parse (empty = all)
 
-        // Pre-build column map if headers are provided and columns are specified (for non-assoc mode)
-        if (!$this->assoc && !empty($this->columns) && !empty($this->headers)) {
-            [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+        // Pre-build column map and validate required columns from injected headers
+        if (!empty($this->headers)) {
+            if (!empty($this->requiredColumns)) {
+                Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+            }
+            if (!empty($this->columns)) {
+                [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+            }
         }
 
         while ($reader->read()) {
