@@ -378,7 +378,7 @@ class TransformTest extends TestCase
     public function testSliceStopsEarly(): void
     {
         $calls = 0;
-        $data = (function () use (&$calls) {
+        $data = (static function () use (&$calls) {
             for ($i = 0; $i < 1000; $i++) {
                 $calls++;
                 yield ['id' => $i];

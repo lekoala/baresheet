@@ -375,6 +375,9 @@ $active = Transform::filter($rows, fn($row) => $row['active'] === 'Yes');
 foreach (Transform::chunk($rows, 1000) as $batch) {
     $db->bulkInsert($batch);
 }
+
+// Slice a page of results, without loading everything into memory
+$page = Transform::slice($rows, offset: 100, limit: 20);
 ```
 
 ## Streaming Output
