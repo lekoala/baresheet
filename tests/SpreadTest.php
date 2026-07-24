@@ -362,7 +362,7 @@ class SpreadTest extends TestCase
     {
         $tempFile = Spread::getTempFilename();
         self::assertFileExists($tempFile);
-        self::assertStringStartsWith(sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
+        self::assertStringStartsWith(realpath(sys_get_temp_dir()) . \DIRECTORY_SEPARATOR . 'BSH', $tempFile);
         unlink($tempFile);
     }
 
