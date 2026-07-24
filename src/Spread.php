@@ -49,6 +49,24 @@ class Spread
         if (str_contains(strtolower($path), 'phar://')) {
             throw new InvalidDocumentException('Phar deserialization is not allowed');
         }
+
+        // "php://filter/resource=..." (or "/read=..." etc.) chains an arbitrary inner
+        // resource behind the php:// scheme, which defeats the scheme allow-list above.
+        // Only the plain data streams are legitimate targets for a filename argument.
+        if (preg_match('/^php:\/\//i', $path)) {
+            $allowedPhpPaths = [
+                'php://input',
+                'php://output',
+                'php://temp',
+                'php://memory',
+                'php://stdin',
+                'php://stdout',
+                'php://stderr',
+            ];
+            if (!in_array(strtolower($path), $allowedPhpPaths, true)) {
+                throw new InvalidDocumentException("Invalid php:// stream: {$path} is not allowed");
+            }
+        }
     }
 
     /**
@@ -575,10 +593,22 @@ class Spread
     /**
      * Parse XML string into SimpleXMLElement with LIBXML_NONET to prevent
      * external entity resolution (XXE/SSRF mitigation).
+     *
+     * @throws InvalidDocumentException If the XML can't be parsed.
      */
     public static function safeXml(string $data): \SimpleXMLElement
     {
-        return new \SimpleXMLElement($data, LIBXML_NONET);
+        // Route libxml warnings through the internal error queue instead of the standard
+        // error handler; SimpleXMLElement still throws on failure either way.
+        $previous = libxml_use_internal_errors(true);
+        try {
+            return new \SimpleXMLElement($data, LIBXML_NONET);
+        } catch (\Throwable $e) {
+            throw new InvalidDocumentException('Invalid XML document', previous: $e);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
     }
 
     /**
@@ -649,6 +679,22 @@ class Spread
         }
         $str = self::stripControlChars($str);
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
+    }
+
+    /**
+     * Reject headers containing the same name more than once. Duplicate headers can't
+     * be represented by array_combine() (one of the columns silently disappears) and
+     * would make column selection ambiguous.
+     *
+     * @param string[] $headers
+     * @throws InvalidDocumentException
+     */
+    public static function checkNoDuplicateHeaders(array $headers): void
+    {
+        $duplicates = array_keys(array_filter(array_count_values($headers), static fn(int $count) => $count > 1));
+        if (!empty($duplicates)) {
+            throw new InvalidDocumentException('Duplicate header(s) found: ' . implode(', ', $duplicates));
+        }
     }
 
     /**

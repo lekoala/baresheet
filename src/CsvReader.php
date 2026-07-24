@@ -89,11 +89,17 @@ class CsvReader implements ReaderInterface
     {
         $isSeekable = (bool) stream_get_meta_data($stream)['seekable'];
 
+        // Detection results are kept in local variables rather than written back to
+        // $this->separator/$this->inputEncoding, so a reused reader always starts a new
+        // read with its original configuration instead of the previous file's results.
+        $separator = $this->separator;
+        $inputEncoding = $this->inputEncoding;
+
         $needsEncodingDetection =
-            ($this->inputEncoding === null || $this->inputEncoding === 'auto') && $this->outputEncoding !== null;
+            ($inputEncoding === null || $inputEncoding === 'auto') && $this->outputEncoding !== null;
 
         $needsSample =
-            $this->separator === 'auto' || $this->skipInputBOM || $this->transcodeBomInput || $needsEncodingDetection;
+            $separator === 'auto' || $this->skipInputBOM || $this->transcodeBomInput || $needsEncodingDetection;
 
         if (!$isSeekable && $needsSample) {
             throw new LogicException(
@@ -136,7 +142,7 @@ class CsvReader implements ReaderInterface
                     );
                 }
                 // BOM takes precedence over manual encoding
-                $this->inputEncoding = null;
+                $inputEncoding = null;
             }
 
             // Prepare normalized sample for separator detection
@@ -148,39 +154,47 @@ class CsvReader implements ReaderInterface
         }
 
         // Auto-detect separator
-        if ($this->separator === 'auto') {
-            $this->separator = self::detectSeparator((string) $normalizedSample);
+        if ($separator === 'auto') {
+            $separator = self::detectSeparator((string) $normalizedSample);
         }
 
         if (
             $inputBOM === null
-            && ($this->inputEncoding === null
-            || $this->inputEncoding === 'auto')
+            && ($inputEncoding === null
+            || $inputEncoding === 'auto')
             && $this->outputEncoding !== null
         ) {
             // Fallback detection if we need to convert but have no BOM
             $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
             if ($detected && $detected !== 'UTF-8') {
-                $this->inputEncoding = $detected;
+                $inputEncoding = $detected;
             }
         }
 
         $headers = !empty($this->headers) ? $this->headers : null;
-        $separator = $this->separator;
         $count = 0;
         $yieldCount = 0;
-        $expectedCols = null;
-        $doEncode = $this->inputEncoding && $this->outputEncoding;
+        // Seeded from injected headers so a too-short/too-long first data row is
+        // caught immediately instead of silently becoming the new expected width.
+        $expectedCols = $headers !== null ? count($headers) : null;
+        $doEncode = $inputEncoding && $this->outputEncoding;
         $columnMap = [];
 
         // Pre-build column map and validate required columns from injected headers
         if (!empty($this->headers)) {
+            if ($this->assoc) {
+                Spread::checkNoDuplicateHeaders($this->headers);
+            }
             if (!empty($this->requiredColumns)) {
                 Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
             }
             if (!empty($this->columns)) {
                 [$columnMap] = Spread::buildColumnSelection($this->columns, $this->headers);
             }
+        }
+
+        if ($this->limit === 0) {
+            return;
         }
 
         while (
@@ -198,7 +212,7 @@ class CsvReader implements ReaderInterface
                 // resulting in a ~15-20% performance improvement for string encoding over large datasets.
                 foreach ($line as &$v) {
                     if (is_string($v)) {
-                        $v = mb_convert_encoding($v, (string) $this->outputEncoding, (string) $this->inputEncoding);
+                        $v = mb_convert_encoding($v, (string) $this->outputEncoding, (string) $inputEncoding);
                     }
                 }
                 unset($v);
@@ -221,6 +235,7 @@ class CsvReader implements ReaderInterface
                 // No headers yet, use first line as headers
                 if ($headers === null) {
                     $headers = array_map('strval', $line);
+                    Spread::checkNoDuplicateHeaders($headers);
                     // Validate required columns
                     Spread::checkRequiredColumns($this->requiredColumns, $headers);
                     // Build column selection map

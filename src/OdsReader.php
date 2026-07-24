@@ -19,6 +19,11 @@ class OdsReader implements ReaderInterface
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
+    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
+    // Caps number-columns-repeated so a single declared cell can't force an
+    // absurd number of repetitions of its value into the row.
+    private const MAX_COLUMN_REPEAT = 16_384;
+
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
@@ -58,11 +63,24 @@ class OdsReader implements ReaderInterface
         if ($result !== true) {
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
-        if ($zip->locateName('content.xml') === false) {
+
+        try {
+            $idx = $zip->locateName('content.xml');
+            if ($idx === false) {
+                throw new InvalidDocumentException('No content.xml found in ODS file');
+            }
+
+            // zipGetData() only guards entries it loads into memory itself; content.xml
+            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            $stat = $zip->statIndex($idx);
+            if ($stat !== false && $stat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+                throw new InvalidDocumentException(
+                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                );
+            }
+        } finally {
             $zip->close();
-            throw new InvalidDocumentException('No content.xml found in ODS file');
         }
-        $zip->close();
 
         // Open content.xml as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
@@ -91,63 +109,73 @@ class OdsReader implements ReaderInterface
     private function parseContent(string $xmlFile): Generator
     {
         $reader = new \XMLReader();
-        $reader->open($xmlFile, null, LIBXML_NONET);
-
-        $tableIndex = 0;
-        $headers = !empty($this->headers) ? $this->headers : null;
-        $totalColumns = $headers !== null ? count($headers) : null;
-        $yieldCount = 0;
-        $columnMap = [];
-        $selectedIndices = []; // Set of column indices to parse (empty = all)
-
-        // Pre-build column map and validate required columns from injected headers
-        if (!empty($this->headers)) {
-            if (!empty($this->requiredColumns)) {
-                Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
-            }
-            if (!empty($this->columns)) {
-                [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
-            }
+        if (!$reader->open($xmlFile, null, LIBXML_NONET)) {
+            throw new InvalidDocumentException("Failed to open {$xmlFile}");
         }
 
-        while ($reader->read()) {
-            if ($reader->nodeType !== \XMLReader::ELEMENT) {
-                continue;
-            }
-            if ($reader->localName !== 'table') {
-                continue;
-            }
-            if ($reader->namespaceURI !== self::NS_TABLE) {
-                continue;
+        try {
+            $tableIndex = 0;
+            $headers = !empty($this->headers) ? $this->headers : null;
+            $totalColumns = $headers !== null ? count($headers) : null;
+            $yieldCount = 0;
+            $columnMap = [];
+            $selectedIndices = []; // Set of column indices to parse (empty = all)
+
+            // Pre-build column map and validate required columns from injected headers
+            if (!empty($this->headers)) {
+                if ($this->assoc) {
+                    Spread::checkNoDuplicateHeaders($this->headers);
+                }
+                if (!empty($this->requiredColumns)) {
+                    Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+                }
+                if (!empty($this->columns)) {
+                    [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+                }
             }
 
-            $name = $reader->getAttributeNs('name', self::NS_TABLE);
-            if (!$this->isTargetSheet($tableIndex, $name)) {
-                $tableIndex++;
-                continue;
+            if ($this->limit === 0) {
+                return;
             }
 
-            if ($reader->isEmptyElement) {
-                continue;
+            while ($reader->read()) {
+                if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                    continue;
+                }
+                if ($reader->localName !== 'table') {
+                    continue;
+                }
+                if ($reader->namespaceURI !== self::NS_TABLE) {
+                    continue;
+                }
+
+                $name = $reader->getAttributeNs('name', self::NS_TABLE);
+                if (!$this->isTargetSheet($tableIndex, $name)) {
+                    $tableIndex++;
+                    continue;
+                }
+
+                if ($reader->isEmptyElement) {
+                    continue;
+                }
+
+                yield from $this->parseTable(
+                    $reader,
+                    $headers,
+                    $totalColumns,
+                    $yieldCount,
+                    $columnMap,
+                    $selectedIndices,
+                );
+
+                return;
             }
 
-            yield from $this->parseTable(
-                $reader,
-                $headers,
-                $totalColumns,
-                $yieldCount,
-                $columnMap,
-                $selectedIndices,
-            );
-
+            if ($this->sheet !== null) {
+                throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
+            }
+        } finally {
             $reader->close();
-            return;
-        }
-
-        $reader->close();
-
-        if ($this->sheet !== null) {
-            throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
         }
     }
 
@@ -225,6 +253,13 @@ class OdsReader implements ReaderInterface
                             $colRepeat = (int) (
                                 $reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1'
                             );
+                            if ($colRepeat > self::MAX_COLUMN_REPEAT) {
+                                throw new InvalidDocumentException(
+                                    "number-columns-repeated ({$colRepeat}) exceeds the maximum allowed ("
+                                    . self::MAX_COLUMN_REPEAT
+                                    . ').',
+                                );
+                            }
                             $colIndex = count($rowData);
 
                             // Optimization: Skip parsing unselected cells
@@ -325,6 +360,7 @@ class OdsReader implements ReaderInterface
                             $headers[] = $v !== null ? (string) $v : '';
                         }
                         $totalColumns = count($headers);
+                        Spread::checkNoDuplicateHeaders($headers);
                         // Validate required columns
                         Spread::checkRequiredColumns($this->requiredColumns, $headers, $reader);
                         // Build column selection map
@@ -364,7 +400,6 @@ class OdsReader implements ReaderInterface
                 yield $rowData;
                 $yieldCount++;
                 if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
-                    $reader->close();
                     return;
                 }
             }

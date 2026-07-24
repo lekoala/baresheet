@@ -358,6 +358,41 @@ class SpreadTest extends TestCase
         self::assertSame('value', (string) $xml->child);
     }
 
+    public function testSafeXmlThrowsInvalidDocumentExceptionOnMalformedXml(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Invalid XML document');
+        Spread::safeXml('<root><child>unclosed</root>');
+    }
+
+    public function testIsSafePathRejectsPhpFilterWrapper(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/Invalid php:\/\/ stream/');
+        Spread::isSafePath('php://filter/convert.base64-encode/resource=/etc/passwd');
+    }
+
+    public function testIsSafePathAllowsPlainPhpOutput(): void
+    {
+        // Should not throw
+        Spread::isSafePath('php://output');
+        Spread::isSafePath('php://temp');
+        $this->addToAssertionCount(1);
+    }
+
+    public function testCheckNoDuplicateHeadersThrows(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Duplicate header(s) found: name');
+        Spread::checkNoDuplicateHeaders(['id', 'name', 'name']);
+    }
+
+    public function testCheckNoDuplicateHeadersPassesForUniqueHeaders(): void
+    {
+        Spread::checkNoDuplicateHeaders(['id', 'name', 'email']);
+        $this->addToAssertionCount(1);
+    }
+
     public function testGetTempFilename(): void
     {
         $tempFile = Spread::getTempFilename();

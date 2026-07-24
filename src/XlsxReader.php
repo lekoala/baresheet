@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet;
 
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
 use ZipArchive;
 
@@ -14,6 +15,11 @@ use ZipArchive;
  */
 class XlsxReader implements ReaderInterface
 {
+    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
+    // Excel's real column limit (XFD), so a bogus cell reference can't force
+    // allocation of an absurd number of null placeholder columns.
+    private const MAX_COLUMNS = 16_384;
+
     public bool $assoc = false;
     public bool $strict = false;
     public ?int $limit = null;
@@ -53,83 +59,127 @@ class XlsxReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
-        // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
-        // Traversing a SimpleXMLElement on every cell would be O(n) per row.
-        $sharedStrings = [];
-        $ssData = Spread::zipGetData($zip, 'xl/sharedStrings.xml');
-        if ($ssData) {
-            $ssXml = Spread::safeXml($ssData);
-            if (isset($ssXml->si)) {
-                foreach ($ssXml->si as $si) {
-                    if (isset($si->t)) {
-                        $sharedStrings[] = (string) $si->t;
-                    } elseif (isset($si->r)) {
-                        // Rich text: concatenate all <r><t> runs into a single string.
-                        $t = '';
-                        foreach ($si->r as $r) {
-                            $t .= (string) $r->t;
+        try {
+            // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
+            // Traversing a SimpleXMLElement on every cell would be O(n) per row.
+            $sharedStrings = [];
+            $ssData = Spread::zipGetData($zip, 'xl/sharedStrings.xml');
+            if ($ssData) {
+                $ssXml = Spread::safeXml($ssData);
+                if (isset($ssXml->si)) {
+                    foreach ($ssXml->si as $si) {
+                        if (isset($si->t)) {
+                            $sharedStrings[] = (string) $si->t;
+                        } elseif (isset($si->r)) {
+                            // Rich text: concatenate all <r><t> runs into a single string.
+                            $t = '';
+                            foreach ($si->r as $r) {
+                                $t .= (string) $r->t;
+                            }
+                            $sharedStrings[] = $t;
+                        } else {
+                            $sharedStrings[] = '';
                         }
-                        $sharedStrings[] = $t;
-                    } else {
-                        $sharedStrings[] = '';
                     }
                 }
             }
-        }
 
-        // Styles
-        $cellFormats = [];
-        $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
-        if ($stylesData) {
-            $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
-        }
-
-        // Check 1904 date system
-        $is1904 = false;
-        $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
-        if ($wbData) {
-            $wbXml = Spread::safeXml($wbData);
-            if (isset($wbXml->workbookPr)) {
-                $date1904 = (string) $wbXml->workbookPr['date1904'];
-                $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
+            // Styles
+            $cellFormats = [];
+            $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
+            if ($stylesData) {
+                $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
             }
-        }
 
-        // Resolve worksheet path from sheet name/index
-        $wsPath = $this->resolveSheetPath($zip);
-        $wsIdx = $zip->locateName($wsPath);
-        if ($wsIdx === false) {
+            // Check 1904 date system
+            $is1904 = false;
+            $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
+            if ($wbData) {
+                $wbXml = Spread::safeXml($wbData);
+                if (isset($wbXml->workbookPr)) {
+                    $date1904 = (string) $wbXml->workbookPr['date1904'];
+                    $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
+                }
+            }
+
+            // Resolve worksheet path from sheet name/index
+            $wsPath = $this->resolveSheetPath($zip);
+            $wsIdx = $zip->locateName($wsPath);
+            if ($wsIdx === false) {
+                throw new InvalidDocumentException('No data');
+            }
+
+            // zipGetData() only guards entries it loads into memory itself; the worksheet
+            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            $wsStat = $zip->statIndex($wsIdx);
+            if ($wsStat !== false && $wsStat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+                throw new InvalidDocumentException(
+                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                );
+            }
+        } finally {
             $zip->close();
-            throw new InvalidDocumentException('No data');
         }
-        $zip->close();
 
-        $totalColumns = null;
         $colFormats = [];
         $isDateCache = [];
 
         // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
         $reader = new \XMLReader();
-        $reader->open('zip://' . $filename . '#' . $wsPath, null, LIBXML_NONET);
+        if (!$reader->open('zip://' . $filename . '#' . $wsPath, null, LIBXML_NONET)) {
+            throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
+        }
 
+        try {
+            yield from $this->parseWorksheet($reader, $sharedStrings, $cellFormats, $colFormats, $isDateCache, $is1904);
+        } finally {
+            $reader->close();
+        }
+    }
+
+    /**
+     * @param string[] $sharedStrings
+     * @param array<int, ?string> $cellFormats
+     * @param array<int, ?string> $colFormats
+     * @param array<string, bool> $isDateCache
+     * @return Generator<mixed>
+     */
+    private function parseWorksheet(
+        \XMLReader $reader,
+        array $sharedStrings,
+        array $cellFormats,
+        array $colFormats,
+        array $isDateCache,
+        bool $is1904,
+    ): Generator {
         $headers = !empty($this->headers) ? $this->headers : null;
         $rowCount = 0;
         $yieldCount = 0;
         $startRow = $this->assoc ? 1 : 0;
         $totalColumns = $headers !== null ? count($headers) : null;
+        // Seeded from injected headers so a too-short/too-long first data row is
+        // caught immediately instead of silently becoming the new expected width.
+        $expectedCols = $totalColumns;
         $colRefCache = [];
         $columnMap = [];
         $selectedIndices = []; // Set of column indices to parse (empty = all)
 
         // Pre-build column map and validate required columns from injected headers
         if (!empty($this->headers)) {
+            if ($this->assoc) {
+                Spread::checkNoDuplicateHeaders($this->headers);
+            }
             if (!empty($this->requiredColumns)) {
                 Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
             }
             if (!empty($this->columns)) {
                 [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
             }
+        }
+
+        if ($this->limit === 0) {
+            return;
         }
 
         while ($reader->read()) {
@@ -163,6 +213,13 @@ class XlsxReader implements ReaderInterface
                             $cellIndex = $colRefCache[$colLetter] ?? null;
                             if ($cellIndex === null) {
                                 $cellIndex = Spread::columnIndex($colLetter) - 1;
+                                if ($cellIndex >= self::MAX_COLUMNS) {
+                                    throw new InvalidDocumentException(
+                                        "Cell reference '{$colLetter}' exceeds the maximum of "
+                                        . self::MAX_COLUMNS
+                                        . ' columns.',
+                                    );
+                                }
                                 $colRefCache[$colLetter] = $cellIndex;
                             }
                         }
@@ -264,6 +321,8 @@ class XlsxReader implements ReaderInterface
                 }
             }
 
+            $actualCols = $col;
+
             while ($totalColumns && $col < $totalColumns) {
                 $rowData[] = null;
                 $col++;
@@ -273,6 +332,17 @@ class XlsxReader implements ReaderInterface
                 continue;
             }
 
+            if ($this->strict) {
+                if ($expectedCols === null) {
+                    $expectedCols = $actualCols;
+                } elseif ($actualCols !== $expectedCols) {
+                    throw new InvalidRowException(
+                        "Row {$rowCount} has {$actualCols} columns, expected {$expectedCols}",
+                        row: $rowCount,
+                    );
+                }
+            }
+
             if ($this->assoc) {
                 if ($headers === null) {
                     $headers = [];
@@ -280,6 +350,7 @@ class XlsxReader implements ReaderInterface
                         $headers[] = $v !== null ? (string) $v : '';
                     }
                     $totalColumns = count($headers);
+                    Spread::checkNoDuplicateHeaders($headers);
                     // Validate required columns
                     Spread::checkRequiredColumns($this->requiredColumns, $headers, $reader);
                     // Build column selection map
@@ -314,11 +385,9 @@ class XlsxReader implements ReaderInterface
             yield $rowData;
             $yieldCount++;
             if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
-                $reader->close();
                 return;
             }
         }
-        $reader->close();
     }
 
     /**
