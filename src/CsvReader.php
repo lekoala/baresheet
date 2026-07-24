@@ -182,9 +182,7 @@ class CsvReader implements ReaderInterface
 
         // Pre-build column map and validate required columns from injected headers
         if (!empty($this->headers)) {
-            if ($this->assoc) {
-                Spread::checkNoDuplicateHeaders($this->headers);
-            }
+            Spread::checkNoDuplicateHeaders($this->headers);
             if (!empty($this->requiredColumns)) {
                 Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
             }

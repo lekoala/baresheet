@@ -6,6 +6,8 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvReader;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
@@ -49,6 +51,21 @@ class RobustnessTest extends TestCase
         return $path;
     }
 
+    private function odsRowXml(string $cellsXml): string
+    {
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<office:document-content'
+            . ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+            . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
+            . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">'
+            . '<office:body><office:spreadsheet><table:table table:name="Sheet1">'
+            . $cellsXml
+            . '</table:table></office:spreadsheet></office:body>'
+            . '</office:document-content>'
+        );
+    }
+
     // -- 1. CsvReader must not mutate its own separator/inputEncoding --
 
     public function testCsvReaderReuseDoesNotLeakDetectedSeparator(): void
@@ -88,7 +105,7 @@ class RobustnessTest extends TestCase
 
         $reader = new XlsxReader(new Options(strict: true));
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 2 has 1 columns, expected 2');
 
         try {
@@ -109,7 +126,7 @@ class RobustnessTest extends TestCase
             headers: ['id', 'first', 'last'],
         ));
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 1 has 2 columns, expected 3');
 
         try {
@@ -150,7 +167,7 @@ class RobustnessTest extends TestCase
         unlink($odsFile);
     }
 
-    // -- 4. Duplicate headers must be rejected in assoc mode --
+    // -- 4. Duplicate headers must be rejected regardless of assoc --
 
     public function testDuplicateHeadersRejectedCsv(): void
     {
@@ -159,7 +176,7 @@ class RobustnessTest extends TestCase
 
         $reader = new CsvReader(new Options(assoc: true));
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(InvalidDocumentException::class);
         $this->expectExceptionMessage('Duplicate header(s) found: name');
 
         try {
@@ -182,7 +199,7 @@ class RobustnessTest extends TestCase
         try {
             iterator_to_array($xlsxReader->readFile($xlsxFile));
             self::fail('Expected an exception for duplicate headers');
-        } catch (\RuntimeException $e) {
+        } catch (InvalidDocumentException $e) {
             self::assertStringContainsString('Duplicate header(s) found: name', $e->getMessage());
         } finally {
             unlink($xlsxFile);
@@ -194,7 +211,7 @@ class RobustnessTest extends TestCase
         try {
             iterator_to_array($odsReader->readFile($odsFile));
             self::fail('Expected an exception for duplicate headers');
-        } catch (\RuntimeException $e) {
+        } catch (InvalidDocumentException $e) {
             self::assertStringContainsString('Duplicate header(s) found: name', $e->getMessage());
         } finally {
             unlink($odsFile);
@@ -208,7 +225,30 @@ class RobustnessTest extends TestCase
 
         $reader = new CsvReader(new Options(assoc: true, headers: ['id', 'name', 'name']));
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('Duplicate header(s) found: name');
+
+        try {
+            iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testDuplicateInjectedHeadersRejectedEvenWithoutAssoc(): void
+    {
+        // headers+columns is non-assoc but still resolves 'name' by index into the
+        // duplicated header — just as ambiguous as the assoc=true case.
+        $file = $this->tempFile('csv');
+        file_put_contents($file, "1,John,Doe\n");
+
+        $reader = new CsvReader(new Options(
+            assoc: false,
+            headers: ['id', 'name', 'name'],
+            columns: ['name'],
+        ));
+
+        $this->expectException(InvalidDocumentException::class);
         $this->expectExceptionMessage('Duplicate header(s) found: name');
 
         try {
@@ -231,7 +271,7 @@ class RobustnessTest extends TestCase
 
         $reader = new XlsxReader();
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(InvalidDocumentException::class);
         $this->expectExceptionMessageMatches('/exceeds the maximum/');
 
         try {
@@ -243,28 +283,71 @@ class RobustnessTest extends TestCase
 
     public function testOdsRejectsAbsurdColumnsRepeated(): void
     {
-        $contentXml =
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            . '<office:document-content'
-            . ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
-            . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
-            . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">'
-            . '<office:body><office:spreadsheet><table:table table:name="Sheet1"><table:table-row>'
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
             . '<table:table-cell table:number-columns-repeated="999999999" office:value-type="string">'
             . '<text:p>bomb</text:p></table:table-cell>'
-            . '</table:table-row></table:table></office:spreadsheet></office:body>'
-            . '</office:document-content>';
-        $file = $this->writeMinimalOds($contentXml);
+            . '</table:table-row>',
+        ));
 
         $reader = new OdsReader();
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/number-columns-repeated.*exceeds the maximum/');
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessageMatches('/exceeds the maximum number of columns/');
 
         try {
             iterator_to_array($reader->readFile($file));
         } finally {
             unlink($file);
         }
+    }
+
+    public function testOdsRejectsAbsurdRowsRepeated(): void
+    {
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row table:number-rows-repeated="999999999">'
+            . '<table:table-cell office:value-type="string"><text:p>bomb</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        $reader = new OdsReader();
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessageMatches('/number-rows-repeated.*exceeds the maximum/');
+
+        try {
+            iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    // -- 6. number-rows-repeated must emit the row N times, not just once --
+
+    public function testOdsNumberRowsRepeatedEmitsRowMultipleTimes(): void
+    {
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row table:number-rows-repeated="3">'
+            . '<table:table-cell office:value-type="string"><text:p>Hello</text:p></table:table-cell>'
+            . '</table:table-row>'
+            . '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>World</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        $reader = new OdsReader();
+        $data = iterator_to_array($reader->readFile($file));
+
+        self::assertSame(
+            [
+                ['Hello'],
+                ['Hello'],
+                ['Hello'],
+                ['World'],
+            ],
+            $data,
+        );
+
+        unlink($file);
     }
 }

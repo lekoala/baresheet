@@ -20,9 +20,12 @@ class OdsReader implements ReaderInterface
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
     private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
-    // Caps number-columns-repeated so a single declared cell can't force an
-    // absurd number of repetitions of its value into the row.
-    private const MAX_COLUMN_REPEAT = 16_384;
+    // Caps the total column count a row can reach, however many repeated
+    // cells it takes to get there.
+    private const MAX_COLUMNS = 16_384;
+    // Caps number-rows-repeated so a single declared row can't force an
+    // absurd number of logical row emissions.
+    private const MAX_ROW_REPEAT = 16_384;
 
     public bool $assoc = false;
     public bool $strict = false;
@@ -123,9 +126,7 @@ class OdsReader implements ReaderInterface
 
             // Pre-build column map and validate required columns from injected headers
             if (!empty($this->headers)) {
-                if ($this->assoc) {
-                    Spread::checkNoDuplicateHeaders($this->headers);
-                }
+                Spread::checkNoDuplicateHeaders($this->headers);
                 if (!empty($this->requiredColumns)) {
                     Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
                 }
@@ -231,118 +232,126 @@ class OdsReader implements ReaderInterface
             }
 
             $rowRepeat = (int) ($reader->getAttributeNs('number-rows-repeated', self::NS_TABLE) ?? '1');
-            if ($rowRepeat > 100) {
+
+            // Parse the physical <table-row> exactly once; number-rows-repeated is then
+            // emitted logically below. Re-entering the reader per repeat doesn't work — by
+            // the second pass it's no longer positioned on this row at all.
+            $rowTemplate = [];
+            $isEmpty = true;
+
+            if (!$reader->isEmptyElement) {
+                $rowDepth = $reader->depth;
+                $moved = $reader->read();
+
+                while ($moved && $reader->depth > $rowDepth) {
+                    if (
+                        $reader->nodeType === \XMLReader::ELEMENT
+                        && $reader->localName === 'table-cell'
+                        && $reader->namespaceURI === self::NS_TABLE
+                    ) {
+                        $colRepeat = (int) ($reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1');
+                        $colIndex = count($rowTemplate);
+                        if (($colIndex + $colRepeat) > self::MAX_COLUMNS) {
+                            throw new InvalidDocumentException(
+                                'Row exceeds the maximum number of columns (' . self::MAX_COLUMNS . ').',
+                            );
+                        }
+
+                        // Optimization: Skip parsing unselected cells
+                        $selectedInRange = false;
+                        if (!empty($selectedIndices)) {
+                            for ($i = 0; $i < $colRepeat; $i++) {
+                                if (isset($selectedIndices[$colIndex + $i])) {
+                                    $selectedInRange = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            $selectedInRange = true;
+                        }
+
+                        if (!$selectedInRange) {
+                            if (!$reader->isEmptyElement) {
+                                $moved = $reader->next();
+                            } else {
+                                $moved = $reader->read();
+                            }
+                            for ($i = 0; $i < $colRepeat; $i++) {
+                                $rowTemplate[] = null;
+                            }
+                            continue;
+                        }
+
+                        $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
+                        $value = null;
+
+                        if (
+                            $valueType === 'float'
+                            || $valueType === 'currency'
+                            || $valueType === 'percentage'
+                        ) {
+                            $value = $reader->getAttributeNs('value', self::NS_OFFICE);
+                        } elseif ($valueType === 'date') {
+                            $value = $reader->getAttributeNs('date-value', self::NS_OFFICE);
+                        } elseif ($valueType === 'time') {
+                            $value = $reader->getAttributeNs('time-value', self::NS_OFFICE);
+                        } elseif ($valueType === 'boolean') {
+                            $value = $reader->getAttributeNs('boolean-value', self::NS_OFFICE);
+                        }
+
+                        $textP = '';
+                        if (!$reader->isEmptyElement) {
+                            $cellDepth = $reader->depth;
+                            while ($reader->read() && $reader->depth > $cellDepth) {
+                                if (
+                                    $reader->nodeType === \XMLReader::ELEMENT
+                                    && $reader->localName === 'p'
+                                    && $reader->namespaceURI === self::NS_TEXT
+                                ) {
+                                    // readString() is much faster and uses less memory than expand()->textContent
+                                    $textP = $reader->readString();
+                                }
+                            }
+                        }
+
+                        if ($value === null) {
+                            if ($valueType === 'string' || $valueType === '') {
+                                $value = $textP !== '' ? $textP : null;
+                            }
+                        }
+
+                        if ($value === null && $colRepeat > 100) {
+                            break;
+                        }
+
+                        for ($ci = 0; $ci < $colRepeat; $ci++) {
+                            $rowTemplate[] = $value;
+                            if ($value !== null && $value !== '') {
+                                $isEmpty = false;
+                            }
+                        }
+                    }
+                    $moved = $reader->read();
+                }
+            }
+
+            if ($isEmpty && $this->skipEmptyLines) {
                 $moved = $reader->next();
                 continue;
             }
 
+            if ($rowRepeat > self::MAX_ROW_REPEAT) {
+                throw new InvalidDocumentException(
+                    'number-rows-repeated ('
+                    . $rowRepeat
+                    . ') exceeds the maximum allowed ('
+                    . self::MAX_ROW_REPEAT
+                    . ').',
+                );
+            }
+
             for ($ri = 0; $ri < $rowRepeat; $ri++) {
-                $rowData = [];
-                $isEmpty = true;
-
-                if (!$reader->isEmptyElement) {
-                    $rowDepth = $reader->depth;
-                    $moved = $reader->read();
-
-                    while ($moved && $reader->depth > $rowDepth) {
-                        if (
-                            $reader->nodeType === \XMLReader::ELEMENT
-                            && $reader->localName === 'table-cell'
-                            && $reader->namespaceURI === self::NS_TABLE
-                        ) {
-                            $colRepeat = (int) (
-                                $reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1'
-                            );
-                            if ($colRepeat > self::MAX_COLUMN_REPEAT) {
-                                throw new InvalidDocumentException(
-                                    "number-columns-repeated ({$colRepeat}) exceeds the maximum allowed ("
-                                    . self::MAX_COLUMN_REPEAT
-                                    . ').',
-                                );
-                            }
-                            $colIndex = count($rowData);
-
-                            // Optimization: Skip parsing unselected cells
-                            $selectedInRange = false;
-                            if (!empty($selectedIndices)) {
-                                for ($i = 0; $i < $colRepeat; $i++) {
-                                    if (isset($selectedIndices[$colIndex + $i])) {
-                                        $selectedInRange = true;
-                                        break;
-                                    }
-                                }
-                            } else {
-                                $selectedInRange = true;
-                            }
-
-                            if (!$selectedInRange) {
-                                if (!$reader->isEmptyElement) {
-                                    $moved = $reader->next();
-                                } else {
-                                    $moved = $reader->read();
-                                }
-                                for ($i = 0; $i < $colRepeat; $i++) {
-                                    $rowData[] = null;
-                                }
-                                continue;
-                            }
-
-                            $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
-                            $value = null;
-
-                            if (
-                                $valueType === 'float'
-                                || $valueType === 'currency'
-                                || $valueType === 'percentage'
-                            ) {
-                                $value = $reader->getAttributeNs('value', self::NS_OFFICE);
-                            } elseif ($valueType === 'date') {
-                                $value = $reader->getAttributeNs('date-value', self::NS_OFFICE);
-                            } elseif ($valueType === 'time') {
-                                $value = $reader->getAttributeNs('time-value', self::NS_OFFICE);
-                            } elseif ($valueType === 'boolean') {
-                                $value = $reader->getAttributeNs('boolean-value', self::NS_OFFICE);
-                            }
-
-                            $textP = '';
-                            if (!$reader->isEmptyElement) {
-                                $cellDepth = $reader->depth;
-                                while ($reader->read() && $reader->depth > $cellDepth) {
-                                    if (
-                                        $reader->nodeType === \XMLReader::ELEMENT
-                                        && $reader->localName === 'p'
-                                        && $reader->namespaceURI === self::NS_TEXT
-                                    ) {
-                                        // readString() is much faster and uses less memory than expand()->textContent
-                                        $textP = $reader->readString();
-                                    }
-                                }
-                            }
-
-                            if ($value === null) {
-                                if ($valueType === 'string' || $valueType === '') {
-                                    $value = $textP !== '' ? $textP : null;
-                                }
-                            }
-
-                            if ($value === null && $colRepeat > 100) {
-                                break;
-                            }
-
-                            for ($ci = 0; $ci < $colRepeat; $ci++) {
-                                $rowData[] = $value;
-                                if ($value !== null && $value !== '') {
-                                    $isEmpty = false;
-                                }
-                            }
-                        }
-                        $moved = $reader->read();
-                    }
-                }
-
-                if ($isEmpty && $this->skipEmptyLines) {
-                    break;
-                }
+                $rowData = $rowTemplate;
 
                 if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
                     $colCount = count($rowData);
@@ -362,7 +371,7 @@ class OdsReader implements ReaderInterface
                         $totalColumns = count($headers);
                         Spread::checkNoDuplicateHeaders($headers);
                         // Validate required columns
-                        Spread::checkRequiredColumns($this->requiredColumns, $headers, $reader);
+                        Spread::checkRequiredColumns($this->requiredColumns, $headers);
                         // Build column selection map
                         [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
                             $this->columns,

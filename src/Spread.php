@@ -11,7 +11,6 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\WriteException;
 use LogicException;
-use XMLReader;
 use ZipArchive;
 
 /**
@@ -702,17 +701,13 @@ class Spread
      *
      * @param string[] $requiredColumns
      * @param string[] $headers
-     * @param XMLReader|null $reader Optional reader to close before throwing exception
      * @throws MissingColumnException
      */
-    public static function checkRequiredColumns(array $requiredColumns, array $headers, ?XMLReader $reader = null): void
+    public static function checkRequiredColumns(array $requiredColumns, array $headers): void
     {
         if (!empty($requiredColumns)) {
             $missing = array_diff($requiredColumns, $headers);
             if (!empty($missing)) {
-                if ($reader !== null) {
-                    $reader->close();
-                }
                 throw new MissingColumnException(array_values($missing));
             }
         }

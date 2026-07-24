@@ -167,9 +167,7 @@ class XlsxReader implements ReaderInterface
 
         // Pre-build column map and validate required columns from injected headers
         if (!empty($this->headers)) {
-            if ($this->assoc) {
-                Spread::checkNoDuplicateHeaders($this->headers);
-            }
+            Spread::checkNoDuplicateHeaders($this->headers);
             if (!empty($this->requiredColumns)) {
                 Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
             }
@@ -352,7 +350,7 @@ class XlsxReader implements ReaderInterface
                     $totalColumns = count($headers);
                     Spread::checkNoDuplicateHeaders($headers);
                     // Validate required columns
-                    Spread::checkRequiredColumns($this->requiredColumns, $headers, $reader);
+                    Spread::checkRequiredColumns($this->requiredColumns, $headers);
                     // Build column selection map
                     [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
                         $this->columns,
