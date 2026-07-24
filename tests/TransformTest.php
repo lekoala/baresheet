@@ -333,6 +333,79 @@ class TransformTest extends TestCase
         iterator_to_array(Transform::chunk([['a']], -1));
     }
 
+    public function testSlice(): void
+    {
+        $data = [
+            ['id' => 1],
+            ['id' => 2],
+            ['id' => 3],
+            ['id' => 4],
+            ['id' => 5],
+        ];
+
+        $result = iterator_to_array(Transform::slice($data, 1, 2));
+        self::assertSame([['id' => 2], ['id' => 3]], $result);
+    }
+
+    public function testSliceReindexesKeys(): void
+    {
+        $data = [
+            'a' => ['id' => 1],
+            'b' => ['id' => 2],
+            'c' => ['id' => 3],
+        ];
+
+        $result = iterator_to_array(Transform::slice($data, 1));
+        self::assertSame([0 => ['id' => 2], 1 => ['id' => 3]], $result);
+    }
+
+    public function testSliceWithoutLimitYieldsRemainder(): void
+    {
+        $data = [['id' => 1], ['id' => 2], ['id' => 3]];
+
+        $result = iterator_to_array(Transform::slice($data, 1));
+        self::assertSame([['id' => 2], ['id' => 3]], $result);
+    }
+
+    public function testSliceZeroLimitYieldsNothing(): void
+    {
+        $data = [['id' => 1], ['id' => 2]];
+
+        $result = iterator_to_array(Transform::slice($data, 0, 0));
+        self::assertSame([], $result);
+    }
+
+    public function testSliceStopsEarly(): void
+    {
+        $calls = 0;
+        $data = (function () use (&$calls) {
+            for ($i = 0; $i < 1000; $i++) {
+                $calls++;
+                yield ['id' => $i];
+            }
+        })();
+
+        $result = iterator_to_array(Transform::slice($data, 10, 5));
+        self::assertCount(5, $result);
+        self::assertSame(15, $calls);
+    }
+
+    public function testSliceNegativeOffsetThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Offset must be greater than or equal to 0.');
+
+        iterator_to_array(Transform::slice([['a']], -1));
+    }
+
+    public function testSliceNegativeLimitThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Limit must be greater than or equal to 0.');
+
+        iterator_to_array(Transform::slice([['a']], 0, -1));
+    }
+
     public function testChaining(): void
     {
         $data = [

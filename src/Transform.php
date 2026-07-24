@@ -176,6 +176,45 @@ class Transform
     }
 
     /**
+     * Slice an iterable without materializing it.
+     *
+     * Results are reindexed from 0, regardless of the original iterable's keys.
+     *
+     * @template TRow
+     * @param iterable<TRow> $data
+     * @return Generator<int, TRow>
+     */
+    public static function slice(iterable $data, int $offset = 0, ?int $limit = null): Generator
+    {
+        if ($offset < 0) {
+            throw new \InvalidArgumentException('Offset must be greater than or equal to 0.');
+        }
+
+        if ($limit !== null && $limit < 0) {
+            throw new \InvalidArgumentException('Limit must be greater than or equal to 0.');
+        }
+
+        if ($limit === 0) {
+            return;
+        }
+
+        $position = 0;
+        $yielded = 0;
+
+        foreach ($data as $item) {
+            if ($position++ < $offset) {
+                continue;
+            }
+
+            yield $item;
+
+            if ($limit !== null && ++$yielded >= $limit) {
+                return;
+            }
+        }
+    }
+
+    /**
      * Cast columns to specific types, throwing on invalid values.
      *
      * Same interface as cast(), but throws InvalidArgumentException with
