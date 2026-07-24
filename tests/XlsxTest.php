@@ -26,8 +26,9 @@ class XlsxTest extends TestCase
         $contentsHeader = file_get_contents(__DIR__ . '/data/header.xlsx');
         $options = new Options();
         $options->assoc = true;
+        $options->applyTo($reader);
         /** @var array<array<string, mixed>> $dataAssoc */
-        $dataAssoc = iterator_to_array($reader->readString((string) $contentsHeader, $options));
+        $dataAssoc = iterator_to_array($reader->readString((string) $contentsHeader));
         self::assertTrue($reader->assoc);
         self::assertNotEmpty($dataAssoc);
         self::assertArrayHasKey('email', $dataAssoc[0]);
@@ -222,7 +223,8 @@ class XlsxTest extends TestCase
     public function testReadXlsxAssoc(): void
     {
         $reader = new XlsxReader();
-        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/header.xlsx', new Options(assoc: true)));
+        (new Options(assoc: true))->applyTo($reader);
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/header.xlsx'));
         self::assertNotEmpty($data);
         self::assertArrayHasKey('email', $data[0]);
     }
@@ -529,7 +531,8 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_opts_' . time() . '.xlsx';
         $opts = new Options(meta: new \LeKoala\Baresheet\Meta(creator: 'OptsCreator'), sheet: 'ViaOpts');
         $writer = new XlsxWriter();
-        $writer->writeFile([['data']], $tempFile, $opts);
+        $opts->applyTo($writer);
+        $writer->writeFile([['data']], $tempFile);
 
         $zip = new \ZipArchive();
         $zip->open($tempFile);

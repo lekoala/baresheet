@@ -30,7 +30,8 @@ class Baresheet
         Spread::isSafePath($filename);
         $ext = self::getExtension($filename);
         $reader = self::getReader($ext);
-        return $reader->readFile($filename, $options);
+        $options?->applyTo($reader);
+        return $reader->readFile($filename);
     }
 
     /**
@@ -43,7 +44,8 @@ class Baresheet
     {
         $ext ??= Spread::getExtensionForContent($contents);
         $reader = self::getReader($ext);
-        return $reader->readString($contents, $options);
+        $options?->applyTo($reader);
+        return $reader->readString($contents);
     }
 
     /**
@@ -56,7 +58,8 @@ class Baresheet
         Spread::isSafePath($filename);
         $ext = self::getExtension($filename);
         $writer = self::getWriter($ext);
-        return $writer->writeFile($data, $filename, $options);
+        $options?->applyTo($writer);
+        return $writer->writeFile($data, $filename);
     }
 
     /**
@@ -69,7 +72,8 @@ class Baresheet
     public static function writeStream(iterable $data, string $ext, ?Options $options = null)
     {
         $writer = self::getWriter($ext);
-        return $writer->writeStream($data, $options);
+        $options?->applyTo($writer);
+        return $writer->writeStream($data);
     }
 
     /**
@@ -81,7 +85,8 @@ class Baresheet
     public static function writeString(iterable $data, string $ext, ?Options $options = null): string
     {
         $writer = self::getWriter($ext);
-        return $writer->writeString($data, $options);
+        $options?->applyTo($writer);
+        return $writer->writeString($data);
     }
 
     /**
@@ -93,7 +98,8 @@ class Baresheet
     {
         $ext = self::getExtension($filename);
         $writer = self::getWriter($ext);
-        $writer->output($data, $filename, $options);
+        $options?->applyTo($writer);
+        $writer->output($data, $filename);
     }
 
     /**

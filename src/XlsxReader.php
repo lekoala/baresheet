@@ -34,10 +34,8 @@ class XlsxReader implements ReaderInterface
     /**
      * @return Generator<mixed>
      */
-    public function readFile(string $filename, ?Options $options = null): Generator
+    public function readFile(string $filename): Generator
     {
-        $options?->applyTo($this);
-
         Spread::isSafePath($filename);
         if (!is_file($filename)) {
             throw new Exception("Invalid file {$filename}");
@@ -360,9 +358,8 @@ class XlsxReader implements ReaderInterface
     /**
      * @return Generator<mixed>
      */
-    public function readString(string $contents, ?Options $options = null): Generator
+    public function readString(string $contents): Generator
     {
-        $options?->applyTo($this);
         $filename = Spread::getTempFilename();
         try {
             file_put_contents($filename, $contents);

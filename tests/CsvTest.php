@@ -22,7 +22,8 @@ class CsvTest extends TestCase
     public function testReadCsvAssoc(): void
     {
         $reader = new CsvReader();
-        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/headers.csv', new Options(assoc: true)));
+        (new Options(assoc: true))->applyTo($reader);
+        $data = iterator_to_array($reader->readFile(__DIR__ . '/data/headers.csv'));
         self::assertCount(1, $data);
         self::assertArrayHasKey('email', $data[0]);
     }
@@ -380,9 +381,9 @@ class CsvTest extends TestCase
     public function testLimitWithAssoc(): void
     {
         $reader = new CsvReader();
+        (new Options(assoc: true, limit: 1))->applyTo($reader);
         $data = iterator_to_array($reader->readString(
             "name,value,extra\n1,2,3\n4,5,6\n7,8,9",
-            new Options(assoc: true, limit: 1),
         ));
         self::assertCount(1, $data);
         self::assertArrayHasKey('name', $data[0]);

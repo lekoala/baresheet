@@ -40,10 +40,8 @@ class OdsWriter implements WriterInterface
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
-    public function writeStream(iterable $data, ?Options $options = null)
+    public function writeStream(iterable $data)
     {
-        $options?->applyTo($this);
-
         $stream = Spread::getMaxMemTempStream();
 
         if ($this->canStream()) {
@@ -75,9 +73,9 @@ class OdsWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
      */
-    public function writeString(iterable $data, ?Options $options = null): string
+    public function writeString(iterable $data): string
     {
-        $stream = $this->writeStream($data, $options);
+        $stream = $this->writeStream($data);
         $contents = stream_get_contents($stream);
         fclose($stream);
         return $contents !== false ? $contents : '';
@@ -86,9 +84,8 @@ class OdsWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
      */
-    public function writeFile(iterable $data, string $filename, ?Options $options = null): bool
+    public function writeFile(iterable $data, string $filename): bool
     {
-        $options?->applyTo($this);
         $filename = Spread::ensureExtension($filename, 'ods');
         return $this->buildFile($data, $filename);
     }
@@ -96,9 +93,8 @@ class OdsWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
      */
-    public function output(iterable $data, string $filename, ?Options $options = null): void
+    public function output(iterable $data, string $filename): void
     {
-        $options?->applyTo($this);
         $filename = Spread::ensureExtension($filename, 'ods');
 
         if ($this->stream && $this->canStream()) {
@@ -128,9 +124,8 @@ class OdsWriter implements WriterInterface
      *
      * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
      */
-    public function outputStream(iterable $data, string $filename, ?Options $options = null): void
+    public function outputStream(iterable $data, string $filename): void
     {
-        $options?->applyTo($this);
         if (!class_exists(\ZipStream\ZipStream::class)) {
             throw new Exception(
                 'Streaming ODS requires maennchen/zipstream-php. '

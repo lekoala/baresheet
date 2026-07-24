@@ -123,29 +123,40 @@ $writer->writeFile($data, 'report.xlsx');
 
 ## Options
 
-There are two ways to pass options:
+Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration. There are three ways to configure an instance:
 
-**1. Directly on instances:**
+**1. Directly on properties:**
 
 ```php
 $reader = new CsvReader();
 $reader->assoc = true;
 $reader->separator = ";";
+```
 
-// Or directly in the constructor
+**2. Via the constructor:**
+
+```php
 $reader = new CsvReader(new Options(assoc: true, separator: ";"));
 ```
 
-**2. Options object** (works on any method, including the `Baresheet` facade). The constructor provides **full IDE autocomplete**:
+**3. Via `Options::applyTo()`**, which gives **full IDE autocomplete** and can reconfigure an already-constructed instance:
 
 ```php
 use LeKoala\Baresheet\Options;
 
 $opts = new Options(
-    assoc: true, 
+    assoc: true,
     separator: 'auto',
     meta: ['creator' => 'My App']
 );
+$opts->applyTo($reader);
+```
+
+`readFile()`, `readString()`, `writeFile()`, etc. no longer accept an `Options` argument directly — they simply read/write using whatever configuration the reader/writer instance currently holds. This avoids ambiguity about whether a per-call option leaks into subsequent calls: the instance's configuration *is* its state.
+
+The `Baresheet` facade keeps the convenient one-shot form, since it always creates a fresh reader/writer internally, applies the options to it, then reads/writes once:
+
+```php
 $rows = Baresheet::read('data.csv', $opts);
 ```
 

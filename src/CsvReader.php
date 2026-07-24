@@ -39,9 +39,8 @@ class CsvReader implements ReaderInterface
     /**
      * @return Generator<mixed>
      */
-    public function readString(string $contents, ?Options $options = null): Generator
+    public function readString(string $contents): Generator
     {
-        $options?->applyTo($this);
         $temp = Spread::getMaxMemTempStream();
         fwrite($temp, $contents);
         rewind($temp);
@@ -55,18 +54,16 @@ class CsvReader implements ReaderInterface
      *                          To read a non-seekable stream, disable BOM skipping/transcoding and
      *                          provide an explicit separator.
      */
-    public function readStream($stream, ?Options $options = null): Generator
+    public function readStream($stream): Generator
     {
-        $options?->applyTo($this);
         return $this->parseStream($stream);
     }
 
     /**
      * @return Generator<mixed>
      */
-    public function readFile(string $filename, ?Options $options = null): Generator
+    public function readFile(string $filename): Generator
     {
-        $options?->applyTo($this);
         $stream = Spread::getInputStream($filename);
         try {
             yield from $this->parseStream($stream);

@@ -12,7 +12,6 @@ interface WriterInterface
      */
     public function writeStream(
         iterable $data,
-        ?Options $options = null,
     );
 
     /**
@@ -20,7 +19,6 @@ interface WriterInterface
      */
     public function writeString(
         iterable $data,
-        ?Options $options = null,
     ): string;
 
     /**
@@ -29,7 +27,6 @@ interface WriterInterface
     public function writeFile(
         iterable $data,
         string $filename,
-        ?Options $options = null,
     ): bool;
 
     /**
@@ -38,7 +35,6 @@ interface WriterInterface
     public function output(
         iterable $data,
         string $filename,
-        ?Options $options = null,
     ): void;
 
     /**
@@ -47,6 +43,5 @@ interface WriterInterface
     public function outputStream(
         iterable $data,
         string $filename,
-        ?Options $options = null,
     ): void;
 }

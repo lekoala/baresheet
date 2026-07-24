@@ -13,7 +13,6 @@ interface ReaderInterface
      */
     public function readString(
         string $contents,
-        ?Options $options = null,
     ): Generator;
 
     /**
@@ -21,6 +20,5 @@ interface ReaderInterface
      */
     public function readFile(
         string $filename,
-        ?Options $options = null,
     ): Generator;
 }

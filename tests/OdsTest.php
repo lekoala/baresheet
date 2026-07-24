@@ -242,13 +242,14 @@ class OdsTest extends TestCase
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_ods_opts_' . time() . '.ods';
         $writer = new OdsWriter();
-        $writer->writeFile([['data']], $tempFile, new Options(
+        (new Options(
             meta: new \LeKoala\Baresheet\Meta(
                 title: 'OptTitle',
                 creator: 'OptCreator',
             ),
             sheet: 'OptSheet',
-        ));
+        ))->applyTo($writer);
+        $writer->writeFile([['data']], $tempFile);
 
         $zip = new \ZipArchive();
         $zip->open($tempFile);

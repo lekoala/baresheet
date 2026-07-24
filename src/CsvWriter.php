@@ -39,10 +39,8 @@ class CsvWriter implements WriterInterface
      * @param iterable<array<float|int|string|\Stringable|null>> $data
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
-    public function writeStream(iterable $data, ?Options $options = null)
+    public function writeStream(iterable $data)
     {
-        $options?->applyTo($this);
-
         $stream = Spread::getMaxMemTempStream();
         $this->writeInternal($stream, $data);
         rewind($stream);
@@ -52,9 +50,9 @@ class CsvWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
      */
-    public function writeString(iterable $data, ?Options $options = null): string
+    public function writeString(iterable $data): string
     {
-        $stream = $this->writeStream($data, $options);
+        $stream = $this->writeStream($data);
         $contents = stream_get_contents($stream);
         fclose($stream);
         return $contents !== false ? $contents : '';
@@ -63,9 +61,8 @@ class CsvWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
      */
-    public function writeFile(iterable $data, string $filename, ?Options $options = null): bool
+    public function writeFile(iterable $data, string $filename): bool
     {
-        $options?->applyTo($this);
         $filename = Spread::ensureExtension($filename, 'csv');
 
         $stream = Spread::getOutputStream($filename);
@@ -77,9 +74,8 @@ class CsvWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
      */
-    public function output(iterable $data, string $filename, ?Options $options = null): void
+    public function output(iterable $data, string $filename): void
     {
-        $options?->applyTo($this);
         $filename = Spread::ensureExtension($filename, 'csv');
 
         if ($this->stream) {
@@ -95,10 +91,8 @@ class CsvWriter implements WriterInterface
     /**
      * @param iterable<array<float|int|string|\Stringable|null>> $data
      */
-    public function outputStream(iterable $data, string $filename, ?Options $options = null): void
+    public function outputStream(iterable $data, string $filename): void
     {
-        $options?->applyTo($this);
-
         Spread::outputHeaders(self::MIMETYPE, $filename);
         $stream = Spread::getOutputStream();
         $this->writeInternal($stream, $data);
