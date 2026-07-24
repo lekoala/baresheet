@@ -17,6 +17,10 @@ literal-separator = true
 print-width = 120
 tab-width = 4
 use-tabs = false
+# PSR-12 requires the opening/closing brace of an empty class body on their
+# own lines; Mago's default collapses it to `{}`, which conflicted with phpcs
+# on src/Exception's marker classes.
+inline-empty-classlike-braces = false
 preserve-breaking-member-access-chain = true
 preserve-breaking-member-access-chain-first-method-on-same-line = true
 preserve-breaking-argument-list = true

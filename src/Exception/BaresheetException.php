@@ -11,4 +11,6 @@ use RuntimeException;
  * read/write operation. API misuse (bad arguments, invalid config) stays
  * as native InvalidArgumentException/LogicException instead.
  */
-class BaresheetException extends RuntimeException {}
+class BaresheetException extends RuntimeException
+{
+}
