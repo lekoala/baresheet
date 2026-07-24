@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
+/**
+ * @phpstan-type WritableCell float|int|string|\Stringable|null
+ * @phpstan-type WritableRow array<int|string, WritableCell>
+ */
 interface WriterInterface
 {
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
     public function writeStream(
@@ -15,14 +19,14 @@ interface WriterInterface
     );
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeString(
         iterable $data,
     ): string;
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeFile(
         iterable $data,
@@ -30,7 +34,7 @@ interface WriterInterface
     ): bool;
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function output(
         iterable $data,
@@ -38,7 +42,7 @@ interface WriterInterface
     ): void;
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function outputStream(
         iterable $data,

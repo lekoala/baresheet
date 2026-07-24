@@ -10,6 +10,8 @@ use ZipArchive;
 
 /**
  * Zero-dependency ODS writer using ZipArchive + raw XML.
+ *
+ * @phpstan-type WritableRow array<int|string, float|int|string|\Stringable|DateTimeInterface|null>
  */
 class OdsWriter implements WriterInterface
 {
@@ -37,7 +39,7 @@ class OdsWriter implements WriterInterface
     // -- Write API --
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
     public function writeStream(iterable $data)
@@ -71,7 +73,7 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeString(iterable $data): string
     {
@@ -82,7 +84,7 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeFile(iterable $data, string $filename): bool
     {
@@ -91,7 +93,7 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function output(iterable $data, string $filename): void
     {
@@ -122,7 +124,7 @@ class OdsWriter implements WriterInterface
      *
      * Requires maennchen/zipstream-php ^3.1.
      *
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function outputStream(iterable $data, string $filename): void
     {
@@ -139,7 +141,7 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      * @param resource|null $outputStream
      */
     private function streamIterative(iterable $data, $outputStream = null): void
@@ -185,7 +187,7 @@ class OdsWriter implements WriterInterface
     // -- Internal --
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      */
     private function buildFile(iterable $data, string $filename): bool
     {
@@ -253,7 +255,7 @@ class OdsWriter implements WriterInterface
     // -- XML generators --
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
+     * @param iterable<WritableRow> $data
      * @return resource
      */
     private function genContent(iterable $data)
@@ -379,8 +381,8 @@ class OdsWriter implements WriterInterface
     /**
      * Prepend a header row from associative keys or explicit headers option.
      *
-     * @param iterable<array<float|int|string|\Stringable|DateTimeInterface|null>> $data
-     * @return iterable<array<float|int|string|\Stringable|DateTimeInterface|null>>
+     * @param iterable<WritableRow> $data
+     * @return iterable<WritableRow>
      */
     private function prependHeaders(iterable $data): iterable
     {

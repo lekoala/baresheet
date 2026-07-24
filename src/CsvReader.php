@@ -11,6 +11,8 @@ use LogicException;
 
 /**
  * Zero-dependency CSV reader using native PHP fgetcsv.
+ *
+ * @phpstan-import-type Row from ReaderInterface
  */
 class CsvReader implements ReaderInterface
 {
@@ -40,7 +42,7 @@ class CsvReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readString(string $contents): Generator
     {
@@ -52,7 +54,7 @@ class CsvReader implements ReaderInterface
 
     /**
      * @param resource $stream
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      * @throws LogicException If the stream is not seekable and BOM/separator detection is required.
      *                          To read a non-seekable stream, disable BOM skipping/transcoding and
      *                          provide an explicit separator.
@@ -65,7 +67,7 @@ class CsvReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readFile(string $filename): Generator
     {
@@ -83,7 +85,7 @@ class CsvReader implements ReaderInterface
 
     /**
      * @param resource $stream
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     private function parseStream($stream): Generator
     {

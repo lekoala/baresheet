@@ -9,6 +9,8 @@ use LeKoala\Baresheet\Exception\WriteException;
 
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
+ *
+ * @phpstan-import-type WritableRow from WriterInterface
  */
 class CsvWriter implements WriterInterface
 {
@@ -37,7 +39,7 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
     public function writeStream(iterable $data)
@@ -49,7 +51,7 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeString(iterable $data): string
     {
@@ -60,7 +62,7 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function writeFile(iterable $data, string $filename): bool
     {
@@ -73,7 +75,7 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function output(iterable $data, string $filename): void
     {
@@ -90,7 +92,7 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     public function outputStream(iterable $data, string $filename): void
     {
@@ -104,7 +106,7 @@ class CsvWriter implements WriterInterface
 
     /**
      * @param resource $stream
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      */
     private function writeInternal($stream, iterable $data): void
     {

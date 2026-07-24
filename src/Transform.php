@@ -105,9 +105,10 @@ class Transform
      * Callback receives (array $row, int $index) and must return bool.
      * Only rows where the callback returns true are yielded.
      *
-     * @param iterable<array<mixed>> $data
-     * @param callable(array<mixed>, int): bool $fn
-     * @return Generator<array<mixed>>
+     * @template TRow of array
+     * @param iterable<TRow> $data
+     * @param callable(TRow, int): bool $fn
+     * @return Generator<int, TRow>
      */
     public static function filter(iterable $data, callable $fn): Generator
     {
@@ -151,8 +152,9 @@ class Transform
      *
      * Yields arrays of up to $size rows. The last chunk may be smaller.
      *
-     * @param iterable<array<mixed>> $data
-     * @return Generator<array<array<mixed>>>
+     * @template TRow
+     * @param iterable<TRow> $data
+     * @return Generator<int, list<TRow>>
      */
     public static function chunk(iterable $data, int $size): Generator
     {

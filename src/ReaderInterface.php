@@ -6,17 +6,20 @@ namespace LeKoala\Baresheet;
 
 use Generator;
 
+/**
+ * @phpstan-type Row array<int|string, mixed>
+ */
 interface ReaderInterface
 {
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readString(
         string $contents,
     ): Generator;
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readFile(
         string $filename,

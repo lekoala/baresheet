@@ -12,6 +12,8 @@ use ZipArchive;
 
 /**
  * Zero-dependency XLSX reader using ZipArchive + SimpleXML.
+ *
+ * @phpstan-import-type Row from ReaderInterface
  */
 class XlsxReader implements ReaderInterface
 {
@@ -39,7 +41,7 @@ class XlsxReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      * @throws InvalidDocumentException
      * @throws SheetNotFoundException
      */
@@ -143,7 +145,7 @@ class XlsxReader implements ReaderInterface
      * @param array<int, ?string> $cellFormats
      * @param array<int, ?string> $colFormats
      * @param array<string, bool> $isDateCache
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     private function parseWorksheet(
         \XMLReader $reader,
@@ -426,7 +428,7 @@ class XlsxReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readString(string $contents): Generator
     {

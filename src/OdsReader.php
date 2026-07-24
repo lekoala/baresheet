@@ -12,6 +12,8 @@ use ZipArchive;
 
 /**
  * Zero-dependency ODS reader using ZipArchive + SimpleXML.
+ *
+ * @phpstan-import-type Row from ReaderInterface
  */
 class OdsReader implements ReaderInterface
 {
@@ -46,7 +48,7 @@ class OdsReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      * @throws InvalidDocumentException
      * @throws SheetNotFoundException
      * @throws InvalidRowException
@@ -91,7 +93,7 @@ class OdsReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     public function readString(string $contents): Generator
     {
@@ -107,7 +109,7 @@ class OdsReader implements ReaderInterface
     }
 
     /**
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     private function parseContent(string $xmlFile): Generator
     {
@@ -204,7 +206,7 @@ class OdsReader implements ReaderInterface
      * @param int $yieldCount
      * @param array<string, int> $columnMap
      * @param array<int, true> $selectedIndices
-     * @return Generator<mixed>
+     * @return Generator<int, Row>
      */
     private function parseTable(
         \XMLReader $reader,
