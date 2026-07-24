@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use RuntimeException;
+use InvalidArgumentException;
+use LeKoala\Baresheet\Exception\WriteException;
 
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
@@ -119,7 +120,7 @@ class CsvWriter implements WriterInterface
                 $result = fwrite($stream, $bomToWrite);
             }
             if ($result === false) {
-                throw new RuntimeException('Failed to write BOM to stream');
+                throw new WriteException('Failed to write BOM to stream');
             }
 
             // If we are writing a non-UTF-8 BOM, we assume the user intends
@@ -207,7 +208,7 @@ class CsvWriter implements WriterInterface
             /** @var array<int|string, bool|float|int|string|null> $row */
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
-                throw new RuntimeException('Failed to write headers to stream');
+                throw new WriteException('Failed to write headers to stream');
             }
         }
 
@@ -262,7 +263,7 @@ class CsvWriter implements WriterInterface
             /** @var array<int|string, bool|float|int|string|null> $row */
             $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
             if ($result === false) {
-                throw new RuntimeException('Failed to write line');
+                throw new WriteException('Failed to write line');
             }
         }
     }
@@ -308,13 +309,13 @@ class CsvWriter implements WriterInterface
         }
         if ($bomToWrite->isUtf8()) {
             if (!self::isUtf8Encoding($outputEncoding)) {
-                throw new RuntimeException(
+                throw new InvalidArgumentException(
                     'Do not combine a UTF-8 BOM with a non-UTF-8 outputEncoding. Disable the BOM or use UTF-8 output.',
                 );
             }
             return;
         }
-        throw new RuntimeException(
+        throw new InvalidArgumentException(
             'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.',
         );
     }

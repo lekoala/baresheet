@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use InvalidArgumentException;
 use LeKoala\Baresheet\Bom;
 use LeKoala\Baresheet\CsvWriter;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 
 class CsvEncodingConflictTest extends TestCase
 {
@@ -18,7 +18,7 @@ class CsvEncodingConflictTest extends TestCase
         $writer->bom = Bom::Utf16Le;
         $writer->outputEncoding = 'UTF-16LE';
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
             'Do not combine a non-UTF-8 BOM with outputEncoding; the BOM already configures stream transcoding.',
         );
@@ -33,7 +33,7 @@ class CsvEncodingConflictTest extends TestCase
         $writer->bom = Bom::Utf8;
         $writer->outputEncoding = 'ISO-8859-1';
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(
             'Do not combine a UTF-8 BOM with a non-UTF-8 outputEncoding. Disable the BOM or use UTF-8 output.',
         );

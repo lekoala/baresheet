@@ -188,12 +188,44 @@ $rows = Baresheet::read('data.csv', $opts);
 | `requiredColumns` | string[]          | `[]`     | Read (CSV, XLSX, ODS)     |
 | `columns`         | string[]          | `[]`     | Read (CSV, XLSX, ODS)     |
 
+## Exceptions
+
+Errors originating from a document or a Baresheet read/write operation are thrown as a `LeKoala\Baresheet\Exception\BaresheetException` (a `RuntimeException`), so catching that one type covers everything below. Bad API usage (invalid arguments, wrong call order) is left as native `InvalidArgumentException`/`LogicException` instead.
+
+```text
+BaresheetException
+├── InvalidDocumentException   // corrupt ZIP, invalid XML, unreadable/unsafe file
+│   └── SheetNotFoundException // requested sheet name/index doesn't exist
+├── InvalidRowException        // strict-mode column count mismatch, invalid strict cast
+├── MissingColumnException     // required or explicitly selected column absent from headers
+├── UnsupportedFormatException // unknown/unrecognized format or extension
+└── WriteException             // write destination/stream/ZIP failure
+```
+
+```php
+use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\Exception\MissingColumnException;
+use LeKoala\Baresheet\Exception\BaresheetException;
+
+try {
+    $rows = iterator_to_array(Baresheet::read('products.csv', new Options(
+        requiredColumns: ['sku', 'price'],
+    )));
+} catch (MissingColumnException $e) {
+    // "Your file must contain the sku and price columns."
+} catch (BaresheetException $e) {
+    // any other document/operation error
+}
+```
+
+`InvalidRowException` exposes `$row` and `$column` when available, and `MissingColumnException` exposes the missing `$columns` list, for building precise error messages.
+
 ## Required Columns Validation
 
 Validate that input files contain expected columns before processing. This catches malformed files early, avoiding wasted cycles parsing invalid data.
 
 ```php
-// Throws RuntimeException if 'email' or 'price' columns are missing
+// Throws MissingColumnException if 'email' or 'price' columns are missing
 $rows = Baresheet::read('products.csv', new Options(
     assoc: true,
     requiredColumns: ['sku', 'price', 'qty']
@@ -205,10 +237,10 @@ foreach ($rows as $row) {
 }
 ```
 
-The validation occurs immediately after reading the header row and throws a descriptive exception listing the missing columns:
+The validation occurs immediately after reading the header row and throws a `MissingColumnException` listing the missing columns:
 
 ```
-RuntimeException: Missing required columns: price, qty
+Missing required columns: price, qty
 ```
 
 Works with all reader formats (CSV, XLSX, ODS) and the `Baresheet` facade.
@@ -300,7 +332,7 @@ Column selection provides dramatic performance improvements for XLSX and ODS fil
 Missing columns throw immediately:
 
 ```
-RuntimeException: Missing required columns: missing_column
+MissingColumnException: Missing required columns: missing_column
 ```
 
 ### Data Transformation

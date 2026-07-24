@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use DateTime;
-use Exception;
 use Generator;
-use RuntimeException;
+use LeKoala\Baresheet\Exception\BaresheetException;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\MissingColumnException;
+use LeKoala\Baresheet\Exception\WriteException;
+use LogicException;
 use XMLReader;
 use ZipArchive;
 
@@ -25,13 +28,13 @@ class Spread
     {
         $result = tempnam(sys_get_temp_dir(), 'BSH');
         if ($result === false) {
-            throw new Exception('Unable to create temp file');
+            throw new BaresheetException('Unable to create temp file');
         }
         return $result;
     }
 
     /**
-     * @throws RuntimeException
+     * @throws InvalidDocumentException
      */
     public static function isSafePath(string $path): void
     {
@@ -39,12 +42,12 @@ class Spread
             $scheme = strtolower($matches[1]);
             $allowedSchemes = ['php', 'file', 'zip'];
             if (!in_array($scheme, $allowedSchemes, true)) {
-                throw new RuntimeException('Invalid stream wrapper: ' . $scheme . ' is not allowed');
+                throw new InvalidDocumentException('Invalid stream wrapper: ' . $scheme . ' is not allowed');
             }
         }
 
         if (str_contains(strtolower($path), 'phar://')) {
-            throw new RuntimeException('Phar deserialization is not allowed');
+            throw new InvalidDocumentException('Phar deserialization is not allowed');
         }
     }
 
@@ -76,33 +79,35 @@ class Spread
         $mb = 4;
         $stream = fopen('php://temp/maxmemory:' . ($mb * 1024 * 1024), 'r+');
         if (!$stream) {
-            throw new RuntimeException('Failed to open stream');
+            throw new BaresheetException('Failed to open stream');
         }
         return $stream;
     }
 
     /**
      * @return resource
+     * @throws WriteException
      */
     public static function getOutputStream(string $filename = 'php://output')
     {
         self::isSafePath($filename);
         $stream = @fopen($filename, 'w');
         if (!$stream) {
-            throw new RuntimeException('Failed to open stream');
+            throw new WriteException('Failed to open stream');
         }
         return $stream;
     }
 
     /**
      * @return resource
+     * @throws InvalidDocumentException
      */
     public static function getInputStream(string $filename)
     {
         self::isSafePath($filename);
         $stream = @fopen($filename, 'r');
         if (!$stream) {
-            throw new RuntimeException('Failed to open stream');
+            throw new InvalidDocumentException('Failed to open stream');
         }
         return $stream;
     }
@@ -119,7 +124,7 @@ class Spread
     public static function outputHeaders(string $contentType, string $filename, ?int $size = null): void
     {
         if (headers_sent()) {
-            throw new RuntimeException('Headers already sent');
+            throw new LogicException('Headers already sent');
         }
 
         header('Content-Type: ' . $contentType);
@@ -343,7 +348,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new Exception('Failed to open zip archive, code: ' . self::zipError($result));
+                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError($result));
             }
 
             $props = self::zipGetData($zip, 'docProps/core.xml');
@@ -393,7 +398,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new Exception('Failed to open zip archive, code: ' . self::zipError($result));
+                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError($result));
             }
 
             $meta = self::zipGetData($zip, 'meta.xml');
@@ -451,7 +456,7 @@ class Spread
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception('Failed to open zip archive, code: ' . self::zipError((int) $result));
+            throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError((int) $result));
         }
         $names = match ($ext) {
             'xlsx' => self::getXlsxSheetNames($zip),
@@ -560,7 +565,7 @@ class Spread
         }
 
         if ($stat['size'] > $maxSize) {
-            throw new \RuntimeException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+            throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
         }
 
         $result = $zip->getFromIndex($idx);
@@ -652,7 +657,7 @@ class Spread
      * @param string[] $requiredColumns
      * @param string[] $headers
      * @param XMLReader|null $reader Optional reader to close before throwing exception
-     * @throws RuntimeException
+     * @throws MissingColumnException
      */
     public static function checkRequiredColumns(array $requiredColumns, array $headers, ?XMLReader $reader = null): void
     {
@@ -662,9 +667,7 @@ class Spread
                 if ($reader !== null) {
                     $reader->close();
                 }
-                throw new RuntimeException(
-                    'Missing required columns: ' . implode(', ', $missing),
-                );
+                throw new MissingColumnException(array_values($missing));
             }
         }
     }
@@ -675,7 +678,7 @@ class Spread
      * @param string[] $columns Columns to select
      * @param string[] $headers Available headers (file or explicit)
      * @return array{0: array<string, int>, 1: array<int, true>} [$columnMap, $selectedIndices]
-     * @throws RuntimeException If any column not found in headers
+     * @throws MissingColumnException If any column not found in headers
      */
     public static function buildColumnSelection(array $columns, array $headers): array
     {
@@ -702,9 +705,7 @@ class Spread
             }
 
             if (!empty($missing)) {
-                throw new RuntimeException(
-                    'Missing required columns: ' . implode(', ', $missing),
-                );
+                throw new MissingColumnException($missing);
             }
         }
 

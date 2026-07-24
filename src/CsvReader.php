@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use Generator;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\InvalidRowException;
+use LogicException;
 
 /**
  * Zero-dependency CSV reader using native PHP fgetcsv.
@@ -50,9 +53,11 @@ class CsvReader implements ReaderInterface
     /**
      * @param resource $stream
      * @return Generator<mixed>
-     * @throws \RuntimeException If the stream is not seekable and BOM/separator detection is required.
+     * @throws LogicException If the stream is not seekable and BOM/separator detection is required.
      *                          To read a non-seekable stream, disable BOM skipping/transcoding and
      *                          provide an explicit separator.
+     * @throws InvalidDocumentException If the CSV content can't be decoded with the current settings.
+     * @throws InvalidRowException If strict mode is enabled and a row doesn't match the expected column count.
      */
     public function readStream($stream): Generator
     {
@@ -91,7 +96,7 @@ class CsvReader implements ReaderInterface
             $this->separator === 'auto' || $this->skipInputBOM || $this->transcodeBomInput || $needsEncodingDetection;
 
         if (!$isSeekable && $needsSample) {
-            throw new \RuntimeException(
+            throw new LogicException(
                 'CsvReader requires a seekable stream when BOM detection, transcoding, encoding detection, or separator auto-detection is enabled.',
             );
         }
@@ -118,7 +123,7 @@ class CsvReader implements ReaderInterface
             // If it's not UTF-8, transcode the stream
             if (!$inputBOM->isUtf8()) {
                 if (!$this->transcodeBomInput) {
-                    throw new \RuntimeException(
+                    throw new InvalidDocumentException(
                         "Cannot parse {$inputBOM->encoding()} CSV without transcoding to UTF-8. Please enable transcodeBomInput.",
                     );
                 }
@@ -126,7 +131,7 @@ class CsvReader implements ReaderInterface
                 $encoding = $inputBOM->encoding();
                 $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
                 if (!$filter) {
-                    throw new \RuntimeException(
+                    throw new InvalidDocumentException(
                         "Failed to append iconv filter for encoding {$encoding}. Ensure iconv extension is enabled.",
                     );
                 }
@@ -205,8 +210,9 @@ class CsvReader implements ReaderInterface
                     $expectedCols = $colCount;
                 } elseif ($colCount !== $expectedCols) {
                     $rowIdx = $count + 1;
-                    throw new \RuntimeException(
+                    throw new InvalidRowException(
                         "Row {$rowIdx} has {$colCount} columns, expected {$expectedCols}. Potential malformed data or unclosed quote.",
+                        row: $rowIdx,
                     );
                 }
             }
@@ -225,7 +231,10 @@ class CsvReader implements ReaderInterface
                 $expected = count($headers);
                 if ($colCount !== $expected) {
                     $rowIdx = $count + 1;
-                    throw new \RuntimeException("Row {$rowIdx} has {$colCount} columns, expected {$expected}");
+                    throw new InvalidRowException(
+                        "Row {$rowIdx} has {$colCount} columns, expected {$expected}",
+                        row: $rowIdx,
+                    );
                 }
                 // Fast path: skip array_combine when columns are selected — index directly
                 if (!empty($columnMap)) {
@@ -261,8 +270,9 @@ class CsvReader implements ReaderInterface
 
         if (!feof($stream)) {
             $rowIdx = $count + 1;
-            throw new \RuntimeException(
+            throw new InvalidRowException(
                 "Failed to parse CSV row {$rowIdx}. Potential malformed data or unclosed quote.",
+                row: $rowIdx,
             );
         }
     }

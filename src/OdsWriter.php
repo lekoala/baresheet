@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
-use Exception;
+use LeKoala\Baresheet\Exception\WriteException;
 use ZipArchive;
 
 /**
@@ -56,7 +56,7 @@ class OdsWriter implements WriterInterface
                     $result = stream_copy_to_stream($tmpStream, $stream);
                     fclose($tmpStream);
                     if ($result === false) {
-                        throw new Exception('Failed to copy temp file to stream');
+                        throw new WriteException('Failed to copy temp file to stream');
                     }
                 }
             } finally {
@@ -127,7 +127,7 @@ class OdsWriter implements WriterInterface
     public function outputStream(iterable $data, string $filename): void
     {
         if (!class_exists(\ZipStream\ZipStream::class)) {
-            throw new Exception(
+            throw new WriteException(
                 'Streaming ODS requires maennchen/zipstream-php. '
                 . 'Install it with: composer require maennchen/zipstream-php',
             );
@@ -191,14 +191,14 @@ class OdsWriter implements WriterInterface
     {
         $destinationDir = dirname($filename);
         if (!is_writable($destinationDir)) {
-            throw new Exception("Directory '{$destinationDir}' is not writable");
+            throw new WriteException("Directory '{$destinationDir}' is not writable");
         }
 
         // Use tempPath when the destination filesystem doesn't support ZipArchive well
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'ods_native');
             if (!$baseName) {
-                throw new Exception('Failed to create temp file in ' . $this->tempPath);
+                throw new WriteException('Failed to create temp file in ' . $this->tempPath);
             }
         } else {
             $baseName = $filename;
@@ -207,7 +207,7 @@ class OdsWriter implements WriterInterface
         $zip = new ZipArchive();
         $result = $zip->open($baseName, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         if ($result !== true) {
-            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
+            throw new WriteException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
         // mimetype must be first entry and stored uncompressed
@@ -228,7 +228,7 @@ class OdsWriter implements WriterInterface
             $destinationFile = $zip->filename;
             $closeResult = $zip->close();
             if ($closeResult === false) {
-                throw new Exception("Failed to close file '{$destinationFile}'");
+                throw new WriteException("Failed to close file '{$destinationFile}'");
             }
         } finally {
             if (is_resource($contentStream)) {
@@ -260,7 +260,7 @@ class OdsWriter implements WriterInterface
     {
         $fd = tmpfile();
         if ($fd === false) {
-            throw new Exception('Failed to open temp stream');
+            throw new WriteException('Failed to open temp stream');
         }
 
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
@@ -356,7 +356,7 @@ class OdsWriter implements WriterInterface
             if (($r % $bufferSizeOpt) === 0) {
                 $res = fwrite($fd, $buffer);
                 if ($res === false) {
-                    throw new \RuntimeException('Failed to write to buffer');
+                    throw new WriteException('Failed to write to buffer');
                 }
                 $buffer = '';
             }
@@ -365,7 +365,7 @@ class OdsWriter implements WriterInterface
         if ($buffer !== '') {
             $res = fwrite($fd, $buffer);
             if ($res === false) {
-                throw new \RuntimeException('Failed to write to buffer');
+                throw new WriteException('Failed to write to buffer');
             }
         }
 

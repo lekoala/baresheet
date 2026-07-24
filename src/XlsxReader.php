@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use Exception;
 use Generator;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\SheetNotFoundException;
 use ZipArchive;
 
 /**
@@ -33,21 +34,23 @@ class XlsxReader implements ReaderInterface
 
     /**
      * @return Generator<mixed>
+     * @throws InvalidDocumentException
+     * @throws SheetNotFoundException
      */
     public function readFile(string $filename): Generator
     {
         Spread::isSafePath($filename);
         if (!is_file($filename)) {
-            throw new Exception("Invalid file {$filename}");
+            throw new InvalidDocumentException("Invalid file {$filename}");
         }
         if (!is_readable($filename)) {
-            throw new Exception("File {$filename} is not readable");
+            throw new InvalidDocumentException("File {$filename} is not readable");
         }
 
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError($result));
+            throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
         // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
@@ -97,7 +100,7 @@ class XlsxReader implements ReaderInterface
         $wsIdx = $zip->locateName($wsPath);
         if ($wsIdx === false) {
             $zip->close();
-            throw new Exception('No data');
+            throw new InvalidDocumentException('No data');
         }
         $zip->close();
 
@@ -409,7 +412,7 @@ class XlsxReader implements ReaderInterface
         }
 
         if (!$target) {
-            throw new Exception("Sheet '{$this->sheet}' not found");
+            throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
         }
 
         // Resolve rId to target path from workbook relationships

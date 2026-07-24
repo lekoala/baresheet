@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\CsvReader;
+use LogicException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -91,7 +92,7 @@ class CsvBomHandlingTest extends TestCase
 
         $reader = new CsvReader();
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage(
             'CsvReader requires a seekable stream when BOM detection, transcoding, encoding detection, or separator auto-detection is enabled.',
         );

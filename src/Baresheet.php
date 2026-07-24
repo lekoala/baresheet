@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use Exception;
 use Generator;
+use LeKoala\Baresheet\Exception\UnsupportedFormatException;
 
 /**
  * Lightweight helper for reading/writing without knowing the format upfront.
@@ -24,6 +24,7 @@ class Baresheet
      * Read a file, auto-detecting format from extension.
      *
      * @return Generator<mixed>
+     * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function read(string $filename, ?Options $options = null): Generator
     {
@@ -39,6 +40,7 @@ class Baresheet
      *
      * @param string|null $ext  Force extension ('csv', 'xlsx', or 'ods'). Auto-detects if null.
      * @return Generator<mixed>
+     * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function readString(string $contents, ?string $ext = null, ?Options $options = null): Generator
     {
@@ -52,6 +54,7 @@ class Baresheet
      * Write data to a file, format determined by extension.
      *
      * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function write(iterable $data, string $filename, ?Options $options = null): bool
     {
@@ -93,6 +96,7 @@ class Baresheet
      * Stream data as a download, format determined by extension.
      *
      * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function output(iterable $data, string $filename, ?Options $options = null): void
     {
@@ -104,6 +108,8 @@ class Baresheet
 
     /**
      * Get a reader instance for the given extension.
+     *
+     * @throws UnsupportedFormatException
      */
     public static function getReader(string $ext): ReaderInterface
     {
@@ -111,12 +117,14 @@ class Baresheet
             self::EXT_CSV => new CsvReader(),
             self::EXT_XLSX => new XlsxReader(),
             self::EXT_ODS => new OdsReader(),
-            default => throw new Exception("Unsupported format: {$ext}"),
+            default => throw new UnsupportedFormatException("Unsupported format: {$ext}"),
         };
     }
 
     /**
      * Get a writer instance for the given extension.
+     *
+     * @throws UnsupportedFormatException
      */
     public static function getWriter(string $ext): WriterInterface
     {
@@ -124,7 +132,7 @@ class Baresheet
             self::EXT_CSV => new CsvWriter(),
             self::EXT_XLSX => new XlsxWriter(),
             self::EXT_ODS => new OdsWriter(),
-            default => throw new Exception("Unsupported format: {$ext}"),
+            default => throw new UnsupportedFormatException("Unsupported format: {$ext}"),
         };
     }
 
@@ -138,9 +146,13 @@ class Baresheet
                 if ($header !== false) {
                     return Spread::getExtensionForContent($header);
                 }
-                throw new Exception('Cannot determine format: file has no extension and content could not be read');
+                throw new UnsupportedFormatException(
+                    'Cannot determine format: file has no extension and content could not be read',
+                );
             }
-            throw new Exception("Cannot determine format: file has no extension and does not exist at '{$filename}'");
+            throw new UnsupportedFormatException(
+                "Cannot determine format: file has no extension and does not exist at '{$filename}'",
+            );
         }
         return $ext;
     }

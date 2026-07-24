@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
-use Exception;
+use LeKoala\Baresheet\Exception\WriteException;
 use ZipArchive;
 
 /**
@@ -60,7 +60,7 @@ class XlsxWriter implements WriterInterface
                     $result = stream_copy_to_stream($tmpStream, $stream);
                     fclose($tmpStream);
                     if ($result === false) {
-                        throw new Exception('Failed to copy temp file to stream');
+                        throw new WriteException('Failed to copy temp file to stream');
                     }
                 }
             } finally {
@@ -131,7 +131,7 @@ class XlsxWriter implements WriterInterface
     public function outputStream(iterable $data, string $filename): void
     {
         if (!class_exists(\ZipStream\ZipStream::class)) {
-            throw new Exception(
+            throw new WriteException(
                 'Streaming XLSX requires maennchen/zipstream-php. '
                 . 'Install it with: composer require maennchen/zipstream-php',
             );
@@ -216,7 +216,7 @@ class XlsxWriter implements WriterInterface
     {
         $destinationDir = dirname($filename);
         if (!is_writable($destinationDir)) {
-            throw new Exception("Directory '{$destinationDir}' is not writable");
+            throw new WriteException("Directory '{$destinationDir}' is not writable");
         }
 
         $mode = ZipArchive::CREATE | ZipArchive::OVERWRITE;
@@ -224,7 +224,7 @@ class XlsxWriter implements WriterInterface
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'xlsx_native');
             if (!$baseName) {
-                throw new Exception('Failed to create temp file in ' . $this->tempPath);
+                throw new WriteException('Failed to create temp file in ' . $this->tempPath);
             }
         } else {
             $baseName = $filename;
@@ -233,14 +233,14 @@ class XlsxWriter implements WriterInterface
         $zip = new ZipArchive();
         $result = $zip->open($baseName, $mode);
         if ($result !== true) {
-            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
+            throw new WriteException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
         $stream = $this->writeToZip($zip, $data);
         try {
             $destinationFile = $zip->filename;
             $closeResult = $zip->close();
             if ($closeResult === false) {
-                throw new Exception("Failed to close file '{$destinationFile}'");
+                throw new WriteException("Failed to close file '{$destinationFile}'");
             }
         } finally {
             if (is_resource($stream)) {
@@ -338,7 +338,7 @@ class XlsxWriter implements WriterInterface
         // calculate column widths and write the <cols> section before <sheetData>.
         $dataStream = tmpfile();
         if (!$dataStream) {
-            throw new Exception('Failed to get temp file for sheet data');
+            throw new WriteException('Failed to get temp file for sheet data');
         }
 
         $r = 0;
@@ -448,7 +448,7 @@ class XlsxWriter implements WriterInterface
         $worksheetStream = tmpfile();
         if (!$worksheetStream) {
             fclose($dataStream);
-            throw new Exception('Failed to get temp file for worksheet');
+            throw new WriteException('Failed to get temp file for worksheet');
         }
 
         $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";

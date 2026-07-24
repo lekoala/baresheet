@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet\Tests;
 
 use DateTimeInterface;
 use Generator;
+use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Transform;
 use PHPUnit\Framework\TestCase;
 
@@ -382,7 +383,7 @@ class TransformTest extends TestCase
             ['qty' => 'abc'],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 0: Column \'qty\' value \'abc\' is not a valid integer');
 
         iterator_to_array(Transform::castStrict($data, ['qty' => 'int']));
@@ -394,7 +395,7 @@ class TransformTest extends TestCase
             ['price' => 'not-a-number'],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 0: Column \'price\' value \'not-a-number\' is not a valid float');
 
         iterator_to_array(Transform::castStrict($data, ['price' => 'float']));
@@ -406,7 +407,7 @@ class TransformTest extends TestCase
             ['active' => 'perhaps'],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 0: Column \'active\' value \'perhaps\' is not a valid boolean');
 
         iterator_to_array(Transform::castStrict($data, ['active' => 'bool']));
@@ -429,7 +430,7 @@ class TransformTest extends TestCase
             ['created' => 'clearly-not-a-date'],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('Row 0: Column \'created\' value \'clearly-not-a-date\' is not a valid date');
 
         iterator_to_array(Transform::castStrict($data, ['created' => 'date']));
@@ -452,7 +453,7 @@ class TransformTest extends TestCase
             ['qty' => 'abc'],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('is not a valid integer');
 
         iterator_to_array(Transform::castStrict($data, ['qty' => '?int']));
@@ -487,7 +488,7 @@ class TransformTest extends TestCase
             ['qty' => ''],
         ];
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidRowException::class);
         $this->expectExceptionMessage('cannot be null/empty');
 
         iterator_to_array(Transform::castStrict($data, ['qty' => 'int']));

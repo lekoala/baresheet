@@ -7,6 +7,7 @@ namespace LeKoala\Baresheet;
 use DateTime;
 use DateTimeInterface;
 use Generator;
+use LeKoala\Baresheet\Exception\InvalidRowException;
 
 /**
  * Data transformation pipelines for spreadsheet rows.
@@ -182,7 +183,8 @@ class Transform
      * @param iterable<array<mixed>> $data
      * @param array<int|string, string> $types
      * @return Generator<array<mixed>>
-     * @throws \InvalidArgumentException
+     * @throws InvalidRowException If a value can't be cast to its declared type.
+     * @throws \InvalidArgumentException If a declared type is not recognized.
      */
     public static function castStrict(iterable $data, array $types): Generator
     {
@@ -255,8 +257,10 @@ class Transform
             if ($isNullable || $baseType === 'date') {
                 return null;
             }
-            throw new \InvalidArgumentException(
+            throw new InvalidRowException(
                 "Row {$rowNum}: Column '{$col}' cannot be null/empty for type {$type}",
+                row: $rowNum,
+                column: (string) $col,
             );
         }
 
@@ -281,8 +285,10 @@ class Transform
         if (is_numeric($str)) {
             return (int) $str;
         }
-        throw new \InvalidArgumentException(
+        throw new InvalidRowException(
             "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid integer",
+            row: $rowNum,
+            column: (string) $col,
         );
     }
 
@@ -291,8 +297,10 @@ class Transform
         if (is_numeric($str)) {
             return (float) $str;
         }
-        throw new \InvalidArgumentException(
+        throw new InvalidRowException(
             "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid float",
+            row: $rowNum,
+            column: (string) $col,
         );
     }
 
@@ -302,8 +310,10 @@ class Transform
         if ($result !== null) {
             return $result;
         }
-        throw new \InvalidArgumentException(
+        throw new InvalidRowException(
             "Row {$rowNum}: Column '{$col}' value '{$str}' is not a valid boolean",
+            row: $rowNum,
+            column: (string) $col,
         );
     }
 
@@ -311,9 +321,12 @@ class Transform
     {
         try {
             return new DateTime($value);
-        } catch (\Exception) {
-            throw new \InvalidArgumentException(
+        } catch (\Exception $e) {
+            throw new InvalidRowException(
                 "Row {$rowNum}: Column '{$col}' value '{$value}' is not a valid date",
+                row: $rowNum,
+                column: (string) $col,
+                previous: $e,
             );
         }
     }

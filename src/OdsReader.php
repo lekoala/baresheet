@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use Exception;
 use Generator;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
+use LeKoala\Baresheet\Exception\InvalidRowException;
+use LeKoala\Baresheet\Exception\SheetNotFoundException;
 use ZipArchive;
 
 /**
@@ -37,25 +39,28 @@ class OdsReader implements ReaderInterface
 
     /**
      * @return Generator<mixed>
+     * @throws InvalidDocumentException
+     * @throws SheetNotFoundException
+     * @throws InvalidRowException
      */
     public function readFile(string $filename): Generator
     {
         Spread::isSafePath($filename);
         if (!is_file($filename)) {
-            throw new Exception("Invalid file {$filename}");
+            throw new InvalidDocumentException("Invalid file {$filename}");
         }
         if (!is_readable($filename)) {
-            throw new Exception("File {$filename} is not readable");
+            throw new InvalidDocumentException("File {$filename} is not readable");
         }
 
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new Exception('Failed to open zip archive, code: ' . Spread::zipError($result));
+            throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
         if ($zip->locateName('content.xml') === false) {
             $zip->close();
-            throw new Exception('No content.xml found in ODS file');
+            throw new InvalidDocumentException('No content.xml found in ODS file');
         }
         $zip->close();
 
@@ -142,7 +147,7 @@ class OdsReader implements ReaderInterface
         $reader->close();
 
         if ($this->sheet !== null) {
-            throw new Exception("Sheet '{$this->sheet}' not found");
+            throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
         }
     }
 
@@ -306,8 +311,10 @@ class OdsReader implements ReaderInterface
 
                 if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
                     $colCount = count($rowData);
-                    throw new \RuntimeException(
-                        "Row has {$colCount} columns, expected {$totalColumns}",
+                    $rowIdx = $yieldCount + 1;
+                    throw new InvalidRowException(
+                        "Row {$rowIdx} has {$colCount} columns, expected {$totalColumns}",
+                        row: $rowIdx,
                     );
                 }
 
