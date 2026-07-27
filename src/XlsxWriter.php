@@ -6,7 +6,6 @@ namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
-use LeKoala\Baresheet\HeaderSchema;
 use ZipArchive;
 
 /**
@@ -307,7 +306,7 @@ class XlsxWriter implements WriterInterface
      * Wrap data with header rows (flat or hierarchical) according to the schema.
      *
      * @param iterable<WritableRow> $data
-     * @return iterable<WritableRow>
+     * @return iterable<array<int|string, mixed>>
      */
     private function wrapRows(iterable $data, ?HeaderSchema $schema): iterable
     {
@@ -352,10 +351,16 @@ class XlsxWriter implements WriterInterface
         $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
         if ($headerSchema !== null) {
             $headerRowsRemaining = count($headerSchema->headerRows());
-        } elseif ($this->boldHeaders || (is_array($data) && !array_is_list(reset($data)))) {
-            $headerRowsRemaining = 1;
         } else {
             $headerRowsRemaining = 0;
+            if ($this->boldHeaders) {
+                $headerRowsRemaining = 1;
+            } elseif (is_array($data)) {
+                $firstRow = reset($data);
+                if (is_array($firstRow) && !array_is_list($firstRow)) {
+                    $headerRowsRemaining = 1;
+                }
+            }
         }
         $wrappedData = $this->wrapRows($data, $headerSchema);
 
@@ -379,7 +384,7 @@ class XlsxWriter implements WriterInterface
                     $excelDate = Spread::dateToExcel($value);
                     $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                     $vl = 16;
-                } elseif ($value === null || $value === '' || (!is_scalar($value) && !$value instanceof \Stringable)) { // @phpstan-ignore-line
+                } elseif ($value === null || $value === '' || (!is_scalar($value) && !$value instanceof \Stringable)) {
                     $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } else {

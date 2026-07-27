@@ -6,7 +6,6 @@ namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
-use LeKoala\Baresheet\HeaderSchema;
 use ZipArchive;
 
 /**
@@ -295,10 +294,16 @@ class OdsWriter implements WriterInterface
         $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
         if ($headerSchema !== null) {
             $headerRowsRemaining = count($headerSchema->headerRows());
-        } elseif ($this->boldHeaders || (is_array($data) && !array_is_list(reset($data)))) {
-            $headerRowsRemaining = 1;
         } else {
             $headerRowsRemaining = 0;
+            if ($this->boldHeaders) {
+                $headerRowsRemaining = 1;
+            } elseif (is_array($data)) {
+                $firstRow = reset($data);
+                if (is_array($firstRow) && !array_is_list($firstRow)) {
+                    $headerRowsRemaining = 1;
+                }
+            }
         }
         $wrappedData = $this->wrapRows($data, $headerSchema);
 
@@ -350,7 +355,14 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 } else {
-                    $escaped = Spread::escapeXml((string) $value);
+                    if ($value instanceof \Stringable) {
+                        $strValue = $value->__toString();
+                    } elseif (is_scalar($value)) {
+                        $strValue = (string) $value;
+                    } else {
+                        $strValue = '';
+                    }
+                    $escaped = Spread::escapeXml($strValue);
                     $buffer .=
                         '<table:table-cell'
                         . $rowCellStyle
@@ -392,7 +404,7 @@ class OdsWriter implements WriterInterface
      * Wrap data with header rows (flat or hierarchical) according to the schema.
      *
      * @param iterable<WritableRow> $data
-     * @return iterable<WritableRow>
+     * @return iterable<array<int|string, mixed>>
      */
     private function wrapRows(iterable $data, ?HeaderSchema $schema): iterable
     {
