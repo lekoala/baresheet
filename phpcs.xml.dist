@@ -10,6 +10,7 @@
     <!-- inherit rules from: -->
     <rule ref="PSR12">
         <exclude name="PSR12.Classes.AnonClassDeclaration.SpaceAfterKeyword" />
+        <exclude name="PSR12.Operators.OperatorSpacing" />
     </rule>
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
 
