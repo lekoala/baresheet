@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
+use LeKoala\Baresheet\HeaderSchema;
 use ZipArchive;
 
 /**
@@ -291,8 +292,15 @@ class OdsWriter implements WriterInterface
         fwrite($fd, '<office:body><office:spreadsheet>');
         fwrite($fd, '<table:table table:name="' . $sheetName . '" table:style-name="ta1">');
 
-        $wrappedData = $this->prependHeaders($data);
-        $isFirstRow = true;
+        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+        if ($headerSchema !== null) {
+            $headerRowsRemaining = count($headerSchema->headerRows());
+        } elseif ($this->boldHeaders || (is_array($data) && !array_is_list(reset($data)))) {
+            $headerRowsRemaining = 1;
+        } else {
+            $headerRowsRemaining = 0;
+        }
+        $wrappedData = $this->wrapRows($data, $headerSchema);
 
         $boldHeadersOpt = $this->boldHeaders;
         $bufferSizeOpt = self::BUFFER_SIZE;
@@ -303,7 +311,7 @@ class OdsWriter implements WriterInterface
             $r++;
             $buffer .= '<table:table-row>';
 
-            $rowCellStyle = $isFirstRow && $boldHeadersOpt ? ' table:style-name="bold"' : '';
+            $rowCellStyle = $headerRowsRemaining > 0 && $boldHeadersOpt ? ' table:style-name="bold"' : '';
 
             foreach ($row as $value) {
                 if ($value instanceof DateTimeInterface) {
@@ -353,7 +361,9 @@ class OdsWriter implements WriterInterface
                         . '</table:table-cell>';
                 }
             }
-            $isFirstRow = false;
+            if ($headerRowsRemaining > 0) {
+                $headerRowsRemaining--;
+            }
             $buffer .= '</table:table-row>';
             if (($r % $bufferSizeOpt) === 0) {
                 $res = fwrite($fd, $buffer);
@@ -379,17 +389,17 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * Prepend a header row from associative keys or explicit headers option.
+     * Wrap data with header rows (flat or hierarchical) according to the schema.
      *
      * @param iterable<WritableRow> $data
      * @return iterable<WritableRow>
      */
-    private function prependHeaders(iterable $data): iterable
+    private function wrapRows(iterable $data, ?HeaderSchema $schema): iterable
     {
-        if (!empty($this->headers)) {
-            yield $this->headers;
+        if ($schema !== null) {
+            yield from $schema->headerRows();
             foreach ($data as $row) {
-                yield array_values($row);
+                yield $schema->flattenRow((array) $row);
             }
             return;
         }

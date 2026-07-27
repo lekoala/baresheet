@@ -385,4 +385,100 @@ class OdsTest extends TestCase
             $content,
         );
     }
+
+    public function testHierarchicalHeadersRoundtrip(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_ods_hier_' . time() . '.ods';
+        $writer = new OdsWriter();
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $writer->writeFile([
+            ['Alice', '30', '95'],
+            ['Bob', '25', '87'],
+        ], $tempFile);
+        self::assertTrue(is_file($tempFile));
+
+        $reader = new OdsReader();
+        $data = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(4, $data);
+
+        self::assertEquals('Info', $data[0][0]);
+        self::assertEquals('Info', $data[0][1]);
+        self::assertEquals('Stats', $data[0][2]);
+
+        self::assertEquals('Name', $data[1][0]);
+        self::assertEquals('Age', $data[1][1]);
+        self::assertEquals('Score', $data[1][2]);
+
+        self::assertEquals('Alice', $data[2][0]);
+        self::assertEquals('30', $data[2][1]);
+        self::assertEquals('95', $data[2][2]);
+
+        self::assertEquals('Bob', $data[3][0]);
+        self::assertEquals('25', $data[3][1]);
+        self::assertEquals('87', $data[3][2]);
+
+        unlink($tempFile);
+    }
+
+    public function testHierarchicalHeadersRoundtripAssoc(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_ods_hier_assoc_' . time() . '.ods';
+        $writer = new OdsWriter();
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $writer->writeFile([
+            ['Alice', '30', '95'],
+            ['Bob', '25', '87'],
+        ], $tempFile);
+
+        $reader = new OdsReader();
+        $reader->assoc = true;
+        $reader->headerRows = 2;
+        $data = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(2, $data);
+
+        self::assertSame(['Name' => 'Alice', 'Age' => '30'], $data[0]['Info']);
+        self::assertSame(['Score' => '95'], $data[0]['Stats']);
+
+        self::assertSame(['Name' => 'Bob', 'Age' => '25'], $data[1]['Info']);
+        self::assertSame(['Score' => '87'], $data[1]['Stats']);
+
+        unlink($tempFile);
+    }
+
+    public function testHierarchicalHeadersBold(): void
+    {
+        $writer = new OdsWriter();
+        $writer->boldHeaders = true;
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $output = $writer->writeString([['Alice', 30, 95]]);
+
+        $tempFile = sys_get_temp_dir() . '/test_ods_hier_bold_' . time() . '.ods';
+        file_put_contents($tempFile, $output);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $content = $zip->getFromName('content.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        $rows = explode('</table:table-row>', $content);
+
+        self::assertStringContainsString('table:style-name="bold"', $rows[0]);
+        self::assertStringContainsString('<text:p>Info</text:p>', $rows[0]);
+
+        self::assertStringContainsString('table:style-name="bold"', $rows[1]);
+        self::assertStringContainsString('<text:p>Name</text:p>', $rows[1]);
+
+        self::assertStringNotContainsString('table:style-name="bold"', $rows[2]);
+        self::assertStringContainsString('<text:p>Alice</text:p>', $rows[2]);
+    }
 }

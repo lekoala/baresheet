@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
+use LeKoala\Baresheet\HeaderSchema;
 use ZipArchive;
 
 /**
@@ -303,17 +304,17 @@ class XlsxWriter implements WriterInterface
     }
 
     /**
-     * Prepend a header row from associative keys or explicit headers option.
+     * Wrap data with header rows (flat or hierarchical) according to the schema.
      *
      * @param iterable<WritableRow> $data
      * @return iterable<WritableRow>
      */
-    private function prependHeaders(iterable $data): iterable
+    private function wrapRows(iterable $data, ?HeaderSchema $schema): iterable
     {
-        if (!empty($this->headers)) {
-            yield $this->headers;
+        if ($schema !== null) {
+            yield from $schema->headerRows();
             foreach ($data as $row) {
-                yield array_values($row);
+                yield $schema->flattenRow((array) $row);
             }
             return;
         }
@@ -347,8 +348,16 @@ class XlsxWriter implements WriterInterface
         $colWidths = [];
         $boldStyle = $this->boldHeaders ? ' s="2"' : '';
         $colCache = [];
-        $wrappedData = $this->prependHeaders($data);
-        $isFirstRow = true;
+
+        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+        if ($headerSchema !== null) {
+            $headerRowsRemaining = count($headerSchema->headerRows());
+        } elseif ($this->boldHeaders || (is_array($data) && !array_is_list(reset($data)))) {
+            $headerRowsRemaining = 1;
+        } else {
+            $headerRowsRemaining = 0;
+        }
+        $wrappedData = $this->wrapRows($data, $headerSchema);
 
         $autoWidth = $this->autoWidth;
         $sharedStringsOpt = $this->sharedStrings;
@@ -358,7 +367,7 @@ class XlsxWriter implements WriterInterface
         foreach ($wrappedData as $dataRow) {
             $r++;
             $i = 0;
-            $cellStyle = $isFirstRow && $boldStyle ? $boldStyle : '';
+            $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
             $buffer .= "<row r=\"{$r}\">";
             foreach ($dataRow as $value) {
                 if (!isset($colCache[$i])) {
@@ -439,7 +448,9 @@ class XlsxWriter implements WriterInterface
                 fwrite($dataStream, $buffer);
                 $buffer = '';
             }
-            $isFirstRow = false;
+            if ($headerRowsRemaining > 0) {
+                $headerRowsRemaining--;
+            }
         }
 
         if ($buffer !== '') {

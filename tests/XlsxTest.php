@@ -648,4 +648,104 @@ class XlsxTest extends TestCase
         self::assertFalse(XlsxReader::isDateTimeFormatCode('0.00E+00'));
         self::assertFalse(XlsxReader::isDateTimeFormatCode('"$"#,##0.00'));
     }
+
+    public function testHierarchicalHeadersRoundtrip(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_hier_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $writer->writeFile([
+            ['Alice', '30', '95'],
+            ['Bob', '25', '87'],
+        ], $tempFile);
+        self::assertTrue(is_file($tempFile));
+
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(4, $data);
+
+        self::assertEquals('Info', $data[0][0]);
+        self::assertEquals('Info', $data[0][1]);
+        self::assertEquals('Stats', $data[0][2]);
+
+        self::assertEquals('Name', $data[1][0]);
+        self::assertEquals('Age', $data[1][1]);
+        self::assertEquals('Score', $data[1][2]);
+
+        self::assertEquals('Alice', $data[2][0]);
+        self::assertEquals('30', $data[2][1]);
+        self::assertEquals('95', $data[2][2]);
+
+        self::assertEquals('Bob', $data[3][0]);
+        self::assertEquals('25', $data[3][1]);
+        self::assertEquals('87', $data[3][2]);
+
+        unlink($tempFile);
+    }
+
+    public function testHierarchicalHeadersRoundtripAssoc(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_hier_assoc_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $writer->writeFile([
+            ['Alice', '30', '95'],
+            ['Bob', '25', '87'],
+        ], $tempFile);
+
+        $reader = new XlsxReader();
+        $reader->assoc = true;
+        $reader->headerRows = 2;
+        $data = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(2, $data);
+
+        self::assertSame(['Name' => 'Alice', 'Age' => '30'], $data[0]['Info']);
+        self::assertSame(['Score' => '95'], $data[0]['Stats']);
+
+        self::assertSame(['Name' => 'Bob', 'Age' => '25'], $data[1]['Info']);
+        self::assertSame(['Score' => '87'], $data[1]['Stats']);
+
+        unlink($tempFile);
+    }
+
+    public function testHierarchicalHeadersBold(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_hier_bold_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->boldHeaders = true;
+        $writer->headers = [
+            'Info' => ['Name', 'Age'],
+            'Stats' => ['Score'],
+        ];
+        $writer->writeFile([
+            ['Alice', 30, 95],
+        ], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+
+        $row1End = strpos($sheet, '</row>');
+        $row1 = substr($sheet, 0, (int) $row1End);
+        self::assertStringContainsString('s="2"', $row1);
+
+        $row2 = substr($sheet, (int) $row1End + 7);
+        $row2End = strpos($row2, '</row>');
+        $row2 = substr($row2, 0, (int) $row2End);
+        self::assertStringContainsString('s="2"', $row2);
+
+        $row3 = substr($sheet, (int) $row1End + 7 + (int) $row2End + 7);
+        $row3End = strpos($row3, '</row>');
+        $row3 = substr($row3, 0, (int) $row3End);
+        self::assertStringNotContainsString('s="2"', $row3);
+
+        unlink($tempFile);
+    }
 }

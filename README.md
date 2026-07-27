@@ -439,22 +439,38 @@ $rows = Baresheet::read('export.csv', new Options(
 
 ### Writing Hierarchical Headers
 
-Writers accept the same hierarchical definition for `headers` and produce multi-row output. Nested data rows are automatically flattened to match the schema:
+All writers (CSV, XLSX, ODS) accept the same hierarchical definition for `headers` and produce multi-row output. Nested data rows are automatically flattened to match the schema:
 
 ```php
-$writer = new CsvWriter(new Options(
-    headers: [
-        'Identity' => ['id', 'first name', 'last name'],
-        'Contact'  => ['email', 'phone'],
-    ],
-));
+use LeKoala\Baresheet\CsvWriter;
+use LeKoala\Baresheet\XlsxWriter;
+use LeKoala\Baresheet\OdsWriter;
 
-$writer->writeFile([
+$headers = [
+    'Identity' => ['id', 'first name', 'last name'],
+    'Contact'  => ['email', 'phone'],
+];
+
+$data = [
     [
         'Identity' => ['id' => 1, 'first name' => 'John', 'last name' => 'Doe'],
         'Contact'  => ['email' => 'john@example.com', 'phone' => '555-1000'],
     ],
-], 'output.csv');
+];
+
+// CSV
+(new CsvWriter())->writeFile($data, 'output.csv');
+
+// XLSX — supports boldHeaders for all header rows
+$writer = new XlsxWriter();
+$writer->headers = $headers;
+$writer->boldHeaders = true;
+$writer->writeFile($data, 'output.xlsx');
+
+// ODS — same API
+$writer = new OdsWriter();
+$writer->headers = $headers;
+$writer->writeFile($data, 'output.ods');
 ```
 
 This generates:
