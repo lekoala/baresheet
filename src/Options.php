@@ -37,6 +37,22 @@ class Options
         public array $requiredColumns = [],
         /** @var string[] Columns to extract (selects and reorders). Empty = all columns. */
         public array $columns = [],
+        /**
+         * @var array<string|int, string|array<array-key, mixed>> Column aliases for renaming.
+         *                              Flat:    ['E-mail' => 'email', 'First Name' => 'first_name']
+         *                              Nested:  ['Contact' => ['E-mail' => 'email']]
+         */
+        public array $aliases = [],
+        /** @var int Number of consecutive rows that define the header (1 = flat, >1 = hierarchical). */
+        public int $headerRows = 1,
+        /**
+         * @var int|string|null Number of logical records to skip before the header block starts.
+         *                    null  = BC behaviour (no header offset).
+         *                    int   = records to skip before header (e.g. 2 = skip 2 rows, header starts on 3rd).
+         *                    'auto' = automatically detect header position (requires requiredColumns).
+         *                    This applies to CSV/XLSX/ODS readers.
+         */
+        public int|string|null $headerOffset = null,
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = 'auto',

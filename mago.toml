@@ -56,6 +56,9 @@ strict-assertions = { enabled = false }
 no-empty = { enabled = false }
 no-isset = { enabled = false }
 excessive-nesting = { enabled = false }
+# Intentional: auto-detection rolling window swallows InvalidDocument/MissingColumn
+# while scanning — exceptions are expected and handled by continuing the scan loop.
+no-empty-catch-clause = { enabled = false }
 
 [analyzer]
 plugins = []

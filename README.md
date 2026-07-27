@@ -96,7 +96,7 @@ $writer->writeFile($data, 'report.xlsx');
 - **BOM handling** — detects and natively transcodes UTF-8/16/32 BOM sequences on the fly via stream filters
 - **Formula injection protection** — `escapeFormulas: true` (opt-in security flag, see Security section)
 - **RFC 4180 compliant** — handles enclosures, double-quote escaping, and **CRLF (`\r\n`)** line endings by default for maximum interoperability.
-- **Column Selection** — Efficiently select, reorder, and alias columns during read.
+- **Column Selection & Aliasing** — Select, reorder, and rename columns during read. Supports hierarchical column selection and aliasing.
 - **Stream reading** — `readStream()` for reading from any PHP resource
 
 ### XLSX
@@ -160,33 +160,36 @@ The `Baresheet` facade keeps the convenient one-shot form, since it always creat
 $rows = Baresheet::read('data.csv', $opts);
 ```
 
-| Option            | Type              | Default  | Applies to                |
-|-------------------|-------------------|----------|---------------------------|
-| `assoc`           | bool              | `false`  | Read (All)                |
-| `strict`          | bool              | `false`  | Read (CSV, XLSX, ODS)     |
-| `stream`          | bool              | `true`   | Output (Any)              |
-| `limit`           | ?int              | `null`   | Read (All)                |
-| `offset`          | int               | `0`      | Read (All)                |
-| `skipEmptyLines`  | bool              | `true`   | Read (All)                |
-| `headers`         | string[]          | `[]`     | Write (All), Read (CSV)   |
-| `separator`       | string            | `"auto"` | Read (CSV)                |
-| `enclosure`       | string            | `"`      | Read (CSV)                |
-| `escape`          | string            | `""`     | Read (CSV)                |
-| `eol`             | string            | `\r\n`   | Write (CSV)               |
-| `inputEncoding`   | ?string           | `null`   | Read (CSV)                |
-| `outputEncoding`  | ?string           | `null`   | Read/Write (CSV)          |
-| `bom`             | bool\|string\|Bom | `true`   | Write (CSV)               |
-| `escapeFormulas`  | bool/callable     | `false`  | Write (CSV)               |
-| `meta`            | array/Meta        | `null`   | Write (XLSX, ODS)         |
-| `autofilter`      | ?string           | `null`   | Write (XLSX)              |
-| `freezePane`      | ?string           | `null`   | Write (XLSX)              |
-| `sheet`           | string/int        | `null`   | Read/Write (XLSX, ODS)    |
-| `boldHeaders`     | bool              | `false`  | Write (XLSX, ODS)         |
-| `tempPath`        | ?string           | `null`   | Any (Temp files location) |
-| `sharedStrings`   | bool              | `false`  | Write (XLSX)              |
-| `autoWidth`       | bool              | `false`  | Write (XLSX)              |
-| `requiredColumns` | string[]          | `[]`     | Read (CSV, XLSX, ODS)     |
-| `columns`         | string[]          | `[]`     | Read (CSV, XLSX, ODS)     |
+| Option            | Type                                       | Default  | Applies to                |
+|-------------------|--------------------------------------------|----------|---------------------------|
+| `assoc`           | bool                                       | `false`  | Read (All)                |
+| `strict`          | bool                                       | `false`  | Read (All), Write (CSV)   |
+| `stream`          | bool                                       | `true`   | Output (Any)              |
+| `limit`           | ?int                                       | `null`   | Read (All)                |
+| `offset`          | int                                        | `0`      | Read (All)                |
+| `skipEmptyLines`  | bool                                       | `true`   | Read (All)                |
+| `headers`         | string[]\|array<int, string[]>             | `[]`     | Read (All), Write (All)   |
+| `headerRows`      | int                                        | `1`      | Read (All), Write (All)   |
+| `headerOffset`    | int\|string\|null                          | `null`   | Read (All)                |
+| `requiredColumns` | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
+| `columns`         | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
+| `aliases`         | array<string\|int,string\|array>           | `[]`     | Read (All)                |
+| `separator`       | string                                     | `"auto"` | Read (CSV)                |
+| `enclosure`       | string                                     | `"`      | Read (CSV)                |
+| `escape`          | string                                     | `""`     | Read (CSV)                |
+| `eol`             | string                                     | `\r\n`   | Write (CSV)               |
+| `inputEncoding`   | ?string                                    | `null`   | Read (CSV)                |
+| `outputEncoding`  | ?string                                    | `null`   | Read/Write (CSV)          |
+| `bom`             | bool\|string\|Bom                          | `true`   | Write (CSV)               |
+| `escapeFormulas`  | bool/callable                              | `false`  | Write (CSV)               |
+| `meta`            | array/Meta                                 | `null`   | Write (XLSX, ODS)         |
+| `autofilter`      | ?string                                    | `null`   | Write (XLSX)              |
+| `freezePane`      | ?string                                    | `null`   | Write (XLSX)              |
+| `sheet`           | string/int                                 | `null`   | Read/Write (XLSX, ODS)    |
+| `boldHeaders`     | bool                                       | `false`  | Write (XLSX, ODS)         |
+| `tempPath`        | ?string                                    | `null`   | Any (Temp files location) |
+| `sharedStrings`   | bool                                       | `false`  | Write (XLSX)              |
+| `autoWidth`       | bool                                       | `false`  | Write (XLSX)              |
 
 ## Exceptions
 
@@ -194,7 +197,8 @@ Errors originating from a document or a Baresheet read/write operation are throw
 
 ```text
 BaresheetException
-├── InvalidDocumentException   // corrupt ZIP, invalid XML, unreadable/unsafe file
+├── InvalidDocumentException   // corrupt ZIP, invalid XML, unreadable/unsafe file,
+│   │                          // duplicate/ambiguous hierarchical header paths
 │   └── SheetNotFoundException // requested sheet name/index doesn't exist
 ├── InvalidRowException        // strict-mode column count mismatch, invalid strict cast
 ├── MissingColumnException     // required or explicitly selected column absent from headers
@@ -325,7 +329,7 @@ Column selection provides dramatic performance improvements for XLSX and ODS fil
 | **CSV**  | 0.28s → 0.28s          | **Baseline**     | **90%+** fewer hash-table entries |
 
 > [!TIP]
-> **The CSV "Practical Ceiling"**: While CSV reading cannot skip bytes (as `fgetcsv` must tokenize every field to track quotes/delimiters), Baresheet uses a direct numeric indexing map. This avoids creating a full associative array for the entire row before subsetting, effectively reaching the maximum performance possible for column selection in PHP.
+> **XLSX & ODS Performance**: Column selection provides dramatic speedups for XLSX and ODS files by skipping XML parsing for unselected cells. CSV benefits from a streamlined mapping path with zero intermediate allocations.
 
 ### Error Handling
 
@@ -335,7 +339,145 @@ Missing columns throw immediately:
 MissingColumnException: Missing required columns: missing_column
 ```
 
-### Data Transformation
+### Hierarchical Headers
+
+Baresheet supports multi-row spreadsheet headers, common in real-world exports where column groups span multiple rows:
+
+```csv
+Identity,,,Contact,,,Meta,,
+id,first name,last name,role,email,phone,type,status,level,department
+1,John,Doe,Admin,john@example.com,555-1000,full-time,active,senior,Engineering
+```
+
+### Multi-Row Headers
+
+Use `headerRows` to specify how many consecutive rows define the header structure. Baresheet automatically propagates parent cells horizontally and builds a nested schema:
+
+```php
+$rows = Baresheet::read('data.csv', new Options(
+    assoc: true,
+    headerRows: 2,
+));
+
+foreach ($rows as $row) {
+    // $row = [
+    //   'Identity'  => ['id' => 1, 'first name' => 'John', ...],
+    //   'Contact'   => ['email' => 'john@example.com', ...],
+    //   'Meta'      => ['status' => 'active', ...],
+    // ]
+}
+```
+
+### Hierarchical Selection
+
+Select nested columns using the same tree-like syntax:
+
+```php
+$rows = Baresheet::read('data.csv', new Options(
+    assoc: true,
+    headerRows: 2,
+    columns: [
+        'Contact' => ['email', 'phone'],
+    ],
+));
+// $row = ['Contact' => ['email' => '...', 'phone' => '...']]
+```
+
+### Hierarchical Required Columns
+
+Validate that expected nested columns exist before processing:
+
+```php
+$rows = Baresheet::read('data.csv', new Options(
+    assoc: true,
+    headerRows: 2,
+    requiredColumns: [
+        'Identity' => ['id'],
+        'Contact' => ['email'],
+    ],
+));
+// Throws MissingColumnException if Identity.id or Contact.email are absent
+```
+
+### Column Aliases
+
+Rename columns to standardized keys after selection and validation, keeping your business logic decoupled from file-specific naming:
+
+```php
+$rows = Baresheet::read('data.csv', new Options(
+    assoc: true,
+    headerRows: 2,
+    aliases: [
+        'E-mail' => 'email',
+        'Contact' => ['phone' => 'phone_number'],
+    ],
+));
+```
+
+Aliases are applied after `requiredColumns` and `columns`, so those options always reference the original column names present in the file. Duplicate aliases created by renaming (e.g. two columns both renamed to `email`) are rejected with an `InvalidDocumentException`.
+
+### Header Offset
+
+Skip preamble rows (titles, metadata, comments) before the header block:
+
+```php
+// Explicit: skip 4 rows before the header
+$rows = Baresheet::read('report.csv', new Options(
+    assoc: true,
+    headerOffset: 4,
+));
+
+// Auto-detection: scan forward until required columns are found
+$rows = Baresheet::read('export.csv', new Options(
+    assoc: true,
+    headerOffset: 'auto',
+    requiredColumns: ['customer_id', 'email'],
+));
+```
+
+`headerOffset` works with CSV, XLSX, and ODS readers. The `'auto'` mode uses a streaming rolling window — no second pass, no `maxScan` limit — and requires `requiredColumns` to be set.
+
+### Writing Hierarchical Headers
+
+Writers accept the same hierarchical definition for `headers` and produce multi-row output. Nested data rows are automatically flattened to match the schema:
+
+```php
+$writer = new CsvWriter(new Options(
+    headers: [
+        'Identity' => ['id', 'first name', 'last name'],
+        'Contact'  => ['email', 'phone'],
+    ],
+));
+
+$writer->writeFile([
+    [
+        'Identity' => ['id' => 1, 'first name' => 'John', 'last name' => 'Doe'],
+        'Contact'  => ['email' => 'john@example.com', 'phone' => '555-1000'],
+    ],
+], 'output.csv');
+```
+
+This generates:
+
+```csv
+Identity,,,Contact,
+id,first name,last name,email,phone
+1,John,Doe,john@example.com,555-1000
+```
+
+### Strict Mode
+
+When `strict` is enabled, every data row must match the schema's expected column count. During header collection (with `headerRows > 1`), rows may legitimately differ in width — strict validation is deferred until the header block is resolved.
+
+```php
+// Read — throws InvalidRowException on mismatched data rows
+$reader = new CsvReader(new Options(assoc: true, strict: true, headers: ['a', 'b', 'c']));
+
+// Write — throws WriteException before flattening, catching short/long rows early
+$writer = new CsvWriter(new Options(strict: true, headers: ['a', 'b', 'c']));
+```
+
+## Data Transformation
 
 Baresheet preserves raw cell values by design. For cleaning, casting, or filtering, use the `Transform` class — generator-based pipelines that compose with readers and writers without loading data into memory.
 
@@ -443,66 +585,33 @@ return $response
 
 ## Performance
 
-Baresheet is explicitly engineered to minimize server resource footprint.
+> **Indicative benchmarks** — These numbers are intended to catch large performance regressions and highlight architectural differences. Absolute results vary by PHP version, hardware, filesystem and workload. Run `php bin/bench-read.php` / `bin/bench-write.php` locally for results relevant to your environment.
+>
+> Environment: PHP 8.3.6, 64-bit, 50,000 rows × 4 columns, median of 3 runs.
 
-The XLSX and ODS readers use an optimized `XMLReader` approach that opens `zip://` streams directly. This avoids any temporary file extraction, cutting I/O overhead by 50% compared to standard zip extraction methods.
+Baresheet is engineered to minimize server resource footprint. The XLSX and ODS readers use an optimized `XMLReader` approach that opens `zip://` streams directly, avoiding temporary file extraction entirely.
 
-Here are the results extracting/writing 50,000 rows (4 columns) locally against other common industry standard libraries:
+### Reading 50,000 Rows
 
-### Reading (Parsing) 50,000 Rows
-
-#### Reading CSV
-
-| Library         | Avg Time (s) | Peak Memory (MB) |
-|-----------------|--------------|------------------|
-| Baresheet (CSV) | 0.0057       | 0.63             |
-| League (CSV)    | 0.0089       | 0.63             |
-| OpenSpout (CSV) | 0.0201       | 0.63             |
-
-#### Reading XLSX
-
-| Library           | Avg Time (s) | Peak Memory (MB) |
-|-------------------|--------------|------------------|
-| Baresheet (XLSX)  | 0.0391       | 0.63             |
-| SimpleXLSX (XLSX) | 0.0816       | 5.78             |
-| OpenSpout (XLSX)  | 0.2114       | 0.63             |
-
-#### Reading ODS
-
-| Library         | Avg Time (s) | Peak Memory (MB) |
-|-----------------|--------------|------------------|
-| Baresheet (ODS) | 0.0484       | 0.63             |
-| OpenSpout (ODS) | 0.1592       | 0.63             |
+| Library    | CSV  | XLSX | ODS  | Peak Memory |
+|------------|------|------|------|-------------|
+| Baresheet  | 1.0× | 1.0× | 1.0× | 0.63 MB     |
+| League     | 1.7× | —    | —    | 0.63 MB     |
+| SimpleXLSX | —    | 2.2× | —    | 5.78 MB     |
+| OpenSpout  | 3.2× | 5.3× | 3.5× | 0.63 MB     |
 
 ### Writing 50,000 Rows
 
-#### Writing CSV
+| Library       | CSV  | XLSX | ODS  | Peak Memory  |
+|---------------|------|------|------|--------------|
+| Baresheet     | 1.0× | 1.0× | 1.0× | 0.52–0.95 MB |
+| League        | 1.4× | —    | —    | 0.55 MB      |
+| SimpleXLSXGen | —    | 1.3× | —    | 109.85 MB    |
+| OpenSpout     | 2.9× | 1.9× | 1.7× | 0.47–1.01 MB |
 
-| Library         | Avg Time (s) | Peak Memory (MB) |
-|-----------------|--------------|------------------|
-| Baresheet (CSV) | 0.0956       | 0.50             |
-| League (CSV)    | 0.1288       | 0.55             |
-| OpenSpout (CSV) | 0.2770       | 0.47             |
+> **XLSX write modes**: By default, Baresheet uses the fastest mode (shared strings and auto column width disabled). Enabling shared strings or auto-width trades speed for file size or presentation — see the Options table for `sharedStrings` and `autoWidth`.
 
-#### Writing XLSX
-
-| Library                           | Avg Time (s) | Peak Memory (MB) |
-|-----------------------------------|--------------|------------------|
-| Baresheet (XLSX)                  | 0.4504       | 0.79             |
-| Baresheet (XLSX - Auto Width)     | 0.4429       | 0.79             |
-| SimpleXLSXGen (XLSX)              | 0.6612       | 109.77           |
-| Baresheet (XLSX - Shared Strings) | 0.8780       | 34.26            |
-| OpenSpout (XLSX)                  | 0.9011       | 1.01             |
-| Baresheet (XLSX - Full)           | 0.9351       | 34.26            |
-
-> Note: By default, Baresheet uses the fastest mode (shared strings and auto column width disabled). You can re-enable them via Options.
-
-#### Writing ODS
-
-| Library         | Avg Time (s) | Peak Memory (MB) |
-|-----------------|--------------|------------------|
-| Baresheet (ODS) | 0.7693       | 0.93             |
-| OpenSpout (ODS) | 1.2474       | 0.88             |
+Memory is measured in an isolated subprocess via `memory_get_peak_usage()`. Baresheet's 0.63 MB read footprint stays constant regardless of file size — the stream-based `XMLReader` never loads the entire document into memory.
 
 ## Security Considerations
 

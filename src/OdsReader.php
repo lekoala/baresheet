@@ -7,6 +7,7 @@ namespace LeKoala\Baresheet;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
+use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
 use ZipArchive;
 
@@ -41,6 +42,10 @@ class OdsReader implements ReaderInterface
     public array $requiredColumns = [];
     /** @var string[] */
     public array $columns = [];
+    /** @var array<string|int, string|array<array-key, mixed>> */
+    public array $aliases = [];
+    public int $headerRows = 1;
+    public int|string|null $headerOffset = null;
 
     public function __construct(?Options $options = null)
     {
@@ -120,20 +125,24 @@ class OdsReader implements ReaderInterface
 
         try {
             $tableIndex = 0;
-            $headers = !empty($this->headers) ? $this->headers : null;
-            $totalColumns = $headers !== null ? count($headers) : null;
+            $schema = !empty($this->headers) ? HeaderSchema::fromHeaders($this->headers, $this->headerRows) : null;
+            $totalColumns = $schema !== null ? $schema->columnCount() : null;
             $yieldCount = 0;
-            $columnMap = [];
-            $selectedIndices = []; // Set of column indices to parse (empty = all)
+            $selectionSchema = null;
 
             // Pre-build column map and validate required columns from injected headers
-            if (!empty($this->headers)) {
-                Spread::checkNoDuplicateHeaders($this->headers);
+            if ($schema !== null) {
                 if (!empty($this->requiredColumns)) {
-                    Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+                    $schema->checkRequiredColumns($this->requiredColumns);
                 }
                 if (!empty($this->columns)) {
-                    [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+                    $selectionSchema = $schema->select($this->columns);
+                }
+                if (!empty($this->aliases)) {
+                    if ($selectionSchema !== null) {
+                        $selectionSchema = $selectionSchema->rename($this->aliases);
+                    }
+                    $schema = $schema->rename($this->aliases);
                 }
             }
 
@@ -164,11 +173,10 @@ class OdsReader implements ReaderInterface
 
                 yield from $this->parseTable(
                     $reader,
-                    $headers,
+                    $schema,
                     $totalColumns,
                     $yieldCount,
-                    $columnMap,
-                    $selectedIndices,
+                    $selectionSchema,
                 );
 
                 return;
@@ -201,23 +209,25 @@ class OdsReader implements ReaderInterface
     }
 
     /**
-     * @param ?array<string> $headers
+     * @param ?HeaderSchema $schema
      * @param ?int $totalColumns
      * @param int $yieldCount
-     * @param array<string, int> $columnMap
-     * @param array<int, true> $selectedIndices
+     * @param ?HeaderSchema $selectionSchema
      * @return Generator<int, Row>
      */
     private function parseTable(
         \XMLReader $reader,
-        ?array &$headers,
+        ?HeaderSchema &$schema,
         ?int &$totalColumns,
         int &$yieldCount,
-        array &$columnMap,
-        array &$selectedIndices,
+        ?HeaderSchema &$selectionSchema,
     ): Generator {
         $tableDepth = $reader->depth;
         $moved = $reader->read();
+        $headerRowsBuffer = [];
+        $headerOffsetCount = 0;
+        $autoScanning = $this->headerOffset === 'auto';
+        $autoWindow = [];
 
         while ($moved && $reader->depth > $tableDepth) {
             if ($reader->nodeType !== \XMLReader::ELEMENT) {
@@ -261,9 +271,10 @@ class OdsReader implements ReaderInterface
 
                         // Optimization: Skip parsing unselected cells
                         $selectedInRange = false;
-                        if (!empty($selectedIndices)) {
+                        if ($selectionSchema !== null) {
+                            $indices = $selectionSchema->indices();
                             for ($i = 0; $i < $colRepeat; $i++) {
-                                if (isset($selectedIndices[$colIndex + $i])) {
+                                if (in_array($colIndex + $i, $indices, true)) {
                                     $selectedInRange = true;
                                     break;
                                 }
@@ -355,6 +366,46 @@ class OdsReader implements ReaderInterface
             for ($ri = 0; $ri < $rowRepeat; $ri++) {
                 $rowData = $rowTemplate;
 
+                // Skip rows before the header block (explicit int offset)
+                if (
+                    !$autoScanning
+                    && $this->headerOffset !== null
+                    && $this->headerOffset !== 'auto'
+                    && $headerOffsetCount < $this->headerOffset
+                ) {
+                    $headerOffsetCount++;
+                    continue;
+                }
+
+                // Auto-detection: slide window until requiredColumns match
+                if ($autoScanning) {
+                    $autoWindow[] = $rowData;
+                    if (count($autoWindow) > $this->headerRows) {
+                        array_shift($autoWindow);
+                    }
+                    if (count($autoWindow) >= $this->headerRows) {
+                        try {
+                            $candidate = HeaderSchema::fromRows($autoWindow);
+                            $candidate->checkRequiredColumns($this->requiredColumns);
+                            $schema = $candidate;
+                            $autoScanning = false;
+                            $totalColumns = $schema->columnCount();
+                            if (!empty($this->columns)) {
+                                $selectionSchema = $schema->select($this->columns);
+                            }
+                            if (!empty($this->aliases)) {
+                                $schema = $schema->rename($this->aliases);
+                                if ($selectionSchema !== null) {
+                                    $selectionSchema = $selectionSchema->rename($this->aliases);
+                                }
+                            }
+                        } catch (InvalidDocumentException|MissingColumnException) {
+                            // Not matched — keep scanning
+                        }
+                    }
+                    continue;
+                }
+
                 if ($this->strict && $totalColumns !== null && count($rowData) !== $totalColumns) {
                     $colCount = count($rowData);
                     $rowIdx = $yieldCount + 1;
@@ -365,20 +416,34 @@ class OdsReader implements ReaderInterface
                 }
 
                 if ($this->assoc) {
-                    if ($headers === null) {
-                        $headers = [];
+                    if ($schema === null) {
+                        $headerNames = [];
                         foreach ($rowData as $v) {
-                            $headers[] = $v !== null ? (string) $v : '';
+                            $headerNames[] = $v !== null ? (string) $v : '';
                         }
-                        $totalColumns = count($headers);
-                        Spread::checkNoDuplicateHeaders($headers);
+                        $headerRowsBuffer[] = $headerNames;
+
+                        if (count($headerRowsBuffer) < $this->headerRows) {
+                            continue;
+                        }
+
+                        $schema = HeaderSchema::fromRows($headerRowsBuffer);
+                        $totalColumns = $schema->columnCount();
                         // Validate required columns
-                        Spread::checkRequiredColumns($this->requiredColumns, $headers);
-                        // Build column selection map
-                        [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
-                            $this->columns,
-                            $headers,
-                        );
+                        if (!empty($this->requiredColumns)) {
+                            $schema->checkRequiredColumns($this->requiredColumns);
+                        }
+                        // Build column selection
+                        if (!empty($this->columns)) {
+                            $selectionSchema = $schema->select($this->columns);
+                        }
+                        // Apply column aliases
+                        if (!empty($this->aliases)) {
+                            if ($selectionSchema !== null) {
+                                $selectionSchema = $selectionSchema->rename($this->aliases);
+                            }
+                            $schema = $schema->rename($this->aliases);
+                        }
                         continue;
                     }
                     $rowData = array_slice(
@@ -386,21 +451,23 @@ class OdsReader implements ReaderInterface
                         0,
                         $totalColumns ?? 0,
                     );
-                    $rowData = array_combine($headers, $rowData);
+                    // Map with selection schema or full schema, not both
+                    if ($selectionSchema !== null) {
+                        $rowData = $selectionSchema->mapRow($rowData);
+                    } else {
+                        $rowData = $schema->mapRow($rowData);
+                    }
                 } else {
                     if ($totalColumns === null) {
                         $totalColumns = count($rowData);
                     }
-                }
-
-                // Apply column selection
-                if (!empty($columnMap)) {
-                    $rowData = Spread::applyColumnSelection(
-                        $rowData,
-                        $columnMap,
-                        $this->columns,
-                        $this->assoc,
-                    );
+                    if ($selectionSchema !== null) {
+                        $selected = [];
+                        foreach ($selectionSchema->indices() as $i) {
+                            $selected[] = $rowData[$i] ?? null;
+                        }
+                        $rowData = $selected;
+                    }
                 }
 
                 if ($yieldCount < $this->offset) {
@@ -416,6 +483,12 @@ class OdsReader implements ReaderInterface
             }
 
             $moved = $reader->next();
+        }
+
+        if ($autoScanning) {
+            throw new InvalidDocumentException(
+                'Could not auto-detect header position. Ensure required columns exist.',
+            );
         }
     }
 }

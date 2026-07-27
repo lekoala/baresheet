@@ -22,6 +22,7 @@ class CsvWriter implements WriterInterface
     public string $eol = "\r\n";
     public bool|Bom|string $bom = true;
     public bool $stream = true;
+    public bool $strict = false;
     /**
      * @var bool|callable If true, escapes formulas starting with `=`, `+`, `-`, or `@` to prevent injection.
      *                    If a callable, it receives (string $cell, int $colIndex) and should return the processed cell.
@@ -48,6 +49,15 @@ class CsvWriter implements WriterInterface
         $this->writeInternal($stream, $data);
         rewind($stream);
         return $stream;
+    }
+
+    /**
+     * @param iterable<WritableRow> $data
+     * @param resource              $stream The stream to write to. The caller owns the stream (no rewind or close is performed).
+     */
+    public function writeToStream(iterable $data, $stream): void
+    {
+        $this->writeInternal($stream, $data);
     }
 
     /**
@@ -155,67 +165,88 @@ class CsvWriter implements WriterInterface
         $escapeFn = $isCallable ? $escapeFormulas : null;
 
         // Headers: inline processing
-        if (!empty($this->headers)) {
-            $row = $this->headers;
-            if ($escapeFormulas && $hasEncoding) {
-                if ($escapeFn !== null) {
-                    $colIndex = 0;
-                    foreach ($row as &$cell) {
-                        // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
-                        if (is_string($cell)) {
-                            /** @var string $outputEncoding */
-                            $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
-                        }
-                        $colIndex++;
-                    }
-                    unset($cell);
-                } else {
-                    $chars = "=+-@\t\r";
-                    foreach ($row as &$cell) {
-                        // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
-                        if (is_string($cell)) {
-                            if ($cell !== '' && str_contains($chars, $cell[0])) {
-                                $cell = "'" . $cell;
+        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+
+        if ($headerSchema !== null) {
+            $headerRows = $headerSchema->headerRows();
+
+            foreach ($headerRows as $row) {
+                if ($escapeFormulas && $hasEncoding) {
+                    if ($escapeFn !== null) {
+                        $colIndex = 0;
+                        foreach ($row as &$cell) {
+                            // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
+                            if (is_string($cell)) {
+                                /** @var string $outputEncoding */
+                                $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
                             }
+                            $colIndex++;
+                        }
+                        unset($cell);
+                    } else {
+                        $chars = "=+-@\t\r";
+                        foreach ($row as &$cell) {
+                            // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
+                            if (is_string($cell)) {
+                                if ($cell !== '' && str_contains($chars, $cell[0])) {
+                                    $cell = "'" . $cell;
+                                }
+                                /** @var string $outputEncoding */
+                                $cell = mb_convert_encoding($cell, $outputEncoding);
+                            }
+                        }
+                        unset($cell);
+                    }
+                } elseif ($escapeFormulas) {
+                    if ($escapeFn !== null) {
+                        $colIndex = 0;
+                        foreach ($row as &$cell) {
+                            // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
+                            if (is_string($cell)) {
+                                $cell = $escapeFn($cell, $colIndex);
+                            }
+                            $colIndex++;
+                        }
+                        unset($cell);
+                    } else {
+                        $row = self::escapeRow($row);
+                    }
+                } elseif ($hasEncoding) {
+                    foreach ($row as &$v) {
+                        // @phpstan-ignore-next-line - $v is mixed from array<mixed>, check is needed
+                        if (is_string($v)) {
                             /** @var string $outputEncoding */
-                            $cell = mb_convert_encoding($cell, $outputEncoding);
+                            $v = mb_convert_encoding($v, $outputEncoding);
                         }
                     }
-                    unset($cell);
+                    unset($v);
                 }
-            } elseif ($escapeFormulas) {
-                if ($escapeFn !== null) {
-                    $colIndex = 0;
-                    foreach ($row as &$cell) {
-                        // @phpstan-ignore-next-line - $cell is mixed from array<mixed>, check is needed
-                        if (is_string($cell)) {
-                            $cell = $escapeFn($cell, $colIndex);
-                        }
-                        $colIndex++;
-                    }
-                    unset($cell);
-                } else {
-                    $row = self::escapeRow($row);
+                /** @var array<int|string, bool|float|int|string|null> $row */
+                $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
+                if ($result === false) {
+                    throw new WriteException('Failed to write headers to stream');
                 }
-            } elseif ($hasEncoding) {
-                foreach ($row as &$v) {
-                    // @phpstan-ignore-next-line - $v is mixed from array<mixed>, check is needed
-                    if (is_string($v)) {
-                        /** @var string $outputEncoding */
-                        $v = mb_convert_encoding($v, $outputEncoding);
-                    }
-                }
-                unset($v);
-            }
-            /** @var array<int|string, bool|float|int|string|null> $row */
-            $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
-            if ($result === false) {
-                throw new WriteException('Failed to write headers to stream');
             }
         }
 
         // Data rows: inline processing
+        $expectedWidth = $this->strict && $headerSchema !== null ? $headerSchema->columnCount() : null;
         foreach ($data as $row) {
+            // Validate before flattening — raw row must match expected width
+            if ($this->strict) {
+                $width = count($row);
+                if ($expectedWidth === null) {
+                    $expectedWidth = $width;
+                } elseif ($width !== $expectedWidth) {
+                    throw new WriteException("Row has {$width} columns, expected {$expectedWidth}");
+                }
+            }
+
+            // Flatten hierarchical rows according to the schema
+            if ($headerSchema !== null) {
+                $row = $headerSchema->flattenRow((array) $row);
+            }
+
             if ($escapeFormulas && $hasEncoding) {
                 if ($escapeFn !== null) {
                     $colIndex = 0;

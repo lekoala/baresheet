@@ -195,6 +195,8 @@ class OptionsTest extends TestCase
             public bool $autoWidth = false;
             public array $requiredColumns = [];
             public array $columns = [];
+            public array $aliases = [];
+            public int $headerRows = 1;
         };
 
         $opts->applyTo($target);

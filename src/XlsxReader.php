@@ -7,6 +7,7 @@ namespace LeKoala\Baresheet;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
+use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
 use ZipArchive;
 
@@ -34,6 +35,10 @@ class XlsxReader implements ReaderInterface
     public array $requiredColumns = [];
     /** @var string[] */
     public array $columns = [];
+    /** @var array<string|int, string|array<array-key, mixed>> */
+    public array $aliases = [];
+    public int $headerRows = 1;
+    public int|string|null $headerOffset = null;
 
     public function __construct(?Options $options = null)
     {
@@ -155,28 +160,36 @@ class XlsxReader implements ReaderInterface
         array $isDateCache,
         bool $is1904,
     ): Generator {
-        $headers = !empty($this->headers) ? $this->headers : null;
+        $schema = !empty($this->headers) ? HeaderSchema::fromHeaders($this->headers, $this->headerRows) : null;
         $rowCount = 0;
         $yieldCount = 0;
         $startRow = $this->assoc ? 1 : 0;
-        $totalColumns = $headers !== null ? count($headers) : null;
+        $totalColumns = $schema !== null ? $schema->columnCount() : null;
         // Seeded from injected headers so a too-short/too-long first data row is
         // caught immediately instead of silently becoming the new expected width.
         $expectedCols = $totalColumns;
         $colRefCache = [];
-        $columnMap = [];
-        $selectedIndices = []; // Set of column indices to parse (empty = all)
+        $selectionSchema = null;
+        $headerRowsBuffer = [];
+        $autoScanning = $this->headerOffset === 'auto';
+        $autoWindow = [];
 
         // Pre-build column map and validate required columns from injected headers
-        if (!empty($this->headers)) {
-            Spread::checkNoDuplicateHeaders($this->headers);
+        if ($schema !== null) {
             if (!empty($this->requiredColumns)) {
-                Spread::checkRequiredColumns($this->requiredColumns, $this->headers);
+                $schema->checkRequiredColumns($this->requiredColumns);
             }
             if (!empty($this->columns)) {
-                [$columnMap, $selectedIndices] = Spread::buildColumnSelection($this->columns, $this->headers);
+                $selectionSchema = $schema->select($this->columns);
+            }
+            if (!empty($this->aliases)) {
+                if ($selectionSchema !== null) {
+                    $selectionSchema = $selectionSchema->rename($this->aliases);
+                }
+                $schema = $schema->rename($this->aliases);
             }
         }
+        $selectedIndices = $selectionSchema !== null ? array_fill_keys($selectionSchema->indices(), true) : [];
 
         if ($this->limit === 0) {
             return;
@@ -225,7 +238,7 @@ class XlsxReader implements ReaderInterface
                         }
 
                         // Optimization: Skip parsing unselected cells entirely
-                        if (!empty($selectedIndices) && !isset($selectedIndices[$cellIndex])) {
+                        if ($selectionSchema !== null && !isset($selectedIndices[$cellIndex])) {
                             // Skip the entire <c> subtree without reading value
                             if (!$reader->isEmptyElement) {
                                 $moved = $reader->next();
@@ -332,7 +345,49 @@ class XlsxReader implements ReaderInterface
                 continue;
             }
 
-            if ($this->strict) {
+            // Skip rows before the header block (explicit int offset)
+            if (
+                !$autoScanning
+                && $this->headerOffset !== null
+                && $this->headerOffset !== 'auto'
+                && $rowCount <= $this->headerOffset
+            ) {
+                continue;
+            }
+
+            // Auto-detection: slide window until requiredColumns match
+            if ($autoScanning) {
+                $autoWindow[] = $rowData;
+                if (count($autoWindow) > $this->headerRows) {
+                    array_shift($autoWindow);
+                }
+                if (count($autoWindow) >= $this->headerRows) {
+                    try {
+                        $candidate = HeaderSchema::fromRows($autoWindow);
+                        $candidate->checkRequiredColumns($this->requiredColumns);
+                        $schema = $candidate;
+                        $autoScanning = false;
+                        $totalColumns = $schema->columnCount();
+                        if (!empty($this->columns)) {
+                            $selectionSchema = $schema->select($this->columns);
+                        }
+                        if (!empty($this->aliases)) {
+                            $schema = $schema->rename($this->aliases);
+                            if ($selectionSchema !== null) {
+                                $selectionSchema = $selectionSchema->rename($this->aliases);
+                            }
+                        }
+                        $selectedIndices = $selectionSchema !== null
+                            ? array_fill_keys($selectionSchema->indices(), true)
+                            : [];
+                    } catch (InvalidDocumentException|MissingColumnException) {
+                        // Not matched — keep scanning
+                    }
+                }
+                continue;
+            }
+
+            if ($this->strict && !($this->assoc && $schema === null)) {
                 if ($expectedCols === null) {
                     $expectedCols = $actualCols;
                 } elseif ($actualCols !== $expectedCols) {
@@ -344,37 +399,56 @@ class XlsxReader implements ReaderInterface
             }
 
             if ($this->assoc) {
-                if ($headers === null) {
-                    $headers = [];
+                if ($schema === null) {
+                    $headerNames = [];
                     foreach ($rowData as $v) {
-                        $headers[] = $v !== null ? (string) $v : '';
+                        $headerNames[] = $v !== null ? (string) $v : '';
                     }
-                    $totalColumns = count($headers);
-                    Spread::checkNoDuplicateHeaders($headers);
+                    $headerRowsBuffer[] = $headerNames;
+
+                    if (count($headerRowsBuffer) < $this->headerRows) {
+                        continue;
+                    }
+
+                    $schema = HeaderSchema::fromRows($headerRowsBuffer);
+                    $totalColumns = $schema->columnCount();
                     // Validate required columns
-                    Spread::checkRequiredColumns($this->requiredColumns, $headers);
-                    // Build column selection map
-                    [$columnMap, $selectedIndices] = Spread::buildColumnSelection(
-                        $this->columns,
-                        $headers,
-                    );
+                    if (!empty($this->requiredColumns)) {
+                        $schema->checkRequiredColumns($this->requiredColumns);
+                    }
+                    // Build column selection
+                    if (!empty($this->columns)) {
+                        $selectionSchema = $schema->select($this->columns);
+                    }
+                    // Apply column aliases
+                    if (!empty($this->aliases)) {
+                        if ($selectionSchema !== null) {
+                            $selectionSchema = $selectionSchema->rename($this->aliases);
+                        }
+                        $schema = $schema->rename($this->aliases);
+                    }
+                    $selectedIndices = $selectionSchema !== null
+                        ? array_fill_keys($selectionSchema->indices(), true)
+                        : [];
                     continue;
                 }
-                $rowData = array_combine($headers, array_slice($rowData, 0, $totalColumns));
+                if ($selectionSchema !== null) {
+                    $rowData = $selectionSchema->mapRow(array_slice($rowData, 0, $totalColumns));
+                } else {
+                    $rowData = $schema->mapRow(array_slice($rowData, 0, $totalColumns));
+                }
             } else {
                 if ($totalColumns === null) {
                     $totalColumns = count($rowData);
                 }
-            }
-
-            // Apply column selection
-            if (!empty($columnMap)) {
-                $rowData = Spread::applyColumnSelection(
-                    $rowData,
-                    $columnMap,
-                    $this->columns,
-                    $this->assoc,
-                );
+                if ($selectionSchema !== null) {
+                    $indices = $selectionSchema->indices();
+                    $selected = [];
+                    foreach ($indices as $i) {
+                        $selected[] = $rowData[$i] ?? null;
+                    }
+                    $rowData = $selected;
+                }
             }
 
             if ($yieldCount < $this->offset) {
@@ -387,6 +461,12 @@ class XlsxReader implements ReaderInterface
             if ($this->limit !== null && ($yieldCount - $this->offset) >= $this->limit) {
                 return;
             }
+        }
+
+        if ($autoScanning) {
+            throw new InvalidDocumentException(
+                'Could not auto-detect header position. Ensure required columns exist.',
+            );
         }
     }
 

@@ -100,6 +100,25 @@ class Transform
     }
 
     /**
+     * Apply a custom transformation to each row.
+     *
+     * Unlike {@see map()} which transforms individual cells, this maps entire rows.
+     * Callback receives (array $row, int $index) and must return the new row.
+     *
+     * @param iterable<array<mixed>> $data
+     * @param callable(array<mixed>, int): array<mixed> $fn
+     * @return Generator<array<mixed>>
+     */
+    public static function mapRows(iterable $data, callable $fn): Generator
+    {
+        $index = 0;
+        foreach ($data as $row) {
+            yield $fn($row, $index);
+            $index++;
+        }
+    }
+
+    /**
      * Filter rows based on a predicate.
      *
      * Callback receives (array $row, int $index) and must return bool.

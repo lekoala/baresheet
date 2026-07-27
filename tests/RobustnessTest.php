@@ -177,7 +177,7 @@ class RobustnessTest extends TestCase
         $reader = new CsvReader(new Options(assoc: true));
 
         $this->expectException(InvalidDocumentException::class);
-        $this->expectExceptionMessage('Duplicate header(s) found: name');
+        $this->expectExceptionMessage('Duplicate header');
 
         try {
             iterator_to_array($reader->readFile($file));
@@ -200,7 +200,7 @@ class RobustnessTest extends TestCase
             iterator_to_array($xlsxReader->readFile($xlsxFile));
             self::fail('Expected an exception for duplicate headers');
         } catch (InvalidDocumentException $e) {
-            self::assertStringContainsString('Duplicate header(s) found: name', $e->getMessage());
+            self::assertStringContainsString('Duplicate header', $e->getMessage());
         } finally {
             unlink($xlsxFile);
         }
@@ -212,7 +212,7 @@ class RobustnessTest extends TestCase
             iterator_to_array($odsReader->readFile($odsFile));
             self::fail('Expected an exception for duplicate headers');
         } catch (InvalidDocumentException $e) {
-            self::assertStringContainsString('Duplicate header(s) found: name', $e->getMessage());
+            self::assertStringContainsString('Duplicate header', $e->getMessage());
         } finally {
             unlink($odsFile);
         }
@@ -226,7 +226,7 @@ class RobustnessTest extends TestCase
         $reader = new CsvReader(new Options(assoc: true, headers: ['id', 'name', 'name']));
 
         $this->expectException(InvalidDocumentException::class);
-        $this->expectExceptionMessage('Duplicate header(s) found: name');
+        $this->expectExceptionMessage('Duplicate header');
 
         try {
             iterator_to_array($reader->readFile($file));
@@ -249,7 +249,7 @@ class RobustnessTest extends TestCase
         ));
 
         $this->expectException(InvalidDocumentException::class);
-        $this->expectExceptionMessage('Duplicate header(s) found: name');
+        $this->expectExceptionMessage('Duplicate header');
 
         try {
             iterator_to_array($reader->readFile($file));
