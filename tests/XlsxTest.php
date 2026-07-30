@@ -815,9 +815,9 @@ class XlsxTest extends TestCase
         $writer->boldHeaders = true;
         $dt = new \DateTime('2024-01-15 10:30:00');
         $writer->writeFile([
-            ['Name', 'Date', 'Score'],
-            ['Alice', $dt, 95],
-            ['Bob', null, 87],
+            ['Name',  'Date', 'Score'],
+            ['Alice', $dt,    95],
+            ['Bob',   null,   87],
         ], $tempFile);
 
         $zip = new \ZipArchive();

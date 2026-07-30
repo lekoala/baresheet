@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxWriter;
-use LeKoala\Baresheet\Exception\WriteException;
 use PHPUnit\Framework\TestCase;
 
 class SpreadTest extends TestCase
