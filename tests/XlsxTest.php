@@ -406,6 +406,39 @@ class XlsxTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testSheetProtectionWithoutPasswordXml(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_protection_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->sheetProtection = true;
+        $writer->writeFile([['Name'], ['Jane']], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+
+        self::assertStringContainsString('<sheetProtection sheet="1"/>', $sheet);
+        unlink($tempFile);
+    }
+
+    public function testSheetProtectionWithPasswordXml(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_protection_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->sheetProtection = 'secret';
+        $writer->writeFile([['Name'], ['Jane']], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+
+        self::assertStringContainsString('<sheetProtection password="DAA7" sheet="1"/>', $sheet);
+        self::assertStringNotContainsString('secret', $sheet);
+        unlink($tempFile);
+    }
+
     #[DataProvider('freezePaneProvider')]
     public function testFreezePaneXml(string $freezePane, string $expectedPane): void
     {

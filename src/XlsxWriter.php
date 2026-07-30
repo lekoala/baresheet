@@ -24,6 +24,8 @@ class XlsxWriter implements WriterInterface
     public Meta|array|null $meta = null;
     public ?string $autofilter = null;
     public ?string $freezePane = null;
+    /** @var bool|string True locks without a password; a string locks with an Excel sheet-protection password. */
+    public bool|string $sheetProtection = false;
     public string|int|null $sheet = null;
     public bool $boldHeaders = false;
     public bool $stream = true;
@@ -492,6 +494,7 @@ class XlsxWriter implements WriterInterface
         fclose($dataStream);
 
         $footer = '</sheetData>';
+        $footer .= $this->genSheetProtectionXml();
         if ($this->autofilter) {
             $autofilter = $this->autofilter;
             if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
@@ -503,6 +506,41 @@ class XlsxWriter implements WriterInterface
         fwrite($worksheetStream, $footer);
 
         return $worksheetStream;
+    }
+
+    private function genSheetProtectionXml(): string
+    {
+        if ($this->sheetProtection === false) {
+            return '';
+        }
+
+        $password = '';
+        if (is_string($this->sheetProtection)) {
+            $password = ' password="' . $this->hashSheetProtectionPassword($this->sheetProtection) . '"';
+        }
+
+        return '<sheetProtection' . $password . ' sheet="1"/>';
+    }
+
+    /**
+     * Excel's legacy sheet-protection password verifier.
+     *
+     * This is intentionally not cryptographic: sheet protection prevents accidental edits,
+     * but does not encrypt the workbook or secure its contents.
+     */
+    private function hashSheetProtectionPassword(string $password): string
+    {
+        $verifier = 0;
+        $length = strlen($password);
+        $passwordWithLength = pack('c', $length) . $password;
+
+        for ($i = $length; $i >= 0; $i--) {
+            $highBit = ($verifier & 0x4000) === 0 ? 0 : 1;
+            $verifier = (($verifier << 1) & 0x7fff) | $highBit;
+            $verifier ^= ord($passwordWithLength[$i]);
+        }
+
+        return strtoupper(dechex($verifier ^ 0xCE4B));
     }
 
     private function genFreezePaneXml(): string

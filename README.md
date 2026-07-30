@@ -133,6 +133,20 @@ $writer->writeFile($data, 'report.xlsx');
 > [!NOTE]
 > ODS is supported for reading and writing tables. Advanced presentation features — such as `freezePane`, `autoWidth`, and `autofilter` — are intentionally XLSX-only. Baresheet does not aim for feature parity between the formats; use XLSX when those features matter.
 
+### XLSX Sheet Protection
+
+Lock an exported sheet to discourage accidental edits:
+
+```php
+// The user can remove the protection without a password.
+Baresheet::write($data, 'readonly.xlsx', new Options(sheetProtection: true));
+
+// The user must enter the password to remove the protection in Excel.
+Baresheet::write($data, 'protected.xlsx', new Options(sheetProtection: 'change-me'));
+```
+
+Sheet protection is not encryption and does not secure the workbook's contents. It is intended to prevent ordinary edits, not to protect sensitive data.
+
 ## Options
 
 Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration. There are three ways to configure an instance:
@@ -197,6 +211,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `meta`            | array/Meta                                 | `null`   | Write (XLSX, ODS)         |
 | `autofilter`      | ?string                                    | `null`   | Write (XLSX)              |
 | `freezePane`      | ?string                                    | `null`   | Write (XLSX)              |
+| `sheetProtection` | bool\|string                               | `false`  | Write (XLSX)              |
 | `sheet`           | string/int                                 | `null`   | Read/Write (XLSX, ODS)    |
 | `boldHeaders`     | bool                                       | `false`  | Write (XLSX, ODS)         |
 | `tempPath`        | ?string                                    | `null`   | Any (Temp files location) |

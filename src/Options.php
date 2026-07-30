@@ -87,6 +87,11 @@ class Options
         /** @var ?string Freeze panes starting from cell (e.g. A2) (XLSX only) */
         public ?string $freezePane = null,
         /**
+         * @var bool|string Protect the XLSX sheet from editing. True locks without a password;
+         *                  a string locks with an Excel sheet-protection password.
+         */
+        public bool|string $sheetProtection = false,
+        /**
          * @var string|int|null
          * For readers: The sheet name or index to read. If null, the first sheet is read.
          * For writers: The name of the sheet to create. If null, it defaults to 'Sheet1' internally.

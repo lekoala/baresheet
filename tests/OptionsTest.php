@@ -89,6 +89,7 @@ class OptionsTest extends TestCase
         $opts = new Options(
             autofilter: 'A1:C1',
             freezePane: 'A2',
+            sheetProtection: 'password',
             boldHeaders: true,
             sharedStrings: true,
             autoWidth: true,
@@ -99,6 +100,7 @@ class OptionsTest extends TestCase
 
         self::assertEquals('A1:C1', $writer->autofilter);
         self::assertEquals('A2', $writer->freezePane);
+        self::assertSame('password', $writer->sheetProtection);
         self::assertTrue($writer->boldHeaders);
         self::assertTrue($writer->sharedStrings);
         self::assertTrue($writer->autoWidth);
@@ -188,6 +190,7 @@ class OptionsTest extends TestCase
             public \LeKoala\Baresheet\Meta|array|null $meta = null;
             public ?string $autofilter = null;
             public ?string $freezePane = null;
+            public bool|string $sheetProtection = false;
             public string|int|null $sheet = null;
             public bool $boldHeaders = false;
             public ?string $tempPath = null;
