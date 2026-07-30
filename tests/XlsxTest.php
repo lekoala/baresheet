@@ -7,6 +7,7 @@ namespace LeKoala\Baresheet\Tests;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class XlsxTest extends TestCase
@@ -405,9 +406,7 @@ class XlsxTest extends TestCase
         unlink($tempFile);
     }
 
-    /**
-     * @dataProvider freezePaneProvider
-     */
+    #[DataProvider('freezePaneProvider')]
     public function testFreezePaneXml(string $freezePane, string $expectedPane): void
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_fp_' . time() . '.xlsx';

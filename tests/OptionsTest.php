@@ -197,6 +197,7 @@ class OptionsTest extends TestCase
             public array $columns = [];
             public array $aliases = [];
             public int $headerRows = 1;
+            public int|string|null $headerOffset = null;
         };
 
         $opts->applyTo($target);

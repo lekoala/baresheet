@@ -67,6 +67,7 @@
         "mago": "mago lint",
         "mago-fmt": "mago format",
         "phpunit": "phpunit",
+        "phpunit:issues": "phpunit --display-warnings --display-deprecations --display-phpunit-deprecations --display-skipped",
         "phpcs": "phpcs",
         "phpcbf": "phpcbf",
         "phpstan": "phpstan analyse src/ --memory-limit=-1"
