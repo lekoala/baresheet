@@ -59,12 +59,12 @@ class OdsTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.ods';
         $writer = new OdsWriter();
         $original = [
-            ['type', 'value'],
-            ['emoji', 'Hello 😀🎉👍'],
-            ['scientific', '1.23E+5'],
+            ['type',           'value'],
+            ['emoji',          'Hello 😀🎉👍'],
+            ['scientific',     '1.23E+5'],
             ['scientific_neg', '-4.56e-3'],
-            ['multiline', "line 1\nline 2\nline 3"],
-            ['leading_zero', '007'],
+            ['multiline',      "line 1\nline 2\nline 3"],
+            ['leading_zero',   '007'],
         ];
 
         $writer->writeFile($original, $tempFile);

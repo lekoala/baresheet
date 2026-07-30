@@ -285,12 +285,12 @@ class XlsxTest extends TestCase
         $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.xlsx';
         $writer = new XlsxWriter();
         $original = [
-            ['type', 'value'],
-            ['emoji', 'Hello 😀🎉👍'],
-            ['scientific', '1.23E+5'],
+            ['type',           'value'],
+            ['emoji',          'Hello 😀🎉👍'],
+            ['scientific',     '1.23E+5'],
             ['scientific_neg', '-4.56e-3'],
-            ['multiline', "line 1\nline 2\nline 3"],
-            ['leading_zero', '007'],
+            ['multiline',      "line 1\nline 2\nline 3"],
+            ['leading_zero',   '007'],
         ];
 
         $writer->writeFile($original, $tempFile);
@@ -911,10 +911,10 @@ class XlsxTest extends TestCase
     public function testCrossFormatChainXlsxToCsv(): void
     {
         $original = [
-            ['name', 'score', 'notes'],
-            ['Alice', '95', 'Hello 😀'],
-            ['Bob', '87', "line 1\nline 2"],
-            ['Carol', '42', '1.23E+5'],
+            ['name',  'score', 'notes'],
+            ['Alice', '95',    'Hello 😀'],
+            ['Bob',   '87',    "line 1\nline 2"],
+            ['Carol', '42',    '1.23E+5'],
         ];
 
         $xlsxFile = sys_get_temp_dir() . '/baresheet_chain_' . time() . '.xlsx';
