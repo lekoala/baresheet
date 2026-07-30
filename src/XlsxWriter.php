@@ -580,7 +580,15 @@ class XlsxWriter implements WriterInterface
             default => 'bottomLeft',
         };
 
-        return '<pane' . $splitAttributes . ' topLeftCell="' . $reference . '" activePane="' . $activePane . '" state="frozen"/>';
+        return (
+            '<pane'
+            . $splitAttributes
+            . ' topLeftCell="'
+            . $reference
+            . '" activePane="'
+            . $activePane
+            . '" state="frozen"/>'
+        );
     }
 
     /**
