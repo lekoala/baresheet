@@ -130,6 +130,9 @@ $writer->writeFile($data, 'report.xlsx');
 - **Document properties** — set creator and title via `meta`
 - **Sheet selection** — read specific sheets by name or index
 
+> [!NOTE]
+> ODS is supported for reading and writing tables. Advanced presentation features — such as `freezePane`, `autoWidth`, and `autofilter` — are intentionally XLSX-only. Baresheet does not aim for feature parity between the formats; use XLSX when those features matter.
+
 ## Options
 
 Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration. There are three ways to configure an instance:
