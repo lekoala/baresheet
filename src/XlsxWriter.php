@@ -473,9 +473,10 @@ class XlsxWriter implements WriterInterface
         $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
         $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
 
-        if ($this->freezePane) {
+        $freezePaneXml = $this->genFreezePaneXml();
+        if ($freezePaneXml !== '') {
             $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
-            $header .= '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>';
+            $header .= $freezePaneXml;
             $header .= '</sheetView></sheetViews>';
         }
 
@@ -502,6 +503,46 @@ class XlsxWriter implements WriterInterface
         fwrite($worksheetStream, $footer);
 
         return $worksheetStream;
+    }
+
+    private function genFreezePaneXml(): string
+    {
+        if ($this->freezePane === null || $this->freezePane === '') {
+            return '';
+        }
+
+        $reference = strtoupper($this->freezePane);
+        if (!preg_match('/^([A-Z]{1,3})([1-9]\d*)$/', $reference, $matches)) {
+            throw new \InvalidArgumentException("Invalid freeze pane cell reference: {$this->freezePane}");
+        }
+
+        $columnIndex = Spread::columnIndex($matches[1]);
+        $rowIndex = (int) $matches[2];
+        if ($columnIndex > 16_384 || $rowIndex > 1_048_576) {
+            throw new \InvalidArgumentException("Invalid freeze pane cell reference: {$this->freezePane}");
+        }
+
+        $xSplit = $columnIndex - 1;
+        $ySplit = $rowIndex - 1;
+        if ($xSplit === 0 && $ySplit === 0) {
+            return '';
+        }
+
+        $splitAttributes = '';
+        if ($xSplit > 0) {
+            $splitAttributes .= ' xSplit="' . $xSplit . '"';
+        }
+        if ($ySplit > 0) {
+            $splitAttributes .= ' ySplit="' . $ySplit . '"';
+        }
+
+        $activePane = match (true) {
+            $xSplit > 0 && $ySplit > 0 => 'bottomRight',
+            $xSplit > 0 => 'topRight',
+            default => 'bottomLeft',
+        };
+
+        return '<pane' . $splitAttributes . ' topLeftCell="' . $reference . '" activePane="' . $activePane . '" state="frozen"/>';
     }
 
     /**

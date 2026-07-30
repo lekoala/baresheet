@@ -405,11 +405,14 @@ class XlsxTest extends TestCase
         unlink($tempFile);
     }
 
-    public function testFreezePaneXml(): void
+    /**
+     * @dataProvider freezePaneProvider
+     */
+    public function testFreezePaneXml(string $freezePane, string $expectedPane): void
     {
         $tempFile = sys_get_temp_dir() . '/baresheet_fp_' . time() . '.xlsx';
         $writer = new XlsxWriter();
-        $writer->freezePane = 'A2';
+        $writer->freezePane = $freezePane;
         $writer->writeFile([
             ['Header1', 'Header2'],
             ['Data1',   'Data2'],
@@ -419,10 +422,34 @@ class XlsxTest extends TestCase
         $zip->open($tempFile);
         $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
         $zip->close();
-        self::assertStringContainsString('<pane ySplit="1"', $sheet);
-        self::assertStringContainsString('state="frozen"', $sheet);
+        self::assertStringContainsString($expectedPane, $sheet);
 
         unlink($tempFile);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function freezePaneProvider(): array
+    {
+        return [
+            'rows' => ['A2', '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'],
+            'columns' => ['B1', '<pane xSplit="1" topLeftCell="B1" activePane="topRight" state="frozen"/>'],
+            'rows and columns' => [
+                'C3',
+                '<pane xSplit="2" ySplit="2" topLeftCell="C3" activePane="bottomRight" state="frozen"/>',
+            ],
+        ];
+    }
+
+    public function testInvalidFreezePaneThrows(): void
+    {
+        $writer = new XlsxWriter();
+        $writer->freezePane = 'A0';
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid freeze pane cell reference: A0');
+        $writer->writeString([['data']]);
     }
 
     public function testCustomSheetName(): void
