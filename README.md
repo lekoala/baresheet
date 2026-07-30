@@ -30,12 +30,21 @@ composer require lekoala/baresheet
 ```php
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\Spread;
 
 // Auto-detect format from extension
 $rows = Baresheet::read('data.xlsx', new Options(assoc: true));
 foreach ($rows as $row) {
     echo $row['email'];
 }
+
+// Inspect a spreadsheet before choosing the table to import
+$sheetNames = Spread::getSheetNames('import.xlsx');
+// ['Patients', 'Archive', 'Instructions']
+
+$rows = Baresheet::read('import.xlsx'); // Reads the first sheet by default
+$archiveRows = Baresheet::read('import.xlsx', new Options(sheet: 'Archive'));
+// CSV is a single table, so do not inspect it for sheets.
 
 // Write — format from extension
 Baresheet::write($data, 'output.csv', new Options(bom: false));
