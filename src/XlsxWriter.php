@@ -691,12 +691,12 @@ class XlsxWriter implements WriterInterface
     private function genStyles(): string
     {
         // fontId 0 = normal, fontId 1 = bold (for boldHeaders)
+        // cellXfs: 0 = default, 1 = date (s="1"), 2 = bold (s="2")
         return <<<'XML'
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-            <numFmts count="2">
-                <numFmt numFmtId="164" formatCode="GENERAL" />
-                <numFmt numFmtId="165" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
+            <numFmts count="1">
+                <numFmt numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
             </numFmts>
             <fonts count="2">
                 <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
@@ -713,16 +713,9 @@ class XlsxWriter implements WriterInterface
                 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
             </cellStyleXfs>
             <cellXfs count="3">
-                <xf applyAlignment="false" applyBorder="false" applyFont="true" applyProtection="false" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0">
-                    <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/>
-                    <protection locked="true" hidden="false"/>
-                </xf>
-                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0">
-                    <alignment horizontal="general" vertical="bottom"/>
-                </xf>
-                <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="164" xfId="0">
-                    <alignment horizontal="general" vertical="bottom"/>
-                </xf>
+                <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
+                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />
+                <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />
             </cellXfs>
             <cellStyles count="1">
                 <cellStyle name="Normal" xfId="0" builtinId="0"/>

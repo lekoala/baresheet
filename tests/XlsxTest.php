@@ -807,4 +807,75 @@ class XlsxTest extends TestCase
 
         unlink($tempFile);
     }
+
+    public function testStylesXmlCleanup(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_styles_cleanup_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $writer->boldHeaders = true;
+        $dt = new \DateTime('2024-01-15 10:30:00');
+        $writer->writeFile([
+            ['Name', 'Date', 'Score'],
+            ['Alice', $dt, 95],
+            ['Bob', null, 87],
+        ], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $styles = $zip->getFromName('xl/styles.xml');
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+
+        // numFmts: only the date format, no redundant GENERAL
+        self::assertStringContainsString('<numFmts count="1">', $styles);
+        self::assertStringContainsString('numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss"', $styles);
+        self::assertStringNotContainsString('formatCode="GENERAL"', $styles);
+
+        // cellXfs: first xf is minimal (no applyAlignment/applyProtection/alignment/protection noise)
+        self::assertStringNotContainsString('applyAlignment="false"', $styles);
+        self::assertStringNotContainsString('applyProtection="false"', $styles);
+        self::assertStringNotContainsString('<alignment', $styles);
+        self::assertStringNotContainsString('<protection', $styles);
+
+        // cellXfs[0] uses built-in General (numFmtId="0"), not custom 164
+        self::assertStringContainsString(
+            '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"',
+            $styles,
+        );
+
+        // cellXfs[1] (date) uses applyNumberFormat with numFmtId="164"
+        self::assertStringContainsString('applyNumberFormat="true"', $styles);
+        self::assertMatchesRegularExpression(
+            '/<xf applyNumberFormat="true"[^>]*numFmtId="164"/',
+            $styles,
+        );
+
+        // cellXfs[2] (bold) uses applyFont with fontId="1"
+        self::assertMatchesRegularExpression(
+            '/<xf applyFont="true"[^>]*fontId="1"/',
+            $styles,
+        );
+
+        // Worksheet: bold header row uses s="2"
+        $row1End = strpos($sheet, '</row>');
+        $row1 = substr($sheet, 0, (int) $row1End);
+        self::assertStringContainsString('s="2"', $row1);
+
+        // Worksheet: date cell uses s="1"
+        $rest = substr($sheet, (int) $row1End + 7);
+        $row2End = strpos($rest, '</row>');
+        $row2 = substr($rest, 0, (int) $row2End);
+        self::assertStringContainsString('s="1"', $row2);
+
+        // Roundtrip: date is preserved
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(3, $data);
+        self::assertStringContainsString('2024-01-15', $data[1][1]);
+        self::assertSame('95', $data[1][2]);
+        self::assertSame('', $data[2][1]);
+        self::assertSame('87', $data[2][2]);
+
+        unlink($tempFile);
+    }
 }
