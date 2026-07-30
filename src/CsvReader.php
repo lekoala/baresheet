@@ -52,9 +52,15 @@ class CsvReader implements ReaderInterface
     public function readString(string $contents): Generator
     {
         $temp = Spread::getMaxMemTempStream();
-        fwrite($temp, $contents);
-        rewind($temp);
-        return $this->parseStream($temp);
+        try {
+            fwrite($temp, $contents);
+            rewind($temp);
+            yield from $this->parseStream($temp);
+        } finally {
+            if (is_resource($temp)) {
+                fclose($temp);
+            }
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvReader;
+use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\OdsReader;
@@ -349,5 +350,194 @@ class RobustnessTest extends TestCase
         );
 
         unlink($file);
+    }
+
+    // -- 7. Generator abandonment: break, exception and unset must release resources --
+
+    private function writeCsvForCleanup(): string
+    {
+        $file = $this->tempFile('csv');
+        file_put_contents($file, "a,b,c\n1,2,3\n4,5,6\n7,8,9\n");
+        return $file;
+    }
+
+    private function writeXlsxForCleanup(): string
+    {
+        $file = $this->tempFile('xlsx');
+        Baresheet::write([
+            ['a', 'b', 'c'],
+            ['1', '2', '3'],
+            ['4', '5', '6'],
+            ['7', '8', '9'],
+        ], $file);
+        return $file;
+    }
+
+    private function writeOdsForCleanup(): string
+    {
+        $file = $this->tempFile('ods');
+        Baresheet::write([
+            ['a', 'b', 'c'],
+            ['1', '2', '3'],
+            ['4', '5', '6'],
+            ['7', '8', '9'],
+        ], $file);
+        return $file;
+    }
+
+    public function testBreakReleasesFileCsv(): void
+    {
+        $file = $this->writeCsvForCleanup();
+        $reader = new CsvReader();
+        foreach ($reader->readFile($file) as $row) {
+            self::assertSame(['a', 'b', 'c'], $row);
+            break;
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testBreakReleasesFileXlsx(): void
+    {
+        $file = $this->writeXlsxForCleanup();
+        $reader = new XlsxReader();
+        foreach ($reader->readFile($file) as $row) {
+            self::assertSame(['a', 'b', 'c'], $row);
+            break;
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testBreakReleasesFileOds(): void
+    {
+        $file = $this->writeOdsForCleanup();
+        $reader = new OdsReader();
+        foreach ($reader->readFile($file) as $row) {
+            self::assertSame(['a', 'b', 'c'], $row);
+            break;
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testExceptionReleasesFileCsv(): void
+    {
+        $file = $this->writeCsvForCleanup();
+        $reader = new CsvReader();
+        try {
+            foreach ($reader->readFile($file) as $row) {
+                throw new \RuntimeException('Simulated failure');
+            }
+        } catch (\RuntimeException) {
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testExceptionReleasesFileXlsx(): void
+    {
+        $file = $this->writeXlsxForCleanup();
+        $reader = new XlsxReader();
+        try {
+            foreach ($reader->readFile($file) as $row) {
+                throw new \RuntimeException('Simulated failure');
+            }
+        } catch (\RuntimeException) {
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testExceptionReleasesFileOds(): void
+    {
+        $file = $this->writeOdsForCleanup();
+        $reader = new OdsReader();
+        try {
+            foreach ($reader->readFile($file) as $row) {
+                throw new \RuntimeException('Simulated failure');
+            }
+        } catch (\RuntimeException) {
+        }
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testGcReleasesFileCsv(): void
+    {
+        $file = $this->writeCsvForCleanup();
+        $reader = new CsvReader();
+        $gen = $reader->readFile($file);
+        $gen->next();
+        unset($gen);
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testGcReleasesFileXlsx(): void
+    {
+        $file = $this->writeXlsxForCleanup();
+        $reader = new XlsxReader();
+        $gen = $reader->readFile($file);
+        $gen->next();
+        unset($gen);
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    public function testGcReleasesFileOds(): void
+    {
+        $file = $this->writeOdsForCleanup();
+        $reader = new OdsReader();
+        $gen = $reader->readFile($file);
+        $gen->next();
+        unset($gen);
+        unlink($file);
+        self::assertFileDoesNotExist($file);
+    }
+
+    // -- 8. Stream ownership: writer methods never close caller-owned streams --
+
+    public function testWriteToStreamDoesNotCloseCallerStream(): void
+    {
+        $stream = fopen('php://temp', 'r+');
+        self::assertIsResource($stream);
+
+        $writer = new CsvWriter();
+        $writer->writeToStream([['a', 'b'], ['1', '2']], $stream);
+
+        self::assertIsResource($stream);
+        rewind($stream);
+        $contents = stream_get_contents($stream);
+        self::assertStringContainsString('a,b', $contents);
+        fclose($stream);
+    }
+
+    public function testReadStreamDoesNotCloseCallerStream(): void
+    {
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, "a,b\n1,2\n");
+        rewind($stream);
+
+        $reader = new CsvReader();
+        $rows = iterator_to_array($reader->readStream($stream));
+        self::assertSame([['a', 'b'], ['1', '2']], $rows);
+
+        self::assertIsResource($stream);
+        fclose($stream);
+    }
+
+    public function testWriteStreamReturnsPositionedStream(): void
+    {
+        $writer = new CsvWriter();
+        $stream = $writer->writeStream([['a', 'b'], ['1', '2']]);
+
+        $meta = stream_get_meta_data($stream);
+        self::assertSame(0, $meta['seekable'] ? ftell($stream) : 0);
+
+        $contents = stream_get_contents($stream);
+        self::assertStringContainsString('a,b', $contents);
+
+        fclose($stream);
     }
 }
