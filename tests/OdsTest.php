@@ -54,6 +54,34 @@ class OdsTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testOdsRoundTripPreservesEmojiAndScientificNotation(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.ods';
+        $writer = new OdsWriter();
+        $original = [
+            ['type', 'value'],
+            ['emoji', 'Hello 😀🎉👍'],
+            ['scientific', '1.23E+5'],
+            ['scientific_neg', '-4.56e-3'],
+            ['multiline', "line 1\nline 2\nline 3"],
+            ['leading_zero', '007'],
+        ];
+
+        $writer->writeFile($original, $tempFile);
+
+        $reader = new OdsReader();
+        $readBack = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(6, $readBack);
+        self::assertSame('type', $readBack[0][0]);
+        self::assertSame('Hello 😀🎉👍', $readBack[1][1]);
+        self::assertSame('1.23E+5', $readBack[2][1]);
+        self::assertSame('-4.56e-3', $readBack[3][1]);
+        self::assertSame("line 1\nline 2\nline 3", $readBack[4][1]);
+        self::assertSame('007', $readBack[5][1]);
+
+        unlink($tempFile);
+    }
+
     public function testWriteToString(): void
     {
         $writer = new OdsWriter();

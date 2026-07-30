@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
@@ -275,6 +276,34 @@ class XlsxTest extends TestCase
         self::assertCount(2, $readBack);
         self::assertEquals('John Doe', $readBack[0][0]);
         self::assertEquals('john@example.com', $readBack[0][1]);
+
+        unlink($tempFile);
+    }
+
+    public function testXlsxRoundTripPreservesEmojiAndScientificNotation(): void
+    {
+        $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.xlsx';
+        $writer = new XlsxWriter();
+        $original = [
+            ['type', 'value'],
+            ['emoji', 'Hello 😀🎉👍'],
+            ['scientific', '1.23E+5'],
+            ['scientific_neg', '-4.56e-3'],
+            ['multiline', "line 1\nline 2\nline 3"],
+            ['leading_zero', '007'],
+        ];
+
+        $writer->writeFile($original, $tempFile);
+
+        $reader = new XlsxReader();
+        $readBack = iterator_to_array($reader->readFile($tempFile));
+        self::assertCount(6, $readBack);
+        self::assertSame('type', $readBack[0][0]);
+        self::assertSame('Hello 😀🎉👍', $readBack[1][1]);
+        self::assertSame('1.23E+5', $readBack[2][1]);
+        self::assertSame('-4.56e-3', $readBack[3][1]);
+        self::assertSame("line 1\nline 2\nline 3", $readBack[4][1]);
+        self::assertSame('007', $readBack[5][1]);
 
         unlink($tempFile);
     }
@@ -877,5 +906,36 @@ class XlsxTest extends TestCase
         self::assertSame('87', $data[2][2]);
 
         unlink($tempFile);
+    }
+
+    public function testCrossFormatChainXlsxToCsv(): void
+    {
+        $original = [
+            ['name', 'score', 'notes'],
+            ['Alice', '95', 'Hello 😀'],
+            ['Bob', '87', "line 1\nline 2"],
+            ['Carol', '42', '1.23E+5'],
+        ];
+
+        $xlsxFile = sys_get_temp_dir() . '/baresheet_chain_' . time() . '.xlsx';
+        $csvFile = sys_get_temp_dir() . '/baresheet_chain_' . time() . '.csv';
+
+        Baresheet::write($original, $xlsxFile);
+
+        $fromXlsx = iterator_to_array(Baresheet::read($xlsxFile));
+        self::assertCount(4, $fromXlsx);
+        self::assertSame('Hello 😀', $fromXlsx[1][2]);
+        self::assertSame("line 1\nline 2", $fromXlsx[2][2]);
+
+        Baresheet::write($fromXlsx, $csvFile);
+
+        $fromCsv = iterator_to_array(Baresheet::read($csvFile));
+        self::assertCount(4, $fromCsv);
+        self::assertSame($fromXlsx, $fromCsv);
+        self::assertSame('Hello 😀', $fromCsv[1][2]);
+        self::assertSame("line 1\nline 2", $fromCsv[2][2]);
+
+        unlink($xlsxFile);
+        unlink($csvFile);
     }
 }
