@@ -145,7 +145,9 @@ Baresheet::write($data, 'readonly.xlsx', new Options(sheetProtection: true));
 Baresheet::write($data, 'protected.xlsx', new Options(sheetProtection: 'change-me'));
 ```
 
-Sheet protection is not encryption and does not secure the workbook's contents. It is intended to prevent ordinary edits, not to protect sensitive data.
+Sheet protection is not encryption and does not secure the workbook's contents. It is intentionally limited to Excel's legacy sheet-protection verifier: adding a stronger password hash would give a false impression of security because the protection can still be removed from the XLSX archive. It is intended to prevent ordinary edits, not to protect sensitive data.
+
+To prevent the workbook from being read, encrypt the completed file with a separate encryption process before delivering or storing it.
 
 ## Options
 

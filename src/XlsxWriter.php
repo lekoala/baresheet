@@ -523,7 +523,7 @@ class XlsxWriter implements WriterInterface
     }
 
     /**
-     * Excel's legacy sheet-protection password verifier.
+     * Generate Excel's legacy sheet-protection password verifier.
      *
      * This is intentionally not cryptographic: sheet protection prevents accidental edits,
      * but does not encrypt the workbook or secure its contents.
