@@ -385,38 +385,50 @@ class RobustnessTest extends TestCase
         return $file;
     }
 
-    public function testBreakReleasesFileCsv(): void
+    public function testCsvReaderReleasesResourcesWhenGeneratorIsAbandoned(): void
     {
         $file = $this->writeCsvForCleanup();
         $reader = new CsvReader();
-        foreach ($reader->readFile($file) as $row) {
-            self::assertSame(['a', 'b', 'c'], $row);
-            break;
-        }
+        $gen = $reader->readFile($file);
+        $gen->rewind();
+
+        self::assertTrue($gen->valid());
+        self::assertSame(['a', 'b', 'c'], $gen->current());
+
+        unset($gen);
+
         unlink($file);
         self::assertFileDoesNotExist($file);
     }
 
-    public function testBreakReleasesFileXlsx(): void
+    public function testXlsxReaderReleasesResourcesWhenGeneratorIsAbandoned(): void
     {
         $file = $this->writeXlsxForCleanup();
         $reader = new XlsxReader();
-        foreach ($reader->readFile($file) as $row) {
-            self::assertSame(['a', 'b', 'c'], $row);
-            break;
-        }
+        $gen = $reader->readFile($file);
+        $gen->rewind();
+
+        self::assertTrue($gen->valid());
+        self::assertSame(['a', 'b', 'c'], $gen->current());
+
+        unset($gen);
+
         unlink($file);
         self::assertFileDoesNotExist($file);
     }
 
-    public function testBreakReleasesFileOds(): void
+    public function testOdsReaderReleasesResourcesWhenGeneratorIsAbandoned(): void
     {
         $file = $this->writeOdsForCleanup();
         $reader = new OdsReader();
-        foreach ($reader->readFile($file) as $row) {
-            self::assertSame(['a', 'b', 'c'], $row);
-            break;
-        }
+        $gen = $reader->readFile($file);
+        $gen->rewind();
+
+        self::assertTrue($gen->valid());
+        self::assertSame(['a', 'b', 'c'], $gen->current());
+
+        unset($gen);
+
         unlink($file);
         self::assertFileDoesNotExist($file);
     }
@@ -459,39 +471,6 @@ class RobustnessTest extends TestCase
             }
         } catch (\RuntimeException) {
         }
-        unlink($file);
-        self::assertFileDoesNotExist($file);
-    }
-
-    public function testGcReleasesFileCsv(): void
-    {
-        $file = $this->writeCsvForCleanup();
-        $reader = new CsvReader();
-        $gen = $reader->readFile($file);
-        $gen->next();
-        unset($gen);
-        unlink($file);
-        self::assertFileDoesNotExist($file);
-    }
-
-    public function testGcReleasesFileXlsx(): void
-    {
-        $file = $this->writeXlsxForCleanup();
-        $reader = new XlsxReader();
-        $gen = $reader->readFile($file);
-        $gen->next();
-        unset($gen);
-        unlink($file);
-        self::assertFileDoesNotExist($file);
-    }
-
-    public function testGcReleasesFileOds(): void
-    {
-        $file = $this->writeOdsForCleanup();
-        $reader = new OdsReader();
-        $gen = $reader->readFile($file);
-        $gen->next();
-        unset($gen);
         unlink($file);
         self::assertFileDoesNotExist($file);
     }
