@@ -681,6 +681,35 @@ class Spread
     }
 
     /**
+     * Validate a sheet name against Excel restrictions.
+     *
+     * @throws WriteException
+     */
+    public static function validateSheetName(string $name): string
+    {
+        if ($name === '') {
+            throw new WriteException('Sheet name must not be empty');
+        }
+        if (mb_strlen($name) > 31) {
+            throw new WriteException("Invalid XLSX sheet name: {$name}");
+        }
+        if (preg_match('~[\\\\/*?:\[\]]~u', $name)) {
+            throw new WriteException("Invalid XLSX sheet name: {$name}");
+        }
+        if (str_starts_with($name, "'")) {
+            throw new WriteException("Invalid XLSX sheet name: {$name}");
+        }
+        if (str_ends_with($name, "'")) {
+            throw new WriteException("Invalid XLSX sheet name: {$name}");
+        }
+        if (strcasecmp($name, 'History') === 0) {
+            throw new WriteException("Invalid XLSX sheet name: {$name}");
+        }
+
+        return $name;
+    }
+
+    /**
      * Reject headers containing the same name more than once. Duplicate headers can't
      * be represented by array_combine() (one of the columns silently disappears) and
      * would make column selection ambiguous.

@@ -266,7 +266,7 @@ class OdsWriter implements WriterInterface
         }
 
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-        $sheetName = Spread::escapeXmlAttr($sheetVal);
+        $sheetName = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
 
         fwrite($fd, '<?xml version="1.0" encoding="UTF-8"?>' . "\n");
         fwrite(

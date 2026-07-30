@@ -734,7 +734,7 @@ class XlsxWriter implements WriterInterface
     private function genWorkbook(): string
     {
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-        $name = Spread::escapeXmlAttr($sheetVal);
+        $name = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
         return <<<XML
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
