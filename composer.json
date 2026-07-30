@@ -52,7 +52,6 @@
             "LeKoala\\Baresheet\\Tests\\": "tests/"
         }
     },
-    "prefer-stable": true,
     "config": {
         "sort-packages": true,
         "preferred-install": "dist"
