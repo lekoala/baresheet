@@ -90,4 +90,13 @@ class CsvSeparatorTest extends TestCase
         $sample = 'a,b;c';
         $this->assertEquals(',', CsvReader::detectSeparator($sample));
     }
+
+    public function testDetectWithEscapedQuotes(): void
+    {
+        // Semicolons inside quotes that contain escaped double quotes should be ignored.
+        // Let's create a line where semicolon is inside the quoted field with escaped quotes,
+        // and commas are the actual field separators.
+        $sample = "name,email,comment\nJohn,john@example.com,\"This;is;\"\"a;comment\"\";with;escaped;quotes;and;semicolons\"";
+        $this->assertEquals(',', CsvReader::detectSeparator($sample));
+    }
 }
