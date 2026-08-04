@@ -436,7 +436,7 @@ class CsvReader implements ReaderInterface
         $scores = array_fill_keys($candidates, 0);
 
         foreach ($lines as $line) {
-            $clean = preg_replace('/"[^"]*"/', '', $line) ?? '';
+            $clean = preg_replace('/"(?:[^"]|"")*"/', '', $line) ?? '';
             foreach ($candidates as $sep) {
                 $scores[$sep] += substr_count($clean, $sep);
             }
