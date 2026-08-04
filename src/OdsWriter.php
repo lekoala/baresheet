@@ -212,16 +212,17 @@ class OdsWriter implements WriterInterface
             throw new WriteException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
-        // mimetype must be first entry and stored uncompressed
-        $zip->addFromString('mimetype', self::MIMETYPE);
-        $zip->setCompressionName('mimetype', ZipArchive::CM_STORE);
-
-        $zip->addFromString('META-INF/manifest.xml', $this->genManifest());
-        $zip->addFromString('meta.xml', $this->genMeta());
-        $zip->addFromString('styles.xml', $this->genStyles());
-
-        $contentStream = $this->genContent($data);
+        $contentStream = null;
         try {
+            // mimetype must be first entry and stored uncompressed
+            $zip->addFromString('mimetype', self::MIMETYPE);
+            $zip->setCompressionName('mimetype', ZipArchive::CM_STORE);
+
+            $zip->addFromString('META-INF/manifest.xml', $this->genManifest());
+            $zip->addFromString('meta.xml', $this->genMeta());
+            $zip->addFromString('styles.xml', $this->genStyles());
+
+            $contentStream = $this->genContent($data);
             rewind($contentStream);
             $meta = stream_get_meta_data($contentStream);
             $uri = (string) ($meta['uri'] ?? '');
@@ -265,139 +266,144 @@ class OdsWriter implements WriterInterface
             throw new WriteException('Failed to open temp stream');
         }
 
-        $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-        $sheetName = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
+        try {
+            $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
+            $sheetName = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
 
-        fwrite($fd, '<?xml version="1.0" encoding="UTF-8"?>' . "\n");
-        fwrite(
-            $fd,
-            '<office:document-content'
-            . ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
-            . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
-            . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
-            . ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"'
-            . ' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
-            . ' office:version="1.3">',
-        );
+            fwrite($fd, '<?xml version="1.0" encoding="UTF-8"?>' . "\n");
+            fwrite(
+                $fd,
+                '<office:document-content'
+                . ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+                . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
+                . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+                . ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"'
+                . ' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
+                . ' office:version="1.3">',
+            );
 
-        // Styles block (mandatory for some readers like OpenSpout)
-        fwrite($fd, '<office:automatic-styles>');
-        fwrite($fd, '<style:style style:name="ta1" style:family="table"/>');
-        fwrite($fd, '<style:style style:name="bold" style:family="table-cell">');
-        fwrite($fd, '<style:text-properties fo:font-weight="bold"/>');
-        fwrite($fd, '</style:style>');
-        fwrite($fd, '</office:automatic-styles>');
+            // Styles block (mandatory for some readers like OpenSpout)
+            fwrite($fd, '<office:automatic-styles>');
+            fwrite($fd, '<style:style style:name="ta1" style:family="table"/>');
+            fwrite($fd, '<style:style style:name="bold" style:family="table-cell">');
+            fwrite($fd, '<style:text-properties fo:font-weight="bold"/>');
+            fwrite($fd, '</style:style>');
+            fwrite($fd, '</office:automatic-styles>');
 
-        fwrite($fd, '<office:body><office:spreadsheet>');
-        fwrite($fd, '<table:table table:name="' . $sheetName . '" table:style-name="ta1">');
+            fwrite($fd, '<office:body><office:spreadsheet>');
+            fwrite($fd, '<table:table table:name="' . $sheetName . '" table:style-name="ta1">');
 
-        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
-        if ($headerSchema !== null) {
-            $headerRowsRemaining = count($headerSchema->headerRows());
-        } else {
-            $headerRowsRemaining = 0;
-            if ($this->boldHeaders) {
-                $headerRowsRemaining = 1;
-            } elseif (is_array($data)) {
-                $firstRow = reset($data);
-                if (is_array($firstRow) && !array_is_list($firstRow)) {
+            $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+            if ($headerSchema !== null) {
+                $headerRowsRemaining = count($headerSchema->headerRows());
+            } else {
+                $headerRowsRemaining = 0;
+                if ($this->boldHeaders) {
                     $headerRowsRemaining = 1;
-                }
-            }
-        }
-        $wrappedData = $this->wrapRows($data, $headerSchema);
-
-        $boldHeadersOpt = $this->boldHeaders;
-        $bufferSizeOpt = self::BUFFER_SIZE;
-        $buffer = '';
-        $r = 0;
-
-        foreach ($wrappedData as $row) {
-            $r++;
-            $buffer .= '<table:table-row>';
-
-            $rowCellStyle = $headerRowsRemaining > 0 && $boldHeadersOpt ? ' table:style-name="bold"' : '';
-
-            foreach ($row as $value) {
-                if ($value instanceof DateTimeInterface) {
-                    $isoDate = $value->format('Y-m-d\TH:i:s');
-                    $display = $value->format('Y-m-d H:i:s');
-                    $buffer .=
-                        '<table:table-cell'
-                        . $rowCellStyle
-                        . ' office:value-type="date"'
-                        . ' office:date-value="'
-                        . $isoDate
-                        . '">'
-                        . '<text:p>'
-                        . $display
-                        . '</text:p>'
-                        . '</table:table-cell>';
-                } elseif ($value === null || $value === '') {
-                    $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
-                } elseif (
-                    is_numeric($value)
-                    && (!is_string($value)
-                    || $value === '0'
-                    || (isset($value[0])
-                    && $value[0] !== '0'
-                    || str_contains($value, '.')))
-                ) {
-                    $buffer .=
-                        '<table:table-cell'
-                        . $rowCellStyle
-                        . ' office:value-type="float"'
-                        . ' office:value="'
-                        . $value
-                        . '">'
-                        . '<text:p>'
-                        . $value
-                        . '</text:p>'
-                        . '</table:table-cell>';
-                } else {
-                    if ($value instanceof \Stringable) {
-                        $strValue = $value->__toString();
-                    } elseif (is_scalar($value)) {
-                        $strValue = (string) $value;
-                    } else {
-                        $strValue = '';
+                } elseif (is_array($data)) {
+                    $firstRow = reset($data);
+                    if (is_array($firstRow) && !array_is_list($firstRow)) {
+                        $headerRowsRemaining = 1;
                     }
-                    $escaped = Spread::escapeXml($strValue);
-                    $buffer .=
-                        '<table:table-cell'
-                        . $rowCellStyle
-                        . ' office:value-type="string">'
-                        . '<text:p>'
-                        . $escaped
-                        . '</text:p>'
-                        . '</table:table-cell>';
                 }
             }
-            if ($headerRowsRemaining > 0) {
-                $headerRowsRemaining--;
+            $wrappedData = $this->wrapRows($data, $headerSchema);
+
+            $boldHeadersOpt = $this->boldHeaders;
+            $bufferSizeOpt = self::BUFFER_SIZE;
+            $buffer = '';
+            $r = 0;
+
+            foreach ($wrappedData as $row) {
+                $r++;
+                $buffer .= '<table:table-row>';
+
+                $rowCellStyle = $headerRowsRemaining > 0 && $boldHeadersOpt ? ' table:style-name="bold"' : '';
+
+                foreach ($row as $value) {
+                    if ($value instanceof DateTimeInterface) {
+                        $isoDate = $value->format('Y-m-d\TH:i:s');
+                        $display = $value->format('Y-m-d H:i:s');
+                        $buffer .=
+                            '<table:table-cell'
+                            . $rowCellStyle
+                            . ' office:value-type="date"'
+                            . ' office:date-value="'
+                            . $isoDate
+                            . '">'
+                            . '<text:p>'
+                            . $display
+                            . '</text:p>'
+                            . '</table:table-cell>';
+                    } elseif ($value === null || $value === '') {
+                        $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
+                    } elseif (
+                        is_numeric($value)
+                        && (!is_string($value)
+                        || $value === '0'
+                        || (isset($value[0])
+                        && $value[0] !== '0'
+                        || str_contains($value, '.')))
+                    ) {
+                        $buffer .=
+                            '<table:table-cell'
+                            . $rowCellStyle
+                            . ' office:value-type="float"'
+                            . ' office:value="'
+                            . $value
+                            . '">'
+                            . '<text:p>'
+                            . $value
+                            . '</text:p>'
+                            . '</table:table-cell>';
+                    } else {
+                        if ($value instanceof \Stringable) {
+                            $strValue = $value->__toString();
+                        } elseif (is_scalar($value)) {
+                            $strValue = (string) $value;
+                        } else {
+                            $strValue = '';
+                        }
+                        $escaped = Spread::escapeXml($strValue);
+                        $buffer .=
+                            '<table:table-cell'
+                            . $rowCellStyle
+                            . ' office:value-type="string">'
+                            . '<text:p>'
+                            . $escaped
+                            . '</text:p>'
+                            . '</table:table-cell>';
+                    }
+                }
+                if ($headerRowsRemaining > 0) {
+                    $headerRowsRemaining--;
+                }
+                $buffer .= '</table:table-row>';
+                if (($r % $bufferSizeOpt) === 0) {
+                    $res = fwrite($fd, $buffer);
+                    if ($res === false) {
+                        throw new WriteException('Failed to write to buffer');
+                    }
+                    $buffer = '';
+                }
             }
-            $buffer .= '</table:table-row>';
-            if (($r % $bufferSizeOpt) === 0) {
+
+            if ($buffer !== '') {
                 $res = fwrite($fd, $buffer);
                 if ($res === false) {
                     throw new WriteException('Failed to write to buffer');
                 }
-                $buffer = '';
             }
+
+            fwrite($fd, '</table:table>');
+            fwrite($fd, '</office:spreadsheet></office:body>');
+            fwrite($fd, '</office:document-content>');
+
+            return $fd;
+        } catch (\Throwable $e) {
+            fclose($fd);
+            throw $e;
         }
-
-        if ($buffer !== '') {
-            $res = fwrite($fd, $buffer);
-            if ($res === false) {
-                throw new WriteException('Failed to write to buffer');
-            }
-        }
-
-        fwrite($fd, '</table:table>');
-        fwrite($fd, '</office:spreadsheet></office:body>');
-        fwrite($fd, '</office:document-content>');
-
-        return $fd;
     }
 
     /**
