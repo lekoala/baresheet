@@ -38,7 +38,7 @@ class XlsxReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
-    public int $maxWorksheetSize = 500_000_000;
+    public ?int $maxWorksheetSize = 500_000_000;
 
     public function __construct(?Options $options = null)
     {
@@ -119,7 +119,7 @@ class XlsxReader implements ReaderInterface
             // zipGetData() only guards entries it loads into memory itself; the worksheet
             // is instead streamed directly via zip:// below, so it needs its own size cap.
             $wsStat = $zip->statIndex($wsIdx);
-            if ($wsStat !== false && $wsStat['size'] > $this->maxWorksheetSize) {
+            if ($this->maxWorksheetSize !== null && $wsStat !== false && $wsStat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
                     "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
                 );

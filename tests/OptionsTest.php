@@ -201,7 +201,7 @@ class OptionsTest extends TestCase
             public array $aliases = [];
             public int $headerRows = 1;
             public int|string|null $headerOffset = null;
-            public int $maxWorksheetSize = 500_000_000;
+            public ?int $maxWorksheetSize = 500_000_000;
         };
 
         $opts->applyTo($target);
@@ -256,6 +256,14 @@ class OptionsTest extends TestCase
         $this->expectExceptionMessage('Escape must be a single character');
 
         new Options(escape: '\\\\');
+    }
+
+    public function testInvalidMaxWorksheetSizeThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('maxWorksheetSize must be greater than 0 or null');
+
+        new Options(maxWorksheetSize: 0);
     }
 
     public function testValidEdgeCases(): void
