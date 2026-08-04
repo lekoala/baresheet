@@ -18,7 +18,6 @@ use ZipArchive;
  */
 class XlsxReader implements ReaderInterface
 {
-    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
     // Excel's real column limit (XFD), so a bogus cell reference can't force
     // allocation of an absurd number of null placeholder columns.
     private const MAX_COLUMNS = 16_384;
@@ -39,6 +38,7 @@ class XlsxReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
+    public int $maxWorksheetSize = 500_000_000;
 
     public function __construct(?Options $options = null)
     {
@@ -117,11 +117,11 @@ class XlsxReader implements ReaderInterface
             }
 
             // zipGetData() only guards entries it loads into memory itself; the worksheet
-            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            // is instead streamed directly via zip:// below, so it needs its own size cap.
             $wsStat = $zip->statIndex($wsIdx);
-            if ($wsStat !== false && $wsStat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+            if ($wsStat !== false && $wsStat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
-                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
                 );
             }
         } finally {

@@ -105,6 +105,8 @@ class Options
         public bool $sharedStrings = false,
         /** @var bool If true, enables auto column width for XLSX files (faster writing when false). */
         public bool $autoWidth = false,
+        /** @var int Maximum allowed size for the streamed worksheet or content XML file in bytes. */
+        public int $maxWorksheetSize = 500_000_000,
     ) {
         if ($this->offset < 0) {
             throw new \InvalidArgumentException('Offset must be >= 0, got ' . $this->offset);

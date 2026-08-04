@@ -22,7 +22,6 @@ class OdsReader implements ReaderInterface
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
-    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
     // Caps the total column count a row can reach, however many repeated
     // cells it takes to get there.
     private const MAX_COLUMNS = 16_384;
@@ -46,6 +45,7 @@ class OdsReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
+    public int $maxWorksheetSize = 500_000_000;
 
     public function __construct(?Options $options = null)
     {
@@ -81,11 +81,11 @@ class OdsReader implements ReaderInterface
             }
 
             // zipGetData() only guards entries it loads into memory itself; content.xml
-            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            // is instead streamed directly via zip:// below, so it needs its own size cap.
             $stat = $zip->statIndex($idx);
-            if ($stat !== false && $stat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+            if ($stat !== false && $stat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
-                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . $this->maxWorksheetSize . ' bytes).',
                 );
             }
         } finally {

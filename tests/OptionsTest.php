@@ -201,6 +201,7 @@ class OptionsTest extends TestCase
             public array $aliases = [];
             public int $headerRows = 1;
             public int|string|null $headerOffset = null;
+            public int $maxWorksheetSize = 500_000_000;
         };
 
         $opts->applyTo($target);
