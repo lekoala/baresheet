@@ -239,8 +239,10 @@ class XlsxWriter implements WriterInterface
         if ($result !== true) {
             throw new WriteException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
-        $stream = $this->writeToZip($zip, $data);
+
+        $stream = null;
         try {
+            $stream = $this->writeToZip($zip, $data);
             $destinationFile = $zip->filename;
             $closeResult = $zip->close();
             if ($closeResult === false) {
@@ -345,167 +347,183 @@ class XlsxWriter implements WriterInterface
             throw new WriteException('Failed to get temp file for sheet data');
         }
 
-        $r = 0;
-        $colWidths = [];
-        $boldStyle = $this->boldHeaders ? ' s="2"' : '';
-        $colCache = [];
+        $worksheetStream = null;
+        try {
+            $r = 0;
+            $colWidths = [];
+            $boldStyle = $this->boldHeaders ? ' s="2"' : '';
+            $colCache = [];
 
-        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
-        if ($headerSchema !== null) {
-            $headerRowsRemaining = count($headerSchema->headerRows());
-        } else {
-            $headerRowsRemaining = 0;
-            if ($this->boldHeaders) {
-                $headerRowsRemaining = 1;
-            } elseif (is_array($data)) {
-                $firstRow = reset($data);
-                if (is_array($firstRow) && !array_is_list($firstRow)) {
+            $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+            if ($headerSchema !== null) {
+                $headerRowsRemaining = count($headerSchema->headerRows());
+            } else {
+                $headerRowsRemaining = 0;
+                if ($this->boldHeaders) {
                     $headerRowsRemaining = 1;
+                } elseif (is_array($data)) {
+                    $firstRow = reset($data);
+                    if (is_array($firstRow) && !array_is_list($firstRow)) {
+                        $headerRowsRemaining = 1;
+                    }
                 }
             }
-        }
-        $wrappedData = $this->wrapRows($data, $headerSchema);
+            $wrappedData = $this->wrapRows($data, $headerSchema);
 
-        $autoWidth = $this->autoWidth;
-        $sharedStringsOpt = $this->sharedStrings;
-        $bufferSizeOpt = self::BUFFER_SIZE;
-        $buffer = '';
+            $autoWidth = $this->autoWidth;
+            $sharedStringsOpt = $this->sharedStrings;
+            $bufferSizeOpt = self::BUFFER_SIZE;
+            $buffer = '';
 
-        foreach ($wrappedData as $dataRow) {
-            $r++;
-            $i = 0;
-            $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
-            $buffer .= "<row r=\"{$r}\">";
-            foreach ($dataRow as $value) {
-                if (!isset($colCache[$i])) {
-                    $colCache[$i] = Spread::columnLetter($i + 1);
-                }
-                $cn = $colCache[$i] . $r;
-
-                if ($value instanceof DateTimeInterface) {
-                    $excelDate = Spread::dateToExcel($value);
-                    $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
-                    $vl = 16;
-                } elseif ($value === null || $value === '' || (!is_scalar($value) && !$value instanceof \Stringable)) {
-                    $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
-                    $vl = 0;
-                } else {
-                    $isNumeric = false;
-                    if (is_int($value) || is_float($value)) {
-                        $isNumeric = true;
-                        $strValue = (string) $value;
-                    } else {
-                        $strValue = (string) $value;
-                        if ($strValue === '0') {
-                            $isNumeric = true;
-                        } elseif (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue)) {
-                            $isNumeric = true;
-                        } elseif (is_numeric($strValue)) {
-                            $isNumeric = (bool) preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
-                        }
+            foreach ($wrappedData as $dataRow) {
+                $r++;
+                $i = 0;
+                $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
+                $buffer .= "<row r=\"{$r}\">";
+                foreach ($dataRow as $value) {
+                    if (!isset($colCache[$i])) {
+                        $colCache[$i] = Spread::columnLetter($i + 1);
                     }
+                    $cn = $colCache[$i] . $r;
 
-                    if ($isNumeric) {
-                        $vl = strlen($strValue);
-                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    if ($value instanceof DateTimeInterface) {
+                        $excelDate = Spread::dateToExcel($value);
+                        $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
+                        $vl = 16;
+                    } elseif (
+                        $value === null
+                        || $value === ''
+                        || (!is_scalar($value)
+                        && !$value instanceof \Stringable)
+                    ) {
+                        $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
+                        $vl = 0;
                     } else {
-                        // ⚡ Bolt: Fast-path optimization
-                        // mb_strlen is significantly slower than strlen in tight loops.
-                        // Use strlen (byte-length) as a fast threshold check for shared strings.
-                        // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
-                        $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
-
-                        $escaped = Spread::escapeXml($strValue);
-
-                        // For shared strings logic, use strlen for byte-length threshold checking
-                        $strByteLen = $autoWidth ? strlen($strValue) : $vl;
-
-                        if ($sharedStringsOpt && $strByteLen <= 160) {
-                            $skey = '~' . $escaped;
-                            if (isset($sharedStringKeys[$skey])) {
-                                $ssIdx = $sharedStringKeys[$skey];
-                            } else {
-                                $sharedStrings[] = $escaped;
-                                $ssIdx = count($sharedStrings) - 1;
-                                $sharedStringKeys[$skey] = $ssIdx;
-                            }
-                            $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                        $isNumeric = false;
+                        if (is_int($value) || is_float($value)) {
+                            $isNumeric = true;
+                            $strValue = (string) $value;
                         } else {
-                            $buffer .=
-                                '<c r="'
-                                . $cn
-                                . '" t="inlineStr"'
-                                . $cellStyle
-                                . '><is><t>'
-                                . $escaped
-                                . '</t></is></c>';
+                            $strValue = (string) $value;
+                            if ($strValue === '0') {
+                                $isNumeric = true;
+                            } elseif (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue)) {
+                                $isNumeric = true;
+                            } elseif (is_numeric($strValue)) {
+                                $isNumeric = (bool) preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
+                            }
+                        }
+
+                        if ($isNumeric) {
+                            $vl = strlen($strValue);
+                            $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                        } else {
+                            // ⚡ Bolt: Fast-path optimization
+                            // mb_strlen is significantly slower than strlen in tight loops.
+                            // Use strlen (byte-length) as a fast threshold check for shared strings.
+                            // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
+                            $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
+
+                            $escaped = Spread::escapeXml($strValue);
+
+                            // For shared strings logic, use strlen for byte-length threshold checking
+                            $strByteLen = $autoWidth ? strlen($strValue) : $vl;
+
+                            if ($sharedStringsOpt && $strByteLen <= 160) {
+                                $skey = '~' . $escaped;
+                                if (isset($sharedStringKeys[$skey])) {
+                                    $ssIdx = $sharedStringKeys[$skey];
+                                } else {
+                                    $sharedStrings[] = $escaped;
+                                    $ssIdx = count($sharedStrings) - 1;
+                                    $sharedStringKeys[$skey] = $ssIdx;
+                                }
+                                $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                            } else {
+                                $buffer .=
+                                    '<c r="'
+                                    . $cn
+                                    . '" t="inlineStr"'
+                                    . $cellStyle
+                                    . '><is><t>'
+                                    . $escaped
+                                    . '</t></is></c>';
+                            }
                         }
                     }
-                }
-                $buffer .= "\r\n";
-                if ($autoWidth) {
-                    if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
-                        $colWidths[$i] = $vl;
+                    $buffer .= "\r\n";
+                    if ($autoWidth) {
+                        if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
+                            $colWidths[$i] = $vl;
+                        }
                     }
+                    $i++;
                 }
-                $i++;
+                $buffer .= "</row>\r\n";
+                if (($r % $bufferSizeOpt) === 0) {
+                    fwrite($dataStream, $buffer);
+                    $buffer = '';
+                }
+                if ($headerRowsRemaining > 0) {
+                    $headerRowsRemaining--;
+                }
             }
-            $buffer .= "</row>\r\n";
-            if (($r % $bufferSizeOpt) === 0) {
+
+            if ($buffer !== '') {
                 fwrite($dataStream, $buffer);
-                $buffer = '';
             }
-            if ($headerRowsRemaining > 0) {
-                $headerRowsRemaining--;
+
+            // Now assemble the final worksheet stream
+            $worksheetStream = tmpfile();
+            if (!$worksheetStream) {
+                throw new WriteException('Failed to get temp file for worksheet');
             }
-        }
 
-        if ($buffer !== '') {
-            fwrite($dataStream, $buffer);
-        }
+            $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
+            $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+            $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
 
-        // Now assemble the final worksheet stream
-        $worksheetStream = tmpfile();
-        if (!$worksheetStream) {
+            $freezePaneXml = $this->genFreezePaneXml();
+            if ($freezePaneXml !== '') {
+                $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
+                $header .= $freezePaneXml;
+                $header .= '</sheetView></sheetViews>';
+            }
+
+            if ($autoWidth) {
+                $header .= $this->genColsXml($colWidths);
+            }
+
+            $header .= '<sheetData>';
+            fwrite($worksheetStream, $header);
+
+            rewind($dataStream);
+            stream_copy_to_stream($dataStream, $worksheetStream);
             fclose($dataStream);
-            throw new WriteException('Failed to get temp file for worksheet');
-        }
+            $dataStream = null;
 
-        $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
-        $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
-        $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-
-        $freezePaneXml = $this->genFreezePaneXml();
-        if ($freezePaneXml !== '') {
-            $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
-            $header .= $freezePaneXml;
-            $header .= '</sheetView></sheetViews>';
-        }
-
-        if ($autoWidth) {
-            $header .= $this->genColsXml($colWidths);
-        }
-
-        $header .= '<sheetData>';
-        fwrite($worksheetStream, $header);
-
-        rewind($dataStream);
-        stream_copy_to_stream($dataStream, $worksheetStream);
-        fclose($dataStream);
-
-        $footer = '</sheetData>';
-        $footer .= $this->genSheetProtectionXml();
-        if ($this->autofilter) {
-            $autofilter = $this->autofilter;
-            if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
-                $escapedFilter = Spread::escapeXmlAttr($autofilter);
-                $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
+            $footer = '</sheetData>';
+            $footer .= $this->genSheetProtectionXml();
+            if ($this->autofilter) {
+                $autofilter = $this->autofilter;
+                if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
+                    $escapedFilter = Spread::escapeXmlAttr($autofilter);
+                    $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
+                }
             }
-        }
-        $footer .= '</worksheet>';
-        fwrite($worksheetStream, $footer);
+            $footer .= '</worksheet>';
+            fwrite($worksheetStream, $footer);
 
-        return $worksheetStream;
+            return $worksheetStream;
+        } catch (\Throwable $e) {
+            if (is_resource($worksheetStream)) {
+                fclose($worksheetStream);
+            }
+            if (is_resource($dataStream)) {
+                fclose($dataStream);
+            }
+            throw $e;
+        }
     }
 
     private function genSheetProtectionXml(): string
