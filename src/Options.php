@@ -112,7 +112,8 @@ class Options
             throw new \InvalidArgumentException('Offset must be >= 0, got ' . $this->offset);
         }
         if ($this->maxWorksheetSize !== null && $this->maxWorksheetSize <= 0) {
-            throw new \InvalidArgumentException('maxWorksheetSize must be greater than 0 or null, got ' . $this->maxWorksheetSize);
+            throw new \InvalidArgumentException('maxWorksheetSize must be greater than 0 or null, got '
+            . $this->maxWorksheetSize);
         }
         if ($this->limit !== null && $this->limit < 0) {
             throw new \InvalidArgumentException('Limit must be >= 0 or null, got ' . $this->limit);

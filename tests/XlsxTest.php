@@ -948,7 +948,7 @@ class XlsxTest extends TestCase
         $readerTiny = new XlsxReader($optionsTiny);
 
         $this->expectException(\LeKoala\Baresheet\Exception\InvalidDocumentException::class);
-        $this->expectExceptionMessage("exceeds maximum allowed size");
+        $this->expectExceptionMessage('exceeds maximum allowed size');
         iterator_to_array($readerTiny->readFile($fixture));
     }
 
