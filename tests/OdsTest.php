@@ -82,6 +82,30 @@ class OdsTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testOdsBooleanRoundTrip(): void
+    {
+        $tempFile = $this->tempFile('ods');
+        $writer = new OdsWriter();
+        $writer->writeFile([
+            ['name', 'active'],
+            ['Alice', true],
+            ['Bob', false],
+        ], $tempFile);
+
+        $reader = new OdsReader();
+        $readBack = iterator_to_array($reader->readFile($tempFile));
+        self::assertSame(
+            [
+                ['name', 'active'],
+                ['Alice', '1'],
+                ['Bob', '0'],
+            ],
+            $readBack,
+        );
+
+        unlink($tempFile);
+    }
+
     public function testWriteToString(): void
     {
         $writer = new OdsWriter();
@@ -433,7 +457,7 @@ class OdsTest extends TestCase
         self::assertCount(4, $data);
 
         self::assertEquals('Info', $data[0][0]);
-        self::assertEquals('Info', $data[0][1]);
+        self::assertEquals('', $data[0][1]);
         self::assertEquals('Stats', $data[0][2]);
 
         self::assertEquals('Name', $data[1][0]);

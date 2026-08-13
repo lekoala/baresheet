@@ -214,9 +214,9 @@ class OpenSpoutInteropTest extends InteropTestCase
         $rows = $this->readOpenSpout('xlsx', $file);
         self::assertSame(
             [
-                ['Patient', 'Patient', 'Domaine',    'Domaine', 'Domaine'],
-                ['ID',      'Nom',     'Date',       'Statut',  'ICD10'],
-                [123,       'Jane',    '2026-07-30', 'Actif',   'A01'],
+                ['Patient', '',     'Domaine',    '',       ''],
+                ['ID',      'Nom',  'Date',       'Statut', 'ICD10'],
+                [123,       'Jane', '2026-07-30', 'Actif',  'A01'],
             ],
             $rows,
         );

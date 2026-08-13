@@ -743,6 +743,36 @@ class Spread
     }
 
     /**
+     * Decide whether a value should be written as a numeric cell.
+     *
+     * Native int/float values are always numeric. Strings are classified as numeric
+     * only when they are a canonical decimal — no sign (except a leading minus), no
+     * leading zeros, no exponent — and have at most 15 significant digits. Excel only
+     * guarantees 15 significant digits, so longer digit strings (IDs, EAN codes,
+     * administrative or card numbers) must stay text to avoid silent truncation.
+     */
+    public static function isNumericCellValue(mixed $value): bool
+    {
+        if (is_int($value) || is_float($value)) {
+            return true;
+        }
+        if ($value instanceof \Stringable) {
+            $value = $value->__toString();
+        }
+        if (!is_string($value)) {
+            return false;
+        }
+
+        if (preg_match('/^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/', $value) !== 1) {
+            return false;
+        }
+
+        $digits = str_replace(['-', '.'], '', $value);
+
+        return strlen($digits) <= 15;
+    }
+
+    /**
      * Build map of column names to indices.
      *
      * @param string[] $columns Columns to select

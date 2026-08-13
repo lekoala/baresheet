@@ -358,10 +358,21 @@ final class HeaderSchema
         }
         /** @var array<int, string[]> $rows */
         $rows = array_fill(0, $maxDepth, array_fill(0, $totalCols, ''));
+        /** @var array<int, ?string> $prev */
+        $prev = array_fill(0, $maxDepth, null);
         foreach ($this->paths as $i => $path) {
             $physIdx = $this->physIndices !== null ? $this->physIndices[$i] : $i;
+            $parentChanged = false;
             foreach ($path as $depth => $segment) {
-                $rows[$depth][$physIdx] = $segment;
+                if ($segment === '') {
+                    continue;
+                }
+                $write = $parentChanged || ($prev[$depth] ?? null) !== $segment;
+                if ($write) {
+                    $rows[$depth][$physIdx] = $segment;
+                    $prev[$depth] = $segment;
+                    $parentChanged = true;
+                }
             }
         }
         /** @var array<int, string[]> $rows */

@@ -160,9 +160,9 @@ class LeagueCsvInteropTest extends InteropTestCase
 
         self::assertSame(
             [
-                ['Domaine',    'Domaine', 'Domaine'],
-                ['Date',       'Statut',  'ICD10'],
-                ['2026-07-30', 'Actif',   'A01'],
+                ['Domaine',    '',       ''],
+                ['Date',       'Statut', 'ICD10'],
+                ['2026-07-30', 'Actif',  'A01'],
             ],
             $records,
         );

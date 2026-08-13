@@ -315,6 +315,7 @@ class OdsReader implements ReaderInterface
                             $value = $reader->getAttributeNs('time-value', self::NS_OFFICE);
                         } elseif ($valueType === 'boolean') {
                             $value = $reader->getAttributeNs('boolean-value', self::NS_OFFICE);
+                            $value = $value === 'true' || $value === '1' ? '1' : '0';
                         }
 
                         $textP = '';

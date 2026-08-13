@@ -109,6 +109,42 @@ class SpreadTest extends TestCase
         self::assertEquals('Unknown error code 999.', Spread::zipError(999));
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('isNumericCellValueProvider')]
+    public function testIsNumericCellValue(mixed $value, bool $expected): void
+    {
+        self::assertSame($expected, Spread::isNumericCellValue($value));
+    }
+
+    /**
+     * @return array<string, array{mixed, bool}>
+     */
+    public static function isNumericCellValueProvider(): array
+    {
+        return [
+            'int' => [42, true],
+            'zero int' => [0, true],
+            'float' => [3.14, true],
+            'negative float' => [-0.5, true],
+            'string int' => ['42', true],
+            'string zero' => ['0', true],
+            'string decimal' => ['3.14', true],
+            'string negative decimal' => ['-0.5', true],
+            '15 digits' => ['123456789012345', true],
+            'leading zero' => ['007', false],
+            'leading zero decimal' => ['007.5', false],
+            'negative leading zero' => ['-007', false],
+            'leading plus' => ['+42', false],
+            'scientific notation' => ['1e3', false],
+            '16 digits' => ['1234567890123456', false],
+            '20 digits' => ['12345678901234567890', false],
+            'empty string' => ['', false],
+            'non numeric string' => ['abc', false],
+            'bool true' => [true, false],
+            'bool false' => [false, false],
+            'null' => [null, false],
+        ];
+    }
+
     public function testDateToExcel(): void
     {
         // 1899-12-30 is base 0

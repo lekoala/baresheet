@@ -11,7 +11,7 @@ use ZipArchive;
 /**
  * Zero-dependency XLSX writer using ZipArchive + raw XML.
  *
- * @phpstan-type WritableRow array<int|string, float|int|string|\Stringable|DateTimeInterface|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
  */
 class XlsxWriter implements WriterInterface
 {
@@ -390,6 +390,9 @@ class XlsxWriter implements WriterInterface
                         $excelDate = Spread::dateToExcel($value);
                         $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                         $vl = 16;
+                    } elseif (is_bool($value)) {
+                        $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
+                        $vl = 1;
                     } elseif (
                         $value === null
                         || $value === ''
@@ -400,18 +403,11 @@ class XlsxWriter implements WriterInterface
                         $vl = 0;
                     } else {
                         $isNumeric = false;
-                        if (is_int($value) || is_float($value)) {
+                        if (Spread::isNumericCellValue($value)) {
                             $isNumeric = true;
                             $strValue = (string) $value;
                         } else {
                             $strValue = (string) $value;
-                            if ($strValue === '0') {
-                                $isNumeric = true;
-                            } elseif (isset($strValue[0]) && $strValue[0] !== '0' && ctype_digit($strValue)) {
-                                $isNumeric = true;
-                            } elseif (is_numeric($strValue)) {
-                                $isNumeric = (bool) preg_match("/^\-?(0|[1-9][0-9]*)(\.[0-9]+)?$/", $strValue);
-                            }
                         }
 
                         if ($isNumeric) {

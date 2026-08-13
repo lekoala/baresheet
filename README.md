@@ -120,6 +120,9 @@ $writer->writeFile($data, 'report.xlsx');
 - **Freeze Pane & Autofilter** — simple options for improved sheet usability
 - **Document properties** — set creator, title, subject, keywords, etc. via `meta`
 
+> [!NOTE]
+> XLSX dates are identified from their cell number format. A numeric Excel serial stored with the `General` format cannot reliably be distinguished from an ordinary number, so it is read back as a raw value.
+
 ### ODS
 
 - **Streaming reader** — handles large files with minimal 0.63MB memory usage

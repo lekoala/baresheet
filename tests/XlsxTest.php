@@ -308,6 +308,56 @@ class XlsxTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testXlsxBooleanRoundTrip(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $writer->writeFile([
+            ['name', 'active'],
+            ['Alice', true],
+            ['Bob', false],
+        ], $tempFile);
+
+        $reader = new XlsxReader();
+        $readBack = iterator_to_array($reader->readFile($tempFile));
+        self::assertSame(
+            [
+                ['name', 'active'],
+                ['Alice', '1'],
+                ['Bob', '0'],
+            ],
+            $readBack,
+        );
+
+        unlink($tempFile);
+    }
+
+    public function testXlsxLongNumericStringsStayText(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $longId = '12345678901234567890';
+        $writer->writeFile([
+            ['id'],
+            [$longId],
+        ], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        self::assertIsString($sheet);
+        // 20-digit IDs must be written as text, not numeric, or Excel silently truncates them
+        self::assertStringContainsString('t="inlineStr"', $sheet);
+        self::assertStringNotContainsString('t="n"', $sheet);
+
+        $reader = new XlsxReader();
+        $readBack = iterator_to_array($reader->readFile($tempFile));
+        self::assertSame([['id'], [$longId]], $readBack);
+
+        unlink($tempFile);
+    }
+
     public function testWriteWithCreator(): void
     {
         $tempFile = $this->tempFile('xlsx');
@@ -353,6 +403,82 @@ class XlsxTest extends TestCase
         $data = iterator_to_array($reader->readFile($tempFile));
         self::assertCount(1, $data);
         self::assertStringContainsString('2024-01-15', $data[0][0]);
+
+        unlink($tempFile);
+    }
+
+    public function testDateDetectionRequiresDateFormatStyle(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile, \ZipArchive::CREATE);
+        $zip->addFromString('[Content_Types].xml', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+              <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+              <Default Extension="xml" ContentType="application/xml"/>
+              <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+              <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+              <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+            </Types>
+            XML);
+        $zip->addFromString('_rels/.rels', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+            </Relationships>
+            XML);
+        $zip->addFromString('xl/workbook.xml', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                      xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+            </workbook>
+            XML);
+        $zip->addFromString('xl/_rels/workbook.xml.rels', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+              <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+            </Relationships>
+            XML);
+        // style 0 = General, style 1 = date format
+        $zip->addFromString('xl/styles.xml', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <numFmts count="1">
+                <numFmt numFmtId="164" formatCode="yyyy-mm-dd"/>
+              </numFmts>
+              <cellXfs count="2">
+                <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+                <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+              </cellXfs>
+            </styleSheet>
+            XML);
+        $zip->addFromString('xl/worksheets/sheet1.xml', <<<'XML'
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <sheetData>
+                <row r="1">
+                  <c r="A1" t="inlineStr"><is><t>general</t></is></c>
+                  <c r="B1" t="inlineStr"><is><t>date</t></is></c>
+                </row>
+                <row r="2">
+                  <c r="A2" s="0"><v>46233</v></c>
+                  <c r="B2" s="1"><v>46233</v></c>
+                </row>
+              </sheetData>
+            </worksheet>
+            XML);
+        $zip->close();
+
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile($tempFile));
+
+        // General-format serial stays a raw number; date-format serial is converted
+        self::assertSame('46233', $data[1][0]);
+        self::assertSame('2026-07-30', $data[1][1]);
 
         unlink($tempFile);
     }
@@ -756,7 +882,7 @@ class XlsxTest extends TestCase
         self::assertCount(4, $data);
 
         self::assertEquals('Info', $data[0][0]);
-        self::assertEquals('Info', $data[0][1]);
+        self::assertEquals('', $data[0][1]);
         self::assertEquals('Stats', $data[0][2]);
 
         self::assertEquals('Name', $data[1][0]);

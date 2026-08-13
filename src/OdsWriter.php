@@ -11,7 +11,7 @@ use ZipArchive;
 /**
  * Zero-dependency ODS writer using ZipArchive + raw XML.
  *
- * @phpstan-type WritableRow array<int|string, float|int|string|\Stringable|DateTimeInterface|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
  */
 class OdsWriter implements WriterInterface
 {
@@ -335,25 +335,36 @@ class OdsWriter implements WriterInterface
                             . $display
                             . '</text:p>'
                             . '</table:table-cell>';
+                    } elseif (is_bool($value)) {
+                        $bool = $value ? 'true' : 'false';
+                        $buffer .=
+                            '<table:table-cell'
+                            . $rowCellStyle
+                            . ' office:value-type="boolean"'
+                            . ' office:boolean-value="'
+                            . $bool
+                            . '">'
+                            . '<text:p>'
+                            . $bool
+                            . '</text:p>'
+                            . '</table:table-cell>';
                     } elseif ($value === null || $value === '') {
                         $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
                     } elseif (
-                        is_numeric($value)
-                        && (!is_string($value)
-                        || $value === '0'
-                        || (isset($value[0])
-                        && $value[0] !== '0'
-                        || str_contains($value, '.')))
+                        Spread::isNumericCellValue($value)
+                        && (is_scalar($value)
+                        || $value instanceof \Stringable)
                     ) {
+                        $strValue = (string) $value;
                         $buffer .=
                             '<table:table-cell'
                             . $rowCellStyle
                             . ' office:value-type="float"'
                             . ' office:value="'
-                            . $value
+                            . $strValue
                             . '">'
                             . '<text:p>'
-                            . $value
+                            . $strValue
                             . '</text:p>'
                             . '</table:table-cell>';
                     } else {
