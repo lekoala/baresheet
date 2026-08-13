@@ -15,6 +15,18 @@ use LeKoala\Baresheet\XlsxWriter;
  */
 class OpenSpoutInteropTest extends InteropTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The interop helper uses OpenSpout v5 APIs (Style::withFormat, per-column
+        // styles). On PHP 8.1/8.2 composer resolves openspout ^4.24, where those
+        // APIs don't exist, so these tests only run against OpenSpout v5.
+        if (PHP_VERSION_ID < 80_300) {
+            self::markTestSkipped('OpenSpout interop tests require openspout/openspout ^5.0 (PHP 8.3+)');
+        }
+    }
+
     public function testOpenSpoutReadsBaresheetBasicXlsx(): void
     {
         $file = $this->tempFile('xlsx');
