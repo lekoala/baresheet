@@ -46,6 +46,13 @@ class Options
         /** @var int Number of consecutive rows that define the header (1 = flat, >1 = hierarchical). */
         public int $headerRows = 1,
         /**
+         * @var null|callable(string): string Callback applied to source headers before schema validation,
+         *                                      requiredColumns, columns and aliases. Receives a single header
+         *                                      cell string and must return the normalized string. Applied to
+         *                                      non-empty header cells only.
+         */
+        public $headerNormalizer = null,
+        /**
          * @var int|string|null Number of logical records to skip before the header block starts.
          *                    null  = BC behaviour (no header offset).
          *                    int   = records to skip before header (e.g. 2 = skip 2 rows, header starts on 3rd).

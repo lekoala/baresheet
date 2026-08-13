@@ -22,7 +22,10 @@ class OdsReader implements ReaderInterface
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
-    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
+    // content.xml is streamed directly via zip:// below (not loaded into PHP memory),
+    // so it gets a permissive sanity guard instead of a tight in-memory cap. This only
+    // protects against absurd/malformed declarations, not against legitimate large files.
+    private const MAX_STREAMED_ENTRY_SIZE = 1_000_000_000;
     // Caps the total column count a row can reach, however many repeated
     // cells it takes to get there.
     private const MAX_COLUMNS = 16_384;
@@ -46,6 +49,8 @@ class OdsReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
+    /** @var null|callable(string): string */
+    public $headerNormalizer = null;
 
     public function __construct(?Options $options = null)
     {
@@ -80,12 +85,12 @@ class OdsReader implements ReaderInterface
                 throw new InvalidDocumentException('No content.xml found in ODS file');
             }
 
-            // zipGetData() only guards entries it loads into memory itself; content.xml
-            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            // content.xml is streamed directly via zip:// below, so it gets the same
+            // permissive streamed-entry sanity guard as the XLSX worksheet.
             $stat = $zip->statIndex($idx);
-            if ($stat !== false && $stat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+            if ($stat !== false && $stat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
                 throw new InvalidDocumentException(
-                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . self::MAX_STREAMED_ENTRY_SIZE . ' bytes).',
                 );
             }
         } finally {
@@ -125,7 +130,9 @@ class OdsReader implements ReaderInterface
 
         try {
             $tableIndex = 0;
-            $schema = !empty($this->headers) ? HeaderSchema::fromHeaders($this->headers, $this->headerRows) : null;
+            $schema = !empty($this->headers)
+                ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
+                : null;
             $totalColumns = $schema !== null ? $schema->columnCount() : null;
             $yieldCount = 0;
             $selectionSchema = null;
@@ -385,7 +392,7 @@ class OdsReader implements ReaderInterface
                     }
                     if (count($autoWindow) >= $this->headerRows) {
                         try {
-                            $candidate = HeaderSchema::fromRows($autoWindow);
+                            $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
                             $candidate->checkRequiredColumns($this->requiredColumns);
                             $schema = $candidate;
                             $autoScanning = false;
@@ -427,7 +434,7 @@ class OdsReader implements ReaderInterface
                             continue;
                         }
 
-                        $schema = HeaderSchema::fromRows($headerRowsBuffer);
+                        $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
                         $totalColumns = $schema->columnCount();
                         // Validate required columns
                         if (!empty($this->requiredColumns)) {

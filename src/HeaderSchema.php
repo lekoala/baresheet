@@ -52,11 +52,15 @@ final class HeaderSchema
 
     /**
      * @param string[] $headers
+     * @param null|callable(string): string $normalizer
      */
-    public static function fromFlatHeaders(array $headers): self
+    public static function fromFlatHeaders(array $headers, ?callable $normalizer = null): self
     {
         $paths = [];
         foreach (array_map('strval', $headers) as $idx => $name) {
+            if ($normalizer !== null && $name !== '') {
+                $name = (string) $normalizer($name);
+            }
             $paths[$idx] = [$name];
         }
         /** @var array<int, string[]> $paths */
@@ -65,8 +69,9 @@ final class HeaderSchema
 
     /**
      * @param array<int, array<int, ?string>> $rows
+     * @param null|callable(string): string $normalizer
      */
-    public static function fromRows(array $rows): self
+    public static function fromRows(array $rows, ?callable $normalizer = null): self
     {
         if (empty($rows)) {
             return new self([]);
@@ -74,9 +79,9 @@ final class HeaderSchema
         if (count($rows) === 1) {
             /** @var string[] $flatRow */
             $flatRow = $rows[0];
-            return self::fromFlatHeaders($flatRow);
+            return self::fromFlatHeaders($flatRow, $normalizer);
         }
-        return new self(self::buildHierarchicalPaths($rows));
+        return new self(self::buildHierarchicalPaths($rows, $normalizer));
     }
 
     /**
@@ -96,8 +101,9 @@ final class HeaderSchema
     /**
      * @param string[]|array<int, array<int, ?string>> $headers
      * @param int $headerRows
+     * @param null|callable(string): string $normalizer
      */
-    public static function fromHeaders(array $headers, int $headerRows = 1): self
+    public static function fromHeaders(array $headers, int $headerRows = 1, ?callable $normalizer = null): self
     {
         if ($headerRows > 1) {
             if (empty($headers)) {
@@ -106,13 +112,13 @@ final class HeaderSchema
             $first = reset($headers);
             if (!is_array($first)) {
                 /** @var string[] $headers */
-                return self::fromFlatHeaders($headers);
+                return self::fromFlatHeaders($headers, $normalizer);
             }
             /** @var array<int, array<int, ?string>> $headers */
-            return self::fromRows($headers);
+            return self::fromRows($headers, $normalizer);
         }
         /** @var string[] $headers */
-        return self::fromFlatHeaders($headers);
+        return self::fromFlatHeaders($headers, $normalizer);
     }
 
     // ─── Accessors ─────────────────────────────────────────────
@@ -372,6 +378,7 @@ final class HeaderSchema
      * @param array<int, array<int, ?string>> $window Initial window (modified in-place)
      * @param callable(): (array<int, ?string>|false) $readNext Called to fetch next row
      * @param int $maxScan
+     * @param null|callable(string): string $normalizer
      * @return int|null 0-based offset of first header row, or null
      */
     public static function detectHeaderOffset(
@@ -380,6 +387,7 @@ final class HeaderSchema
         array &$window,
         callable $readNext,
         int $maxScan = 50,
+        ?callable $normalizer = null,
     ): ?int {
         $requiredPaths = self::normalizePaths($requiredColumns);
 
@@ -389,7 +397,7 @@ final class HeaderSchema
             $candidate = array_slice($window, 0, $headerRows);
 
             try {
-                $schema = new self(self::buildHierarchicalPaths($candidate));
+                $schema = self::fromRows($candidate, $normalizer);
             } catch (InvalidDocumentException) {
                 // Not a valid header block — advance window
                 $next = self::readNextNonEmpty($readNext);
@@ -593,9 +601,10 @@ final class HeaderSchema
 
     /**
      * @param array<int, array<int, ?string>> $rows
+     * @param null|callable(string): string $normalizer
      * @return array<int, string[]>
      */
-    private static function buildHierarchicalPaths(array $rows): array
+    private static function buildHierarchicalPaths(array $rows, ?callable $normalizer = null): array
     {
         $levelCount = count($rows);
         $counts = array_map('count', $rows);
@@ -605,7 +614,11 @@ final class HeaderSchema
         for ($level = 0; $level < $levelCount; $level++) {
             $cells[$level] = [];
             for ($col = 0; $col < $maxWidth; $col++) {
-                $cells[$level][$col] = isset($rows[$level][$col]) ? (string) $rows[$level][$col] : '';
+                $cell = isset($rows[$level][$col]) ? (string) $rows[$level][$col] : '';
+                if ($normalizer !== null && $cell !== '') {
+                    $cell = (string) $normalizer($cell);
+                }
+                $cells[$level][$col] = $cell;
             }
         }
 

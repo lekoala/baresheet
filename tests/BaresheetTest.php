@@ -9,7 +9,6 @@ use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxWriter;
-use PHPUnit\Framework\TestCase;
 
 class BaresheetTest extends TestCase
 {
@@ -70,7 +69,7 @@ class BaresheetTest extends TestCase
 
     public function testWriteCsv(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_auto_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         $opts = new Options(bom: false);
         $result = Baresheet::write(
             [
@@ -91,7 +90,7 @@ class BaresheetTest extends TestCase
 
     public function testWriteXlsx(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_auto_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $result = Baresheet::write([
             ['john', 'doe', 'john.doe@example.com'],
         ], $tempFile);

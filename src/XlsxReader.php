@@ -18,7 +18,11 @@ use ZipArchive;
  */
 class XlsxReader implements ReaderInterface
 {
-    private const MAX_ZIP_ENTRY_SIZE = 50_000_000;
+    // Streamed entries (worksheet, shared strings) are not fully loaded into PHP
+    // memory, so they get a permissive sanity guard instead of a tight in-memory cap.
+    // This only protects against absurd/malformed declarations, not against legitimate
+    // large files. Small entries loaded in full via Spread::zipGetData keep their own cap.
+    private const MAX_STREAMED_ENTRY_SIZE = 1_000_000_000;
     // Excel's real column limit (XFD), so a bogus cell reference can't force
     // allocation of an absurd number of null placeholder columns.
     private const MAX_COLUMNS = 16_384;
@@ -39,6 +43,8 @@ class XlsxReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
+    /** @var null|callable(string): string */
+    public $headerNormalizer = null;
 
     public function __construct(?Options $options = null)
     {
@@ -67,28 +73,20 @@ class XlsxReader implements ReaderInterface
         }
 
         try {
-            // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
-            // Traversing a SimpleXMLElement on every cell would be O(n) per row.
-            $sharedStrings = [];
-            $ssData = Spread::zipGetData($zip, 'xl/sharedStrings.xml');
-            if ($ssData) {
-                $ssXml = Spread::safeXml($ssData);
-                if (isset($ssXml->si)) {
-                    foreach ($ssXml->si as $si) {
-                        if (isset($si->t)) {
-                            $sharedStrings[] = (string) $si->t;
-                        } elseif (isset($si->r)) {
-                            // Rich text: concatenate all <r><t> runs into a single string.
-                            $t = '';
-                            foreach ($si->r as $r) {
-                                $t .= (string) $r->t;
-                            }
-                            $sharedStrings[] = $t;
-                        } else {
-                            $sharedStrings[] = '';
-                        }
-                    }
+            // Locate shared strings without loading them: they are streamed below via zip://
+            // after the archive is closed, exactly like the worksheet.
+            $sharedStringsUri = null;
+            $ssIdx = $zip->locateName('xl/sharedStrings.xml');
+            if ($ssIdx !== false) {
+                $ssStat = $zip->statIndex($ssIdx);
+                if ($ssStat !== false && $ssStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
+                    throw new InvalidDocumentException(
+                        'ZIP entry \'xl/sharedStrings.xml\' exceeds maximum allowed size ('
+                        . self::MAX_STREAMED_ENTRY_SIZE
+                        . ' bytes).',
+                    );
                 }
+                $sharedStringsUri = 'zip://' . $filename . '#xl/sharedStrings.xml';
             }
 
             // Styles
@@ -116,12 +114,13 @@ class XlsxReader implements ReaderInterface
                 throw new InvalidDocumentException('No data');
             }
 
-            // zipGetData() only guards entries it loads into memory itself; the worksheet
-            // is instead streamed directly via zip:// below, so it needs the same size cap.
+            // The worksheet is streamed directly via zip:// below (not loaded into PHP
+            // memory), so it gets the same permissive streamed-entry sanity guard as the
+            // shared strings, not the tight in-memory cap.
             $wsStat = $zip->statIndex($wsIdx);
-            if ($wsStat !== false && $wsStat['size'] > self::MAX_ZIP_ENTRY_SIZE) {
+            if ($wsStat !== false && $wsStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
                 throw new InvalidDocumentException(
-                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . self::MAX_ZIP_ENTRY_SIZE . ' bytes).',
+                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . self::MAX_STREAMED_ENTRY_SIZE . ' bytes).',
                 );
             }
         } finally {
@@ -130,6 +129,11 @@ class XlsxReader implements ReaderInterface
 
         $colFormats = [];
         $isDateCache = [];
+
+        // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
+        // Streamed via XMLReader to avoid holding the full XML string and SimpleXML DOM
+        // in memory simultaneously.
+        $sharedStrings = $sharedStringsUri !== null ? self::readSharedStrings($sharedStringsUri) : [];
 
         // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
@@ -143,6 +147,75 @@ class XlsxReader implements ReaderInterface
         } finally {
             $reader->close();
         }
+    }
+
+    /**
+     * Stream shared strings from the zip:// entry, building a plain array for O(1)
+     * index lookup during row parsing. Avoids holding the full XML string and the
+     * SimpleXML DOM in memory at the same time.
+     *
+     * @return string[]
+     */
+    private static function readSharedStrings(string $uri): array
+    {
+        $sharedStrings = [];
+        $reader = new \XMLReader();
+        if (!$reader->open($uri, null, LIBXML_NONET)) {
+            return $sharedStrings;
+        }
+
+        try {
+            while ($reader->read()) {
+                if ($reader->nodeType !== \XMLReader::ELEMENT || $reader->name !== 'si') {
+                    continue;
+                }
+                $sharedStrings[] = self::readSharedStringItem($reader);
+            }
+        } finally {
+            $reader->close();
+        }
+
+        return $sharedStrings;
+    }
+
+    /**
+     * Read a single <si> item, concatenating its visible text. Direct <t> children
+     * (simple string) and direct <r><t> runs (rich text) are included; <rPh> phonetic
+     * runs and <phoneticPr> are ignored.
+     */
+    private static function readSharedStringItem(\XMLReader $reader): string
+    {
+        if ($reader->isEmptyElement) {
+            return '';
+        }
+
+        $siDepth = $reader->depth;
+        $text = '';
+
+        while ($reader->read() && $reader->depth > $siDepth) {
+            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                continue;
+            }
+            // Only direct children of <si> are meaningful here; this naturally skips
+            // the <t> inside <rPh> (which is nested one level deeper).
+            if ($reader->depth !== $siDepth + 1) {
+                continue;
+            }
+            if ($reader->name === 't') {
+                $text .= $reader->readString();
+            } elseif ($reader->name === 'r') {
+                if (!$reader->isEmptyElement) {
+                    $rDepth = $reader->depth;
+                    while ($reader->read() && $reader->depth > $rDepth) {
+                        if ($reader->nodeType === \XMLReader::ELEMENT && $reader->name === 't') {
+                            $text .= $reader->readString();
+                        }
+                    }
+                }
+            }
+        }
+
+        return $text;
     }
 
     /**
@@ -160,7 +233,9 @@ class XlsxReader implements ReaderInterface
         array $isDateCache,
         bool $is1904,
     ): Generator {
-        $schema = !empty($this->headers) ? HeaderSchema::fromHeaders($this->headers, $this->headerRows) : null;
+        $schema = !empty($this->headers)
+            ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
+            : null;
         $rowCount = 0;
         $yieldCount = 0;
         $startRow = $this->assoc ? 1 : 0;
@@ -363,7 +438,7 @@ class XlsxReader implements ReaderInterface
                 }
                 if (count($autoWindow) >= $this->headerRows) {
                     try {
-                        $candidate = HeaderSchema::fromRows($autoWindow);
+                        $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
                         $candidate->checkRequiredColumns($this->requiredColumns);
                         $schema = $candidate;
                         $autoScanning = false;
@@ -410,7 +485,7 @@ class XlsxReader implements ReaderInterface
                         continue;
                     }
 
-                    $schema = HeaderSchema::fromRows($headerRowsBuffer);
+                    $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
                     $totalColumns = $schema->columnCount();
                     // Validate required columns
                     if (!empty($this->requiredColumns)) {

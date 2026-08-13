@@ -9,13 +9,12 @@ use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
-use PHPUnit\Framework\TestCase;
 
 class RequiredColumnsTest extends TestCase
 {
     public function testCsvRequiredColumnsAllPresent(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,price\njohn@example.com,John,10.50\n");
 
         $reader = new CsvReader(new Options(
@@ -32,7 +31,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testCsvRequiredColumnsMissingThrows(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name\njohn@example.com,John\n");
 
         $this->expectException(\RuntimeException::class);
@@ -49,7 +48,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testCsvRequiredColumnsMultipleMissing(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email\njohn@example.com\n");
 
         $this->expectException(\RuntimeException::class);
@@ -66,7 +65,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testCsvRequiredColumnsEmptyArrayNoValidation(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name\njohn@example.com,John\n");
 
         $reader = new CsvReader(new Options(
@@ -82,7 +81,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testXlsxRequiredColumnsAllPresent(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50],
         ], $tempFile);
@@ -101,7 +100,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testXlsxRequiredColumnsMissingThrows(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John'],
         ], $tempFile);
@@ -120,7 +119,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testOdsRequiredColumnsAllPresent(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'price' => 10.50],
         ], $tempFile);
@@ -139,7 +138,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testOdsRequiredColumnsMissingThrows(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John'],
         ], $tempFile);
@@ -158,7 +157,7 @@ class RequiredColumnsTest extends TestCase
 
     public function testBaresheetFacadeWithRequiredColumns(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_required_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,price\njohn@example.com,John,10.50\n");
 
         $opts = new Options(assoc: true, requiredColumns: ['email', 'name', 'price']);

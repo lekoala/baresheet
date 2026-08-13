@@ -7,7 +7,6 @@ namespace LeKoala\Baresheet\Tests;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Options;
-use PHPUnit\Framework\TestCase;
 
 class CsvTest extends TestCase
 {
@@ -81,7 +80,7 @@ class CsvTest extends TestCase
 
     public function testWriteCsvToFile(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_test_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         $writer = new CsvWriter();
         $writer->bom = false;
         $result = $writer->writeFile([

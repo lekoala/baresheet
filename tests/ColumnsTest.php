@@ -9,13 +9,12 @@ use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
-use PHPUnit\Framework\TestCase;
 
 class ColumnsTest extends TestCase
 {
     public function testCsvColumnsSelectAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,age,city\njohn@example.com,John,25,NYC\n");
 
         $reader = new CsvReader(new Options(
@@ -32,7 +31,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvColumnsReorderAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,age\njohn@example.com,John,25\n");
 
         $reader = new CsvReader(new Options(
@@ -49,7 +48,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvColumnsSelectPlain(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "john@example.com,John,25\n"); // No header row
 
         $reader = new CsvReader(new Options(
@@ -67,7 +66,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvColumnsMissingThrows(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name\njohn@example.com,John\n");
 
         $this->expectException(\RuntimeException::class);
@@ -84,7 +83,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvColumnsEmptyArrayReturnsAll(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,age\njohn@example.com,John,25\n");
 
         $reader = new CsvReader(new Options(
@@ -101,7 +100,7 @@ class ColumnsTest extends TestCase
 
     public function testXlsxColumnsSelectAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
@@ -120,7 +119,7 @@ class ColumnsTest extends TestCase
 
     public function testXlsxColumnsReorderAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
@@ -139,7 +138,7 @@ class ColumnsTest extends TestCase
 
     public function testOdsColumnsSelectAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
@@ -158,7 +157,7 @@ class ColumnsTest extends TestCase
 
     public function testOdsColumnsReorderAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         Baresheet::write([
             ['email' => 'john@example.com', 'name' => 'John', 'age' => 25],
         ], $tempFile);
@@ -177,7 +176,7 @@ class ColumnsTest extends TestCase
 
     public function testBaresheetFacadeWithColumns(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name,age\njohn@example.com,John,25\n");
 
         $opts = new Options(assoc: true, columns: ['name', 'email']);
@@ -191,7 +190,7 @@ class ColumnsTest extends TestCase
 
     public function testColumnsWithLimit(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name\na@b.com,Alice\nc@d.com,Charlie\ne@f.com,Eve\n");
 
         $reader = new CsvReader(new Options(
@@ -210,7 +209,7 @@ class ColumnsTest extends TestCase
 
     public function testColumnsWithOffset(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_columns_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "email,name\na@b.com,Alice\nc@d.com,Charlie\ne@f.com,Eve\n");
 
         $reader = new CsvReader(new Options(
@@ -231,7 +230,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvHeadersInjectedAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "1,john,john@example.com\n2,jane,jane@example.com\n");
 
         $reader = new CsvReader(new Options(
@@ -249,7 +248,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvHeadersInjectedAssocColumns(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "1,john,john@example.com\n");
 
         $reader = new CsvReader(new Options(
@@ -267,7 +266,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvHeadersInjectedAssocRequiredColumns(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         file_put_contents($tempFile, "1,john,john@example.com\n");
 
         $this->expectException(\RuntimeException::class);
@@ -285,7 +284,7 @@ class ColumnsTest extends TestCase
 
     public function testCsvHeadersInjectedAssocStrictMismatch(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.csv';
+        $tempFile = $this->tempFile('csv');
         // 3 headers but only 2 fields on data row
         file_put_contents($tempFile, "1,john\n");
 
@@ -304,7 +303,7 @@ class ColumnsTest extends TestCase
 
     public function testXlsxHeadersInjectedAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         // Write data without header row
         Baresheet::write([
             [1, 'john', 'john@example.com'],
@@ -326,7 +325,7 @@ class ColumnsTest extends TestCase
 
     public function testOdsHeadersInjectedAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_headers_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         Baresheet::write([
             [1, 'john', 'john@example.com'],
         ], $tempFile);

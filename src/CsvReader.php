@@ -40,6 +40,8 @@ class CsvReader implements ReaderInterface
     public array $aliases = [];
     public int $headerRows = 1;
     public int|string|null $headerOffset = null;
+    /** @var null|callable(string): string */
+    public $headerNormalizer = null;
 
     public function __construct(?Options $options = null)
     {
@@ -184,7 +186,9 @@ class CsvReader implements ReaderInterface
             }
         }
 
-        $schema = !empty($this->headers) ? HeaderSchema::fromHeaders($this->headers, $this->headerRows) : null;
+        $schema = !empty($this->headers)
+            ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
+            : null;
         $count = 0;
         $yieldCount = 0;
         $expectedCols = $schema !== null ? $schema->columnCount() : null;
@@ -266,7 +270,7 @@ class CsvReader implements ReaderInterface
                 if (count($autoWindow) >= $this->headerRows) {
                     try {
                         /** @var array<int, array<int, ?string>> $autoWindow */
-                        $candidate = HeaderSchema::fromRows($autoWindow);
+                        $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
                         $candidate->checkRequiredColumns($this->requiredColumns);
                         // Window rows ARE the header — build schema from them
                         $schema = $candidate;
@@ -308,7 +312,7 @@ class CsvReader implements ReaderInterface
                 if ($schema === null) {
                     if ($this->headerRows === 1) {
                         $headerNames = array_map('strval', $line);
-                        $schema = HeaderSchema::fromFlatHeaders($headerNames);
+                        $schema = HeaderSchema::fromFlatHeaders($headerNames, $this->headerNormalizer);
                     } else {
                         $headerRowsBuffer = [$line];
                         $skippedForHeader = $headerRowsBuffer;
@@ -342,7 +346,7 @@ class CsvReader implements ReaderInterface
                             );
                         }
                         /** @var array<int, array<int, ?string>> $headerRowsBuffer */
-                        $schema = HeaderSchema::fromRows($headerRowsBuffer);
+                        $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
                     }
                     $expectedCols = $schema->columnCount();
                     // requiredColumns → columns → aliases

@@ -8,13 +8,12 @@ use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxWriter;
-use PHPUnit\Framework\TestCase;
 
 class SpreadTest extends TestCase
 {
     public function testGetPropertiesXlsx(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_props_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(
             title: 'XlsxTitle',
@@ -43,7 +42,7 @@ class SpreadTest extends TestCase
 
     public function testGetPropertiesOds(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_props_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(
             title: 'OdsTitle',
@@ -72,7 +71,7 @@ class SpreadTest extends TestCase
 
     public function testGetSheetNamesXlsx(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheet = 'TestSheet';
         $writer->writeFile([['data']], $tempFile);
@@ -85,7 +84,7 @@ class SpreadTest extends TestCase
 
     public function testGetSheetNamesOds(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->sheet = 'TestSheet';
         $writer->writeFile([['data']], $tempFile);
@@ -379,7 +378,7 @@ class SpreadTest extends TestCase
 
     public function testGetOutputStream(): void
     {
-        $tempFile = sys_get_temp_dir() . '/test_output_' . time() . '.txt';
+        $tempFile = $this->tempFile('txt');
         $stream = Spread::getOutputStream($tempFile);
         self::assertIsResource($stream);
         fwrite($stream, 'hello');
@@ -467,7 +466,7 @@ class SpreadTest extends TestCase
 
     public function testZipGetData(): void
     {
-        $tempZip = sys_get_temp_dir() . '/test_zipgetdata_' . time() . '.zip';
+        $tempZip = $this->tempFile('zip');
         $zip = new \ZipArchive();
         $zip->open($tempZip, \ZipArchive::CREATE);
         $zip->addFromString('test.txt', 'Hello World');

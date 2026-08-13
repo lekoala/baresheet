@@ -199,6 +199,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `headers`         | string[]\|array<int, string[]>             | `[]`     | Read (All), Write (All)   |
 | `headerRows`      | int                                        | `1`      | Read (All), Write (All)   |
 | `headerOffset`    | int\|string\|null                          | `null`   | Read (All)                |
+| `headerNormalizer`| null\|callable(string): string             | `null`   | Read (All)                |
 | `requiredColumns` | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
 | `columns`         | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
 | `aliases`         | array<string\|int,string\|array>           | `[]`     | Read (All)                |
@@ -465,6 +466,33 @@ $rows = Baresheet::read('export.csv', new Options(
 ```
 
 `headerOffset` works with CSV, XLSX, and ODS readers. The `'auto'` mode uses a streaming rolling window — no second pass, no `maxScan` limit — and requires `requiredColumns` to be set.
+
+### Header Normalization
+
+Normalize source headers once, before schema validation and before `requiredColumns`, `columns`, and `aliases` are applied:
+
+```php
+$rows = Baresheet::read('export.csv', new Options(
+    assoc: true,
+    headerNormalizer: fn(string $header): string => strtolower(trim($header)),
+    requiredColumns: ['first name', 'email'],
+    columns: ['email', 'first name'],
+));
+```
+
+The callback receives each non-empty header cell and must return the normalized string. It applies to headers read from the file (including `headerOffset: 'auto'` detection) and to injected `headers`. It does **not** apply to `requiredColumns`, `columns`, or `aliases` — those must already be written in the normalized form.
+
+```php
+// Source: " First Name " → normalized to "first_name"
+$rows = Baresheet::read('export.csv', new Options(
+    assoc: true,
+    headerOffset: 'auto',
+    requiredColumns: ['first_name'],
+    headerNormalizer: fn(string $header): string => strtolower(str_replace(' ', '_', trim($header))),
+));
+```
+
+Two source headers that normalize to the same value (e.g. `"Name"` and `"name"` under `strtolower`) are rejected with an `InvalidDocumentException`, since the resulting schema would contain a duplicate path.
 
 ### Writing Hierarchical Headers
 

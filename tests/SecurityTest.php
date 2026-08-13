@@ -8,7 +8,6 @@ use Exception;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
-use PHPUnit\Framework\TestCase;
 
 class SecurityTest extends TestCase
 {
@@ -26,7 +25,7 @@ class SecurityTest extends TestCase
             description: 'A < B & C > D',
         );
 
-        $tempFile = sys_get_temp_dir() . '/test_security_props_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer->writeFile([['Test']], $tempFile);
 
         $this->assertTrue(is_file($tempFile), 'XLSX file should be generated successfully.');
@@ -64,7 +63,7 @@ class SecurityTest extends TestCase
         // Autofilter is placed inside <autoFilter ref="...">
         $writer->autofilter = 'A1:B2" evilattr="true';
 
-        $tempFile = sys_get_temp_dir() . '/test_security_attrs_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer->writeFile([['Test', 'Data'], ['Row', '1']], $tempFile);
 
         $this->assertTrue(is_file($tempFile), 'XLSX file should be generated successfully.');
@@ -132,7 +131,7 @@ class SecurityTest extends TestCase
      */
     public function testZipBombRejection(): void
     {
-        $tempZip = sys_get_temp_dir() . '/test_zipbomb_' . time() . '.zip';
+        $tempZip = $this->tempFile('zip');
 
         $zip = new \ZipArchive();
         $zip->open($tempZip, \ZipArchive::CREATE);

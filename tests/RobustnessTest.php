@@ -12,7 +12,6 @@ use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
-use PHPUnit\Framework\TestCase;
 use ZipArchive;
 
 /**
@@ -21,11 +20,6 @@ use ZipArchive;
  */
 class RobustnessTest extends TestCase
 {
-    private function tempFile(string $ext): string
-    {
-        return sys_get_temp_dir() . '/baresheet_robustness_' . bin2hex(random_bytes(6)) . '.' . $ext;
-    }
-
     /**
      * @return string Path to a minimal .xlsx file whose xl/worksheets/sheet1.xml is $sheetXml.
      */

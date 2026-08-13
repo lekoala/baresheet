@@ -9,7 +9,6 @@ use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
 
 class XlsxTest extends TestCase
 {
@@ -233,7 +232,7 @@ class XlsxTest extends TestCase
 
     public function testWriteXlsxToFile(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_test_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $result = $writer->writeFile([
             ['john', 'doe', 'john.doe@example.com'],
@@ -262,7 +261,7 @@ class XlsxTest extends TestCase
 
     public function testXlsxRoundTrip(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_roundtrip_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $original = [
             ['John Doe', 'john@example.com', '42'],
@@ -282,7 +281,7 @@ class XlsxTest extends TestCase
 
     public function testXlsxRoundTripPreservesEmojiAndScientificNotation(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $original = [
             ['type',           'value'],
@@ -310,7 +309,7 @@ class XlsxTest extends TestCase
 
     public function testWriteWithCreator(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_creator_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'TestApp');
         $writer->writeFile([['hello']], $tempFile);
@@ -325,7 +324,7 @@ class XlsxTest extends TestCase
 
     public function testWriteWithNumericValues(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_num_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->writeFile([
             ['42', '3.14', '0', '007', 'text'],
@@ -344,7 +343,7 @@ class XlsxTest extends TestCase
 
     public function testDateTimeSupport(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_date_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $dt = new \DateTime('2024-01-15 10:30:00');
         $writer->writeFile([[$dt, 'label']], $tempFile);
@@ -359,7 +358,7 @@ class XlsxTest extends TestCase
 
     public function testAutoColumnWidths(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_colwidth_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->autoWidth = true;
         $writer->writeFile([
@@ -381,7 +380,7 @@ class XlsxTest extends TestCase
 
     public function testXlsxWithEmptyValues(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_empty_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->writeFile([
             ['',      'data', ''],
@@ -398,7 +397,7 @@ class XlsxTest extends TestCase
 
     public function testLimitReading(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_limit_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->writeFile([
             ['row1'],
@@ -418,7 +417,7 @@ class XlsxTest extends TestCase
 
     public function testAutofilterXml(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_af_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->autofilter = 'A1:B1';
         $writer->writeFile([
@@ -437,7 +436,7 @@ class XlsxTest extends TestCase
 
     public function testSheetProtectionWithoutPasswordXml(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_protection_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheetProtection = true;
         $writer->writeFile([['Name'], ['Jane']], $tempFile);
@@ -453,7 +452,7 @@ class XlsxTest extends TestCase
 
     public function testSheetProtectionWithPasswordXml(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_protection_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheetProtection = 'secret';
         $writer->writeFile([['Name'], ['Jane']], $tempFile);
@@ -471,7 +470,7 @@ class XlsxTest extends TestCase
     #[DataProvider('freezePaneProvider')]
     public function testFreezePaneXml(string $freezePane, string $expectedPane): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_fp_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->freezePane = $freezePane;
         $writer->writeFile([
@@ -515,7 +514,7 @@ class XlsxTest extends TestCase
 
     public function testCustomSheetName(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_sn_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheet = 'MySheet';
         $writer->writeFile([['data']], $tempFile);
@@ -531,7 +530,7 @@ class XlsxTest extends TestCase
 
     public function testBoldHeaders(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_bold_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->boldHeaders = true;
         $writer->writeFile([
@@ -550,7 +549,7 @@ class XlsxTest extends TestCase
 
     public function testAssocWriteDetection(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_assoc_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->writeFile([
             ['name' => 'John', 'email' => 'john@example.com'],
@@ -568,7 +567,7 @@ class XlsxTest extends TestCase
 
     public function testExplicitHeaders(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_hdr_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->headers = ['Name', 'Email'];
         $writer->writeFile([
@@ -585,7 +584,7 @@ class XlsxTest extends TestCase
 
     public function testGetSheetNames(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_sheets_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheet = 'Reports';
         $writer->writeFile([['data']], $tempFile);
@@ -600,7 +599,7 @@ class XlsxTest extends TestCase
     public function testReadBySheetName(): void
     {
         // Write a file with a custom sheet name, then read it back using $sheet
-        $tempFile = sys_get_temp_dir() . '/baresheet_readsheet_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->sheet = 'Data';
         $writer->writeFile([['hello']], $tempFile);
@@ -616,7 +615,7 @@ class XlsxTest extends TestCase
 
     public function testOptionsPassThrough(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_opts_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $opts = new Options(meta: new \LeKoala\Baresheet\Meta(creator: 'OptsCreator'), sheet: 'ViaOpts');
         $writer = new XlsxWriter();
         $opts->applyTo($writer);
@@ -739,7 +738,7 @@ class XlsxTest extends TestCase
 
     public function testHierarchicalHeadersRoundtrip(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_hier_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->headers = [
             'Info' => ['Name', 'Age'],
@@ -776,7 +775,7 @@ class XlsxTest extends TestCase
 
     public function testHierarchicalHeadersRoundtripAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_hier_assoc_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->headers = [
             'Info' => ['Name', 'Age'],
@@ -804,7 +803,7 @@ class XlsxTest extends TestCase
 
     public function testHierarchicalHeadersBold(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_hier_bold_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->boldHeaders = true;
         $writer->headers = [
@@ -839,7 +838,7 @@ class XlsxTest extends TestCase
 
     public function testStylesXmlCleanup(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_styles_cleanup_' . time() . '.xlsx';
+        $tempFile = $this->tempFile('xlsx');
         $writer = new XlsxWriter();
         $writer->boldHeaders = true;
         $dt = new \DateTime('2024-01-15 10:30:00');
@@ -917,8 +916,8 @@ class XlsxTest extends TestCase
             ['Carol', '42',    '1.23E+5'],
         ];
 
-        $xlsxFile = sys_get_temp_dir() . '/baresheet_chain_' . time() . '.xlsx';
-        $csvFile = sys_get_temp_dir() . '/baresheet_chain_' . time() . '.csv';
+        $xlsxFile = $this->tempFile('xlsx');
+        $csvFile = $this->tempFile('csv');
 
         Baresheet::write($original, $xlsxFile);
 

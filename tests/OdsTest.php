@@ -8,7 +8,6 @@ use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
-use PHPUnit\Framework\TestCase;
 
 class OdsTest extends TestCase
 {
@@ -33,7 +32,7 @@ class OdsTest extends TestCase
 
     public function testWriteAndReadBack(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $original = [
             ['John Doe', 'john@example.com', '42'],
@@ -56,7 +55,7 @@ class OdsTest extends TestCase
 
     public function testOdsRoundTripPreservesEmojiAndScientificNotation(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_edge_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $original = [
             ['type',           'value'],
@@ -95,7 +94,7 @@ class OdsTest extends TestCase
 
     public function testAssocMode(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_assoc_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->headers = ['name', 'email'];
         $writer->writeFile([
@@ -115,7 +114,7 @@ class OdsTest extends TestCase
 
     public function testWithCreatorAndTitle(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_meta_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(creator: 'TestCreator', title: 'TestTitle');
         $writer->writeFile([['data']], $tempFile);
@@ -134,7 +133,7 @@ class OdsTest extends TestCase
 
     public function testWithAllMetaProperties(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_full_meta_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->meta = new \LeKoala\Baresheet\Meta(
             title: 'MyTitle',
@@ -169,7 +168,7 @@ class OdsTest extends TestCase
 
     public function testSheetName(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_sheet_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->sheet = 'MyData';
         $writer->writeFile([['test']], $tempFile);
@@ -186,7 +185,7 @@ class OdsTest extends TestCase
 
     public function testLimitOption(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_limit_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->writeFile([
             ['row1'],
@@ -205,7 +204,7 @@ class OdsTest extends TestCase
 
     public function testBaresheetFacadeOds(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_facade_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $original = [
             ['Alpha', 'Beta'],
         ];
@@ -222,7 +221,7 @@ class OdsTest extends TestCase
 
     public function testNumericValues(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_num_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->writeFile([
             [1, 2.5, 'text'],
@@ -239,7 +238,7 @@ class OdsTest extends TestCase
 
     public function testDateTimeSupport(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_date_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $dt = new \DateTime('2025-06-15 10:30:00');
         $writer->writeFile([
@@ -255,7 +254,7 @@ class OdsTest extends TestCase
 
     public function testContentDetection(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_detect_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->writeFile([['test']], $tempFile);
 
@@ -268,7 +267,7 @@ class OdsTest extends TestCase
 
     public function testOptionsPassThrough(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_opts_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         (new Options(
             meta: new \LeKoala\Baresheet\Meta(
@@ -373,7 +372,7 @@ class OdsTest extends TestCase
         // boldHeaders is false by default
         $output = $writer->writeString([['test']]);
 
-        $tempFile = sys_get_temp_dir() . '/test_styles_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         file_put_contents($tempFile, $output);
 
         $zip = new \ZipArchive();
@@ -393,7 +392,7 @@ class OdsTest extends TestCase
         $writer->boldHeaders = true;
         $output = $writer->writeString([['Header'], ['Value']]);
 
-        $tempFile = sys_get_temp_dir() . '/test_bold_ref_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         file_put_contents($tempFile, $output);
 
         $zip = new \ZipArchive();
@@ -416,7 +415,7 @@ class OdsTest extends TestCase
 
     public function testHierarchicalHeadersRoundtrip(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_hier_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->headers = [
             'Info' => ['Name', 'Age'],
@@ -453,7 +452,7 @@ class OdsTest extends TestCase
 
     public function testHierarchicalHeadersRoundtripAssoc(): void
     {
-        $tempFile = sys_get_temp_dir() . '/baresheet_ods_hier_assoc_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         $writer = new OdsWriter();
         $writer->headers = [
             'Info' => ['Name', 'Age'],
@@ -489,7 +488,7 @@ class OdsTest extends TestCase
         ];
         $output = $writer->writeString([['Alice', 30, 95]]);
 
-        $tempFile = sys_get_temp_dir() . '/test_ods_hier_bold_' . time() . '.ods';
+        $tempFile = $this->tempFile('ods');
         file_put_contents($tempFile, $output);
 
         $zip = new \ZipArchive();
