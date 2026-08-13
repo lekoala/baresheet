@@ -767,9 +767,13 @@ class Spread
             return false;
         }
 
+        // Count significant digits only: strip the sign and the decimal point, then
+        // drop the non-significant leading zeros ("0.0000012300" → "12300"). Trailing
+        // zeros are part of the encoded precision and stay counted.
         $digits = str_replace(['-', '.'], '', $value);
+        $significantDigits = ltrim($digits, '0');
 
-        return strlen($digits) <= 15;
+        return strlen($significantDigits) <= 15;
     }
 
     /**

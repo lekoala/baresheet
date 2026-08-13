@@ -8,6 +8,7 @@ use DateTimeInterface;
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\Tests\TestCase as BaseTestCase;
+use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Reader\ODS\Reader as OdsReader;
@@ -56,15 +57,23 @@ abstract class InteropTestCase extends BaseTestCase
         if ($sheetName !== null) {
             $writer->getCurrentSheet()->setName($sheetName);
         }
-        $dateStyle = (new Style())->withFormat('yyyy-mm-dd hh:mm:ss');
+
+        // The date-format style is the only API that differs between OpenSpout 4
+        // (setFormat) and 5 (withFormat). Everything else below (Cell::fromValue,
+        // new Row) is stable across both generations, so we only branch on that.
+        $dateStyle = new Style();
+        if (method_exists($dateStyle, 'withFormat')) {
+            $dateStyle = $dateStyle->withFormat('yyyy-mm-dd hh:mm:ss');
+        } else {
+            $dateStyle->setFormat('yyyy-mm-dd hh:mm:ss');
+        }
+
         foreach ($rows as $row) {
-            $styles = [];
-            foreach ($row as $i => $value) {
-                if ($value instanceof DateTimeInterface) {
-                    $styles[$i] = $dateStyle;
-                }
+            $cells = [];
+            foreach ($row as $value) {
+                $cells[] = Cell::fromValue($value, $value instanceof DateTimeInterface ? $dateStyle : null);
             }
-            $writer->addRow($styles !== [] ? Row::fromValuesWithStyles($row, $styles) : Row::fromValues($row));
+            $writer->addRow(new Row($cells));
         }
         $writer->close();
     }

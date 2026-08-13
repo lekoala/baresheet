@@ -341,7 +341,9 @@ for ($i = 1; $i <= $rowCount; $i++) {
     };
 }
 
-// xlsx.write.plain — binary writer, baseline for the extraction overhead question
+// xlsx.write.plain — text-heavy baseline. Every string still passes through
+// Spread::isNumericCellValue(), but the regex fails on the first char, so this
+// measures the write path with a trivial (negative) classification.
 $results['xlsx.write.plain'] = timeIt(
     static function () use ($flatData, $rowCount) {
         $writer = new XlsxWriter();
@@ -359,7 +361,7 @@ $results['xlsx.write.plain'] = timeIt(
     $rowCount,
 );
 
-// xlsx.write.numeric — stresses the numeric-vs-text cell classification
+// xlsx.write.numeric — stresses the positive branches of the numeric classification
 $results['xlsx.write.numeric'] = timeIt(
     static function () use ($numericData, $rowCount) {
         $writer = new XlsxWriter();
@@ -377,7 +379,7 @@ $results['xlsx.write.numeric'] = timeIt(
     $rowCount,
 );
 
-// ods.write.plain — ODS writer
+// ods.write.plain — ODS text-heavy baseline
 $results['ods.write.plain'] = timeIt(
     static function () use ($flatData, $rowCount) {
         $writer = new OdsWriter();
@@ -392,6 +394,24 @@ $results['ods.write.plain'] = timeIt(
     },
     $reps,
     'ods-write-plain',
+    $rowCount,
+);
+
+// ods.write.numeric — stresses the shared numeric classification on the ODS path
+$results['ods.write.numeric'] = timeIt(
+    static function () use ($numericData, $rowCount) {
+        $writer = new OdsWriter();
+        $file = tempnam(sys_get_temp_dir(), 'bench_write_') . '.ods';
+        $writer->writeFile($numericData, $file);
+        $size = filesize($file);
+        @unlink($file);
+        if ($size <= 0) {
+            throw new RuntimeException('Write produced empty file');
+        }
+        return $rowCount;
+    },
+    $reps,
+    'ods-write-numeric',
     $rowCount,
 );
 
