@@ -18,10 +18,9 @@ use ZipArchive;
  */
 class XlsxReader implements ReaderInterface
 {
-    // Streamed entries (worksheet, shared strings) are not fully loaded into PHP
-    // memory, so they get a permissive sanity guard instead of a tight in-memory cap.
-    // This only protects against absurd/malformed declarations, not against legitimate
-    // large files. Small entries loaded in full via Spread::zipGetData keep their own cap.
+    // The shared strings table is streamed via XMLReader below (not loaded in full),
+    // so it gets a permissive sanity guard instead of a tight in-memory cap. This only
+    // protects against absurd/malformed declarations, not against legitimate large files.
     private const MAX_STREAMED_ENTRY_SIZE = 1_000_000_000;
     // Excel's real column limit (XFD), so a bogus cell reference can't force
     // allocation of an absurd number of null placeholder columns.
@@ -45,6 +44,8 @@ class XlsxReader implements ReaderInterface
     public int|string|null $headerOffset = null;
     /** @var null|callable(string): string */
     public $headerNormalizer = null;
+    /** @var ?int Maximum allowed size for the streamed worksheet, in bytes (null = unlimited). */
+    public ?int $maxWorksheetSize = 500_000_000;
 
     public function __construct(?Options $options = null)
     {
@@ -115,12 +116,11 @@ class XlsxReader implements ReaderInterface
             }
 
             // The worksheet is streamed directly via zip:// below (not loaded into PHP
-            // memory), so it gets the same permissive streamed-entry sanity guard as the
-            // shared strings, not the tight in-memory cap.
+            // memory); the maximum size is configurable via maxWorksheetSize.
             $wsStat = $zip->statIndex($wsIdx);
-            if ($wsStat !== false && $wsStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
+            if ($this->maxWorksheetSize !== null && $wsStat !== false && $wsStat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
-                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . self::MAX_STREAMED_ENTRY_SIZE . ' bytes).',
+                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
                 );
             }
         } finally {

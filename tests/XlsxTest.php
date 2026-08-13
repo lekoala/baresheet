@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
@@ -936,5 +937,32 @@ class XlsxTest extends TestCase
 
         unlink($xlsxFile);
         unlink($csvFile);
+    }
+
+    public function testMaxWorksheetSizeLimitXlsx(): void
+    {
+        $fixture = __DIR__ . '/data/basic.xlsx';
+
+        // A tiny limit of 100 bytes should trigger an exception
+        $readerTiny = new XlsxReader(new Options(maxWorksheetSize: 100));
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('exceeds maximum allowed size');
+        iterator_to_array($readerTiny->readFile($fixture));
+    }
+
+    public function testMaxWorksheetSizeUnlimitedAndSufficientLimitXlsx(): void
+    {
+        $fixture = __DIR__ . '/data/basic.xlsx';
+
+        // An unlimited (null) limit should successfully parse
+        $readerNull = new XlsxReader(new Options(maxWorksheetSize: null));
+        $dataNull = iterator_to_array($readerNull->readFile($fixture));
+        self::assertCount(1, $dataNull);
+
+        // A large limit should successfully parse
+        $readerLarge = new XlsxReader(new Options(maxWorksheetSize: 100_000));
+        $dataLarge = iterator_to_array($readerLarge->readFile($fixture));
+        self::assertCount(1, $dataLarge);
     }
 }

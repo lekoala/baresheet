@@ -220,6 +220,7 @@ $rows = Baresheet::read('data.csv', $opts);
 | `tempPath`        | ?string                                    | `null`   | Any (Temp files location) |
 | `sharedStrings`   | bool                                       | `false`  | Write (XLSX)              |
 | `autoWidth`       | bool                                       | `false`  | Write (XLSX)              |
+| `maxWorksheetSize`| ?int                                       | `500000000` | Read (XLSX, ODS)      |
 
 ## Exceptions
 

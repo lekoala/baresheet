@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
@@ -507,5 +508,32 @@ class OdsTest extends TestCase
 
         self::assertStringNotContainsString('table:style-name="bold"', $rows[2]);
         self::assertStringContainsString('<text:p>Alice</text:p>', $rows[2]);
+    }
+
+    public function testMaxWorksheetSizeLimitOds(): void
+    {
+        $fixture = __DIR__ . '/data/large.ods';
+
+        // A tiny limit of 100 bytes should trigger an exception
+        $readerTiny = new OdsReader(new Options(maxWorksheetSize: 100));
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('exceeds maximum allowed size');
+        iterator_to_array($readerTiny->readFile($fixture));
+    }
+
+    public function testMaxWorksheetSizeUnlimitedAndSufficientLimitOds(): void
+    {
+        $fixture = __DIR__ . '/data/large.ods';
+
+        // An unlimited (null) limit should successfully parse
+        $readerNull = new OdsReader(new Options(maxWorksheetSize: null));
+        $dataNull = iterator_to_array($readerNull->readFile($fixture));
+        self::assertNotEmpty($dataNull);
+
+        // A large limit should successfully parse
+        $readerLarge = new OdsReader(new Options(maxWorksheetSize: 10_000_000));
+        $dataLarge = iterator_to_array($readerLarge->readFile($fixture));
+        self::assertNotEmpty($dataLarge);
     }
 }

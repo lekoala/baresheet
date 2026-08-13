@@ -22,10 +22,6 @@ class OdsReader implements ReaderInterface
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
 
-    // content.xml is streamed directly via zip:// below (not loaded into PHP memory),
-    // so it gets a permissive sanity guard instead of a tight in-memory cap. This only
-    // protects against absurd/malformed declarations, not against legitimate large files.
-    private const MAX_STREAMED_ENTRY_SIZE = 1_000_000_000;
     // Caps the total column count a row can reach, however many repeated
     // cells it takes to get there.
     private const MAX_COLUMNS = 16_384;
@@ -51,6 +47,8 @@ class OdsReader implements ReaderInterface
     public int|string|null $headerOffset = null;
     /** @var null|callable(string): string */
     public $headerNormalizer = null;
+    /** @var ?int Maximum allowed size for the streamed content.xml, in bytes (null = unlimited). */
+    public ?int $maxWorksheetSize = 500_000_000;
 
     public function __construct(?Options $options = null)
     {
@@ -85,14 +83,12 @@ class OdsReader implements ReaderInterface
                 throw new InvalidDocumentException('No content.xml found in ODS file');
             }
 
-            // content.xml is streamed directly via zip:// below, so it gets the same
-            // permissive streamed-entry sanity guard as the XLSX worksheet.
+            // content.xml is streamed directly via zip:// below (not loaded into PHP
+            // memory); the maximum size is configurable via maxWorksheetSize.
             $stat = $zip->statIndex($idx);
-            if ($stat !== false && $stat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
+            if ($this->maxWorksheetSize !== null && $stat !== false && $stat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
-                    'ZIP entry \'content.xml\' exceeds maximum allowed size ('
-                    . self::MAX_STREAMED_ENTRY_SIZE
-                    . ' bytes).',
+                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . $this->maxWorksheetSize . ' bytes).',
                 );
             }
         } finally {
