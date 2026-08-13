@@ -13,6 +13,8 @@
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\OdsWriter;
+use LeKoala\Baresheet\XlsxWriter;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -327,6 +329,72 @@ $results['csv.write.nested'] = timeIt(
     $rowCount,
 );
 
+// Numeric-mixed dataset to exercise Spread::isNumericCellValue on the write path.
+// Same shape as $flatData (10 columns) so xlsx.write.numeric is comparable to xlsx.write.plain.
+$numericData = [];
+for ($i = 1; $i <= $rowCount; $i++) {
+    $numericData[] = match ($i % 4) {
+        0 => ['00123', '42', '3.14', '-0.5', '1e3', '007', '12345678901234567890', 'name', 'user', 'col'],
+        1 => ["col{$i}_value", "name{$i}", '007.5', '0', '+42', '3', 'id', 'text', 'x', 'y'],
+        2 => ['12345678901234567890', '1e3', '-0.5', '3.14', '42', '0', '007', 'lead', 'zero', 'str'],
+        default => ["id_{$i}", '0', '+42', '007', '1e3', '-0.5', '3.14', '42', '00123', 'long'],
+    };
+}
+
+// xlsx.write.plain — binary writer, baseline for the extraction overhead question
+$results['xlsx.write.plain'] = timeIt(
+    static function () use ($flatData, $rowCount) {
+        $writer = new XlsxWriter();
+        $file = tempnam(sys_get_temp_dir(), 'bench_write_') . '.xlsx';
+        $writer->writeFile($flatData, $file);
+        $size = filesize($file);
+        @unlink($file);
+        if ($size <= 0) {
+            throw new RuntimeException('Write produced empty file');
+        }
+        return $rowCount;
+    },
+    $reps,
+    'xlsx-write-plain',
+    $rowCount,
+);
+
+// xlsx.write.numeric — stresses the numeric-vs-text cell classification
+$results['xlsx.write.numeric'] = timeIt(
+    static function () use ($numericData, $rowCount) {
+        $writer = new XlsxWriter();
+        $file = tempnam(sys_get_temp_dir(), 'bench_write_') . '.xlsx';
+        $writer->writeFile($numericData, $file);
+        $size = filesize($file);
+        @unlink($file);
+        if ($size <= 0) {
+            throw new RuntimeException('Write produced empty file');
+        }
+        return $rowCount;
+    },
+    $reps,
+    'xlsx-write-numeric',
+    $rowCount,
+);
+
+// ods.write.plain — ODS writer
+$results['ods.write.plain'] = timeIt(
+    static function () use ($flatData, $rowCount) {
+        $writer = new OdsWriter();
+        $file = tempnam(sys_get_temp_dir(), 'bench_write_') . '.ods';
+        $writer->writeFile($flatData, $file);
+        $size = filesize($file);
+        @unlink($file);
+        if ($size <= 0) {
+            throw new RuntimeException('Write produced empty file');
+        }
+        return $rowCount;
+    },
+    $reps,
+    'ods-write-plain',
+    $rowCount,
+);
+
 // ─── Output ─────────────────────────────────────────────────
 
 $readBaseline  = $results['csv.read.assoc-flat'];
@@ -337,8 +405,12 @@ echo "│ Scenario                    │ Time (s) │ vs base   │" . PHP_EOL;
 echo "├─────────────────────────────┼──────────┼───────────┤" . PHP_EOL;
 
 foreach ($results as $name => $time) {
-    $isWrite = str_starts_with($name, 'csv.write');
-    $baseline = $isWrite ? $writeBaseline : $readBaseline;
+    $baseline = match (true) {
+        str_starts_with($name, 'xlsx.write') => $results['xlsx.write.plain'],
+        str_starts_with($name, 'ods.write') => $results['ods.write.plain'],
+        str_contains($name, '.write.') => $writeBaseline,
+        default => $readBaseline,
+    };
     $ratio = $time / $baseline;
     $flag = '';
     if ($ratio > 1.30) {
