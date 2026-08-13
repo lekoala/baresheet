@@ -90,7 +90,9 @@ class OdsReader implements ReaderInterface
             $stat = $zip->statIndex($idx);
             if ($stat !== false && $stat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
                 throw new InvalidDocumentException(
-                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . self::MAX_STREAMED_ENTRY_SIZE . ' bytes).',
+                    'ZIP entry \'content.xml\' exceeds maximum allowed size ('
+                    . self::MAX_STREAMED_ENTRY_SIZE
+                    . ' bytes).',
                 );
             }
         } finally {

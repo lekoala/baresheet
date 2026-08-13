@@ -63,7 +63,10 @@ class HeaderNormalizerTest extends TestCase
     public function testDetectHeaderOffsetAppliesNormalizer(): void
     {
         $window = [['Title']];
-        $queue = [[' First Name ', 'Email'], ['John', 'john@example.com']];
+        $queue = [
+            [' First Name ', 'Email'],
+            ['John',         'john@example.com'],
+        ];
         $readNext = static function () use (&$queue) {
             return $queue === [] ? false : array_shift($queue);
         };
@@ -140,7 +143,7 @@ class HeaderNormalizerTest extends TestCase
         $writer = new XlsxWriter();
         $output = $writer->writeString([
             [' First Name ', ' Email '],
-            ['John', 'john@example.com'],
+            ['John',         'john@example.com'],
         ]);
 
         $reader = new XlsxReader(new Options(
@@ -158,7 +161,7 @@ class HeaderNormalizerTest extends TestCase
         $writer = new OdsWriter();
         $output = $writer->writeString([
             [' First Name ', ' Email '],
-            ['John', 'john@example.com'],
+            ['John',         'john@example.com'],
         ]);
 
         $reader = new OdsReader(new Options(

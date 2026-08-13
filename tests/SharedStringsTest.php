@@ -20,9 +20,12 @@ class SharedStringsTest extends TestCase
             $cells .= '<c r="' . $col . '1" t="s"><v>' . $i . '</v></c>';
         }
 
-        $worksheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        $worksheet =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            . '<sheetData><row r="1">' . $cells . '</row></sheetData></worksheet>';
+            . '<sheetData><row r="1">'
+            . $cells
+            . '</row></sheetData></worksheet>';
 
         $tmp = $this->tempFile('xlsx');
 
@@ -43,7 +46,8 @@ class SharedStringsTest extends TestCase
 
     public function testReadsRichTextWhitespaceAndSkipsPhoneticRuns(): void
     {
-        $ss = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        $ss =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="5" uniqueCount="5">'
             . '<si><t xml:space="preserve">  leading/trailing  </t></si>'
             . '<si><r><t>Hello</t></r><r><t> World</t></r></si>'
@@ -68,8 +72,8 @@ class SharedStringsTest extends TestCase
         $writer = new XlsxWriter();
         $writer->sharedStrings = true;
         $bytes = $writer->writeString([
-            ['alpha', 'beta', 'alpha'],
-            ['beta', '  spaced  ', 'alpha'],
+            ['alpha', 'beta',       'alpha'],
+            ['beta',  '  spaced  ', 'alpha'],
         ]);
 
         $reader = new XlsxReader();
@@ -77,8 +81,8 @@ class SharedStringsTest extends TestCase
 
         self::assertSame(
             [
-                ['alpha', 'beta', 'alpha'],
-                ['beta', '  spaced  ', 'alpha'],
+                ['alpha', 'beta',       'alpha'],
+                ['beta',  '  spaced  ', 'alpha'],
             ],
             $data,
         );

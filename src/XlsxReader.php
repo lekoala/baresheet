@@ -198,7 +198,7 @@ class XlsxReader implements ReaderInterface
             }
             // Only direct children of <si> are meaningful here; this naturally skips
             // the <t> inside <rPh> (which is nested one level deeper).
-            if ($reader->depth !== $siDepth + 1) {
+            if ($reader->depth !== ($siDepth + 1)) {
                 continue;
             }
             if ($reader->name === 't') {
