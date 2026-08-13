@@ -188,39 +188,39 @@ The `Baresheet` facade keeps the convenient one-shot form, since it always creat
 $rows = Baresheet::read('data.csv', $opts);
 ```
 
-| Option            | Type                                       | Default  | Applies to                |
-|-------------------|--------------------------------------------|----------|---------------------------|
-| `assoc`           | bool                                       | `false`  | Read (All)                |
-| `strict`          | bool                                       | `false`  | Read (All), Write (CSV)   |
-| `stream`          | bool                                       | `true`   | Output (Any)              |
-| `limit`           | ?int                                       | `null`   | Read (All)                |
-| `offset`          | int                                        | `0`      | Read (All)                |
-| `skipEmptyLines`  | bool                                       | `true`   | Read (All)                |
-| `headers`         | string[]\|array<int, string[]>             | `[]`     | Read (All), Write (All)   |
-| `headerRows`      | int                                        | `1`      | Read (All), Write (All)   |
-| `headerOffset`    | int\|string\|null                          | `null`   | Read (All)                |
-| `headerNormalizer`| null\|callable(string): string             | `null`   | Read (All)                |
-| `requiredColumns` | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
-| `columns`         | string[]\|array<string\|int,string\|array> | `[]`     | Read (All)                |
-| `aliases`         | array<string\|int,string\|array>           | `[]`     | Read (All)                |
-| `separator`       | string                                     | `"auto"` | Read (CSV)                |
-| `enclosure`       | string                                     | `"`      | Read (CSV)                |
-| `escape`          | string                                     | `""`     | Read (CSV)                |
-| `eol`             | string                                     | `\r\n`   | Write (CSV)               |
-| `inputEncoding`   | ?string                                    | `null`   | Read (CSV)                |
-| `outputEncoding`  | ?string                                    | `null`   | Read/Write (CSV)          |
-| `bom`             | bool\|string\|Bom                          | `true`   | Write (CSV)               |
-| `escapeFormulas`  | bool/callable                              | `false`  | Write (CSV)               |
-| `meta`            | array/Meta                                 | `null`   | Write (XLSX, ODS)         |
-| `autofilter`      | ?string                                    | `null`   | Write (XLSX)              |
-| `freezePane`      | ?string                                    | `null`   | Write (XLSX)              |
-| `sheetProtection` | bool\|string                               | `false`  | Write (XLSX)              |
-| `sheet`           | string/int                                 | `null`   | Read/Write (XLSX, ODS)    |
-| `boldHeaders`     | bool                                       | `false`  | Write (XLSX, ODS)         |
-| `tempPath`        | ?string                                    | `null`   | Any (Temp files location) |
-| `sharedStrings`   | bool                                       | `false`  | Write (XLSX)              |
-| `autoWidth`       | bool                                       | `false`  | Write (XLSX)              |
-| `maxWorksheetSize`| ?int                                       | `500000000` | Read (XLSX, ODS)      |
+| Option             | Type                                       | Default     | Applies to                |
+|--------------------|--------------------------------------------|-------------|---------------------------|
+| `assoc`            | bool                                       | `false`     | Read (All)                |
+| `strict`           | bool                                       | `false`     | Read (All), Write (CSV)   |
+| `stream`           | bool                                       | `true`      | Output (Any)              |
+| `limit`            | ?int                                       | `null`      | Read (All)                |
+| `offset`           | int                                        | `0`         | Read (All)                |
+| `skipEmptyLines`   | bool                                       | `true`      | Read (All)                |
+| `headers`          | string[]\|array<int, string[]>             | `[]`        | Read (All), Write (All)   |
+| `headerRows`       | int                                        | `1`         | Read (All), Write (All)   |
+| `headerOffset`     | int\|string\|null                          | `null`      | Read (All)                |
+| `headerNormalizer` | null\|callable(string): string             | `null`      | Read (All)                |
+| `requiredColumns`  | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
+| `columns`          | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
+| `aliases`          | array<string\|int,string\|array>           | `[]`        | Read (All)                |
+| `separator`        | string                                     | `"auto"`    | Read (CSV)                |
+| `enclosure`        | string                                     | `"`         | Read (CSV)                |
+| `escape`           | string                                     | `""`        | Read (CSV)                |
+| `eol`              | string                                     | `\r\n`      | Write (CSV)               |
+| `inputEncoding`    | ?string                                    | `null`      | Read (CSV)                |
+| `outputEncoding`   | ?string                                    | `null`      | Read/Write (CSV)          |
+| `bom`              | bool\|string\|Bom                          | `true`      | Write (CSV)               |
+| `escapeFormulas`   | bool/callable                              | `false`     | Write (CSV)               |
+| `meta`             | array/Meta                                 | `null`      | Write (XLSX, ODS)         |
+| `autofilter`       | ?string                                    | `null`      | Write (XLSX)              |
+| `freezePane`       | ?string                                    | `null`      | Write (XLSX)              |
+| `sheetProtection`  | bool\|string                               | `false`     | Write (XLSX)              |
+| `sheet`            | string/int                                 | `null`      | Read/Write (XLSX, ODS)    |
+| `boldHeaders`      | bool                                       | `false`     | Write (XLSX, ODS)         |
+| `tempPath`         | ?string                                    | `null`      | Any (Temp files location) |
+| `sharedStrings`    | bool                                       | `false`     | Write (XLSX)              |
+| `autoWidth`        | bool                                       | `false`     | Write (XLSX)              |
+| `maxWorksheetSize` | ?int                                       | `500000000` | Read (XLSX, ODS)          |
 
 ## Exceptions
 
