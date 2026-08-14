@@ -9,8 +9,7 @@ use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
 
 /**
- * Zero-dependency XLSX writer producing raw XML packaged by DirectZipWriter
- * (seekable output) or ZipStream (non-seekable output).
+ * Zero-dependency XLSX writer producing raw XML packaged by DirectZipWriter.
  *
  * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
  */
@@ -84,7 +83,7 @@ class XlsxWriter implements WriterInterface
     {
         $filename = Spread::ensureExtension($filename, 'xlsx');
 
-        if ($this->stream && $this->canStream()) {
+        if ($this->stream) {
             $this->outputStream($data, $filename);
             return;
         }
@@ -105,90 +104,24 @@ class XlsxWriter implements WriterInterface
     }
 
     /**
-     * Stream XLSX directly to php://output via ZipStream (no temp ZIP file).
-     *
-     * Requires maennchen/zipstream-php ^3.1.
+     * Stream XLSX directly to php://output via DirectZipWriter.
      *
      * @param iterable<WritableRow> $data
      */
     public function outputStream(iterable $data, string $filename): void
     {
-        if (!class_exists(\ZipStream\ZipStream::class)) {
-            throw new WriteException(
-                'Streaming XLSX requires maennchen/zipstream-php. '
-                . 'Install it with: composer require maennchen/zipstream-php',
-            );
-        }
-
+        $filename = Spread::ensureExtension($filename, 'xlsx');
         Spread::outputHeaders(self::MIMETYPE, $filename);
 
-        $this->streamIterative($data);
-    }
-
-    /**
-     * @param iterable<WritableRow> $data
-     * @param resource|null $outputStream
-     */
-    private function streamIterative(iterable $data, $outputStream = null, bool $enableZeroHeader = true): void
-    {
-        $zipArgs = [
-            // We handle headers ourselves via Spread::outputHeaders() to maintain consistency
-            // across all writers (CSV/XLSX/ODS) and support PSR-7 StreamedResponses.
-            'sendHttpHeaders' => false,
-            'defaultEnableZeroHeader' => $enableZeroHeader,
-        ];
-        if ($outputStream) {
-            $zipArgs['outputStream'] = $outputStream;
+        $output = fopen('php://output', 'wb');
+        if ($output === false) {
+            throw new WriteException('Failed to open php://output');
         }
-        $zip = new \ZipStream\ZipStream(...$zipArgs);
-
-        $this->addStaticFilesToZip($zip);
-        $this->streamWorksheetToZip($zip, $data);
-        $zip->finish();
-    }
-
-    private function addStaticFilesToZip(\ZipStream\ZipStream $zip): void
-    {
-        $files = [
-            '_rels/.rels' => $this->genRels(),
-            'docProps/app.xml' => $this->genAppXml(),
-            'docProps/core.xml' => $this->genCoreXml(),
-            'xl/styles.xml' => $this->genStyles(),
-            'xl/workbook.xml' => $this->genWorkbook(),
-            'xl/_rels/workbook.xml.rels' => $this->genWorkbookRels(),
-            '[Content_Types].xml' => $this->genContentTypes(),
-        ];
-
-        foreach ($files as $path => $xml) {
-            $zip->addFile(fileName: $path, data: $xml);
-        }
-    }
-
-    /**
-     * @param iterable<WritableRow> $data
-     */
-    private function streamWorksheetToZip(\ZipStream\ZipStream $zip, iterable $data): void
-    {
-        $sharedStrings = [];
-        $sharedStringKeys = [];
-        $worksheetStream = $this->genWorksheet($data, $sharedStrings, $sharedStringKeys);
         try {
-            rewind($worksheetStream);
-
-            if ($this->sharedStrings) {
-                $zip->addFile(fileName: 'xl/sharedStrings.xml', data: $this->genSharedStrings($sharedStrings));
-            }
-            $zip->addFileFromStream(fileName: 'xl/worksheets/sheet1.xml', stream: $worksheetStream);
+            $this->buildDirectZip($data, $output);
         } finally {
-            if (is_resource($worksheetStream)) {
-                fclose($worksheetStream);
-            }
+            fclose($output);
         }
-    }
-
-    protected function canStream(): bool
-    {
-        return class_exists(\ZipStream\ZipStream::class);
     }
 
     // -- Internal --
@@ -556,83 +489,6 @@ class XlsxWriter implements WriterInterface
             }
         }
         return $footer . '</worksheet>';
-    }
-
-    /**
-     * Build the full worksheet into a temp stream (used by the ZipStream path).
-     *
-     * @param iterable<WritableRow> $data
-     * @param array<string> $sharedStrings
-     * @param array<string,int> $sharedStringKeys
-     * @return resource
-     */
-    private function genWorksheet(iterable $data, array &$sharedStrings, array &$sharedStringKeys)
-    {
-        $worksheetStream = tmpfile();
-        if (!$worksheetStream) {
-            throw new WriteException('Failed to get temp file for worksheet');
-        }
-
-        $dataStream = null;
-        if ($this->autoWidth) {
-            $dataStream = tmpfile();
-            if (!$dataStream) {
-                fclose($worksheetStream);
-                throw new WriteException('Failed to get temp file for sheet data');
-            }
-        }
-
-        try {
-            $colWidths = [];
-            $suffix = '</sheetData>' . $this->buildWorksheetSuffix();
-
-            if (!$this->autoWidth) {
-                // Single pass: header, rows, footer stream straight through.
-                fwrite($worksheetStream, $this->buildWorksheetPrefix(false, []) . '<sheetData>');
-                $this->streamRows(
-                    $data,
-                    static function (string $chunk) use ($worksheetStream): void {
-                        fwrite($worksheetStream, $chunk);
-                    },
-                    $sharedStrings,
-                    $sharedStringKeys,
-                    false,
-                    $colWidths,
-                );
-                fwrite($worksheetStream, $suffix);
-                return $worksheetStream;
-            }
-
-            // Two-pass (autoWidth): rows go to a temp stream first, then the
-            // final stream is assembled with <cols> preceding <sheetData>.
-            $this->streamRows(
-                $data,
-                static function (string $chunk) use ($dataStream): void {
-                    fwrite($dataStream, $chunk);
-                },
-                $sharedStrings,
-                $sharedStringKeys,
-                true,
-                $colWidths,
-            );
-
-            fwrite($worksheetStream, $this->buildWorksheetPrefix(true, $colWidths) . '<sheetData>');
-            rewind($dataStream);
-            stream_copy_to_stream($dataStream, $worksheetStream);
-            fclose($dataStream);
-            $dataStream = null;
-            fwrite($worksheetStream, $suffix);
-
-            return $worksheetStream;
-        } catch (\Throwable $e) {
-            if (is_resource($worksheetStream)) {
-                fclose($worksheetStream);
-            }
-            if (is_resource($dataStream)) {
-                fclose($dataStream);
-            }
-            throw $e;
-        }
     }
 
     private function genSheetProtectionXml(): string

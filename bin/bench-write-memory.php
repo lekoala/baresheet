@@ -5,7 +5,7 @@
  *
  * Verifies that XLSX writeFile() peak PHP memory stays bounded (quasi-flat)
  * as the dataset grows — a core Baresheet property. This guards against
- * regressions from ZipStream upgrades or future changes to the write path.
+ * regressions in the direct ZIP write path.
  *
  * Usage:
  *   php bin/bench-write-memory.php
@@ -16,31 +16,41 @@ use LeKoala\Baresheet\XlsxWriter;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 const ROW_COUNTS = [10_000, 100_000, 500_000];
-const REPS = 3;
+const REPS = 5;
 
 /**
- * @return array<int, array<int, int|float|string>>
+ * @return Generator<int, array<int, int|float|string>>
  */
-function buildData(int $rows): array
+function generateData(int $rows): Generator
 {
-    $data = [];
     for ($i = 1; $i <= $rows; $i++) {
-        $data[] = [
+        yield [
             $i, "fname $i", $i * 1.5, "email-$i@domain.com", $i % 100,
             'dept ' . ($i % 50), $i / 3, "user-$i", $i + 7, "notes $i some extra padding",
         ];
     }
-    return $data;
+}
+
+/** @param list<float> $values */
+function median(array $values): float
+{
+    sort($values);
+    $middle = intdiv(count($values), 2);
+    return count($values) % 2 === 0
+        ? ($values[$middle - 1] + $values[$middle]) / 2
+        : $values[$middle];
 }
 
 // Subprocess mode: measure peak memory delta (bytes) for one isolated write.
 if (isset($argv[1]) && $argv[1] === '--memory') {
     $rows = isset($argv[2]) ? (int) $argv[2] : 100_000;
-    $data = buildData($rows);
     gc_collect_cycles();
+    if (function_exists('memory_reset_peak_usage')) {
+        memory_reset_peak_usage();
+    }
     $startMem = memory_get_usage();
-    $file = sys_get_temp_dir() . '/bench-write-mem.xlsx';
-    (new XlsxWriter())->writeFile($data, $file);
+    $file = sys_get_temp_dir() . '/bench-write-mem-' . getmypid() . '.xlsx';
+    (new XlsxWriter())->writeFile(generateData($rows), $file);
     @unlink($file);
     printf("%.0f", memory_get_peak_usage() - $startMem);
     exit;
@@ -55,30 +65,27 @@ function measureWriteMemory(int $rows): float
 }
 
 echo "# XLSX writeFile peak-memory guard\n\n";
-echo "| Rows | Avg Time (s) | Peak Memory (MB) | MB per 1k rows |\n";
-echo "|---|---|---|---|\n";
+echo "| Rows | Median Time (s) | Peak PHP Memory (MB) |\n";
+echo "|---|---|---|\n";
 
 foreach (ROW_COUNTS as $rows) {
-    $data = buildData($rows);
-
     $times = [];
     for ($i = 0; $i < REPS; $i++) {
         $file = sys_get_temp_dir() . "/bench-write-mem-$rows-$i.xlsx";
         $start = microtime(true);
-        (new XlsxWriter())->writeFile($data, $file);
+        (new XlsxWriter())->writeFile(generateData($rows), $file);
         $times[] = microtime(true) - $start;
         @unlink($file);
     }
-    $avgTime = array_sum($times) / count($times);
+    $medianTime = median($times);
     $peak = measureWriteMemory($rows);
 
     printf(
-        "| %d | %.4f | %.2f | %.3f |\n",
+        "| %d | %.4f | %.2f |\n",
         $rows,
-        $avgTime,
+        $medianTime,
         $peak,
-        $peak / ($rows / 1000),
     );
 }
 
-echo "\n> Peak should stay bounded as rows grow (flat MB/1k rows, not linear).\n";
+echo "\n> With generator input, total incremental PHP peak should remain approximately flat as rows grow.\n";

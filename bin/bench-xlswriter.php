@@ -18,7 +18,7 @@ use LeKoala\Baresheet\XlsxWriter;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 const ROW_COUNT = 100000;
-const REPS = 3;
+const REPS = 5;
 
 $tempDir = dirname(__DIR__) . '/.temp';
 if (!is_dir($tempDir)) {
@@ -85,6 +85,9 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     }
 
     gc_collect_cycles();
+    if (function_exists('memory_reset_peak_usage')) {
+        memory_reset_peak_usage();
+    }
     $startMem = memory_get_usage();
 
     switch ($key) {
@@ -145,6 +148,16 @@ function measureWriteMemory(string $key, int $rows, string $tempDir): float
     return $bytes / 1024 / 1024;
 }
 
+/** @param list<float> $values */
+function median(array $values): float
+{
+    sort($values);
+    $middle = intdiv(count($values), 2);
+    return count($values) % 2 === 0
+        ? ($values[$middle - 1] + $values[$middle]) / 2
+        : $values[$middle];
+}
+
 /** Ensure a fixture exists, generating it with Baresheet if missing. */
 function ensureFixture(string $file, string $scenario, bool $shared, int $rows): void
 {
@@ -173,7 +186,7 @@ foreach ($readScenarios as $key => $cfg) {
     ensureFixture($cfg['file'], $key, $cfg['shared'], ROW_COUNT);
 
     echo "## Read: {$cfg['label']}\n\n";
-    echo "| Library | Avg Time (s) | Peak Memory (MB) | vs fastest |\n";
+    echo "| Library | Median Time (s) | Peak PHP Memory (MB) | vs fastest |\n";
     echo "|---|---|---|---|\n";
 
     $results = [];
@@ -187,7 +200,7 @@ foreach ($readScenarios as $key => $cfg) {
         $times[] = microtime(true) - $start;
     }
     $results['Baresheet'] = [
-        'time' => array_sum($times) / count($times),
+        'time' => median($times),
         'memory' => measureReadMemory('read-baresheet', $cfg['file']),
     ];
 
@@ -201,7 +214,7 @@ foreach ($readScenarios as $key => $cfg) {
         $times[] = microtime(true) - $start;
     }
     $results['xlswriter'] = [
-        'time' => array_sum($times) / count($times),
+        'time' => median($times),
         'memory' => measureReadMemory('read-xlswriter', $cfg['file']),
     ];
 
@@ -219,7 +232,7 @@ foreach ($readScenarios as $key => $cfg) {
 echo "# Write Benchmark: XLSX ({$tempDir})\n\n";
 echo "> Memory caveat: memory_get_peak_usage() only tracks PHP allocations;\n";
 echo "> xlswriter's C-side workbook memory is not included.\n\n";
-echo "| Library | Avg Time (s) | Peak Memory (MB) | vs fastest |\n";
+echo "| Library | Median Time (s) | Peak PHP Memory (MB) | vs fastest |\n";
 echo "|---|---|---|---|\n";
 
 $data = [];
@@ -239,7 +252,7 @@ for ($i = 0; $i < REPS; $i++) {
     @unlink($tmp);
 }
 $writeResults['Baresheet'] = [
-    'time' => array_sum($times) / count($times),
+    'time' => median($times),
     'memory' => measureWriteMemory('write-baresheet', ROW_COUNT, $tempDir),
 ];
 
@@ -253,7 +266,7 @@ for ($i = 0; $i < REPS; $i++) {
     @unlink($tmp);
 }
 $writeResults['xlswriter'] = [
-    'time' => array_sum($times) / count($times),
+    'time' => median($times),
     'memory' => measureWriteMemory('write-xlswriter', ROW_COUNT, $tempDir),
 ];
 
@@ -271,7 +284,7 @@ for ($i = 0; $i < REPS; $i++) {
     @unlink($tmp);
 }
 $writeResults['xlswriter (const memory)'] = [
-    'time' => array_sum($times) / count($times),
+    'time' => median($times),
     'memory' => measureWriteMemory('write-xlswriter-const', ROW_COUNT, $tempDir),
 ];
 

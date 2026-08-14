@@ -42,6 +42,9 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     $key = $argv[2];
     $file = $argv[3];
     gc_collect_cycles();
+    if (function_exists('memory_reset_peak_usage')) {
+        memory_reset_peak_usage();
+    }
     $startMem = memory_get_usage();
 
     switch ($key) {
@@ -118,7 +121,17 @@ function measureMemory(string $key, string $file): float
     return $bytes / 1024 / 1024;
 }
 
-$reps = 3;
+$reps = 5;
+
+/** @param list<float> $values */
+function median(array $values): float
+{
+    sort($values);
+    $middle = intdiv(count($values), 2);
+    return count($values) % 2 === 0
+        ? ($values[$middle - 1] + $values[$middle]) / 2
+        : $values[$middle];
+}
 
 $libraries = [
     'csv' => [
@@ -191,25 +204,28 @@ foreach ($libraries as $format => $adapters) {
     $file = $files[$format];
 
     echo "## Read Benchmark: " . strtoupper($format) . PHP_EOL . PHP_EOL;
-    echo "| Library | Avg Time (s) | Peak Memory (MB) |" . PHP_EOL;
+    echo "| Library | Median Time (s) | Peak PHP Memory (MB) |" . PHP_EOL;
     echo "|---|---|---|" . PHP_EOL;
 
     $results = [];
+    $timings = array_fill_keys(array_keys($adapters), []);
+
+    for ($i = 0; $i < $reps; $i++) {
+        $order = array_keys($adapters);
+        shuffle($order);
+        foreach ($order as $label) {
+            $start = microtime(true);
+            ($adapters[$label]['fn'])($file);
+            $timings[$label][] = microtime(true) - $start;
+        }
+    }
 
     foreach ($adapters as $label => $config) {
-        $times = [];
-
-        for ($i = 0; $i < $reps; $i++) {
-            $start = microtime(true);
-            ($config['fn'])($file);
-            $times[] = microtime(true) - $start;
-        }
-
         // Memory measured in isolated subprocess
         $memory = measureMemory($config['key'], $file);
 
         $results[$label] = [
-            'time' => array_sum($times) / count($times),
+            'time' => median($timings[$label]),
             'memory' => $memory
         ];
     }

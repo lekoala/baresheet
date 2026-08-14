@@ -131,6 +131,19 @@ namespace LeKoala\Baresheet\Tests {
                 $this->hasHeaderPrefix($headers, 'Content-Length:'),
                 'Streamed output should not have Content-Length header',
             );
+
+            $this->assertSame(45, unpack('v', substr($output, 4, 2))[1]);
+            $this->assertSame(0x0808, unpack('v', substr($output, 6, 2))[1]);
+            $this->assertNotFalse(strpos($output, pack('V', 0x0807_4b50)));
+
+            $temp = tempnam(sys_get_temp_dir(), 'xlsx_stream_test_');
+            $this->assertIsString($temp);
+            file_put_contents($temp, $output);
+            $zip = new \ZipArchive();
+            $this->assertTrue($zip->open($temp));
+            $this->assertNotFalse($zip->getFromName('xl/worksheets/sheet1.xml'));
+            $zip->close();
+            unlink($temp);
         }
 
         public function testOdsWriterOutput(): void

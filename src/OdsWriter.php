@@ -45,26 +45,20 @@ class OdsWriter implements WriterInterface
     public function writeStream(iterable $data)
     {
         $stream = Spread::getMaxMemTempStream();
-
-        if ($this->canStream()) {
-            $this->streamIterative($data, $stream);
-        } else {
-            // Buffer to temp file, then copy to stream
-            $tempFilename = Spread::getTempFilename();
-            try {
-                $this->buildFile($data, $tempFilename);
-                $tmpStream = fopen($tempFilename, 'r');
-                if ($tmpStream) {
-                    $result = stream_copy_to_stream($tmpStream, $stream);
-                    fclose($tmpStream);
-                    if ($result === false) {
-                        throw new WriteException('Failed to copy temp file to stream');
-                    }
+        $tempFilename = Spread::getTempFilename();
+        try {
+            $this->buildFile($data, $tempFilename);
+            $tmpStream = fopen($tempFilename, 'r');
+            if ($tmpStream) {
+                $result = stream_copy_to_stream($tmpStream, $stream);
+                fclose($tmpStream);
+                if ($result === false) {
+                    throw new WriteException('Failed to copy temp file to stream');
                 }
-            } finally {
-                if (is_file($tempFilename)) {
-                    unlink($tempFilename);
-                }
+            }
+        } finally {
+            if (is_file($tempFilename)) {
+                unlink($tempFilename);
             }
         }
 
@@ -97,91 +91,41 @@ class OdsWriter implements WriterInterface
      */
     public function output(iterable $data, string $filename): void
     {
+        $this->outputBuffered($data, $filename, includeLength: !$this->stream);
+    }
+
+    /**
+     * ODS output is buffered to preserve its special first mimetype entry.
+     *
+     * @param iterable<WritableRow> $data
+     */
+    public function outputStream(iterable $data, string $filename): void
+    {
+        $this->outputBuffered($data, $filename, includeLength: false);
+    }
+
+    /**
+     * @param iterable<WritableRow> $data
+     */
+    private function outputBuffered(iterable $data, string $filename, bool $includeLength): void
+    {
         $filename = Spread::ensureExtension($filename, 'ods');
-
-        if ($this->stream && $this->canStream()) {
-            $this->outputStream($data, $filename);
-            return;
-        }
-
         $tempFilename = Spread::getTempFilename();
         try {
             $this->buildFile($data, $tempFilename);
 
             $size = filesize($tempFilename);
-            Spread::outputHeaders(self::MIMETYPE, $filename, $size !== false ? $size : null);
-
+            Spread::outputHeaders(
+                self::MIMETYPE,
+                $filename,
+                $includeLength && $size !== false ? $size : null,
+            );
             readfile($tempFilename);
         } finally {
             if (is_file($tempFilename)) {
                 unlink($tempFilename);
             }
         }
-    }
-
-    /**
-     * Stream ODS directly to php://output via ZipStream (no temp file).
-     *
-     * Requires maennchen/zipstream-php ^3.1.
-     *
-     * @param iterable<WritableRow> $data
-     */
-    public function outputStream(iterable $data, string $filename): void
-    {
-        if (!class_exists(\ZipStream\ZipStream::class)) {
-            throw new WriteException(
-                'Streaming ODS requires maennchen/zipstream-php. '
-                . 'Install it with: composer require maennchen/zipstream-php',
-            );
-        }
-
-        Spread::outputHeaders(self::MIMETYPE, $filename);
-
-        $this->streamIterative($data);
-    }
-
-    /**
-     * @param iterable<WritableRow> $data
-     * @param resource|null $outputStream
-     */
-    private function streamIterative(iterable $data, $outputStream = null): void
-    {
-        $zipArgs = [
-            // We handle headers ourselves via Spread::outputHeaders() to maintain consistency
-            // across all writers (CSV/XLSX/ODS) and support PSR-7 StreamedResponses.
-            'sendHttpHeaders' => false,
-        ];
-        if ($outputStream) {
-            $zipArgs['outputStream'] = $outputStream;
-        }
-        $zip = new \ZipStream\ZipStream(...$zipArgs);
-
-        // mimetype must be first and stored uncompressed
-        $zip->addFile(
-            fileName: 'mimetype',
-            data: self::MIMETYPE,
-            compressionMethod: \ZipStream\CompressionMethod::STORE,
-        );
-        $zip->addFile(fileName: 'META-INF/manifest.xml', data: $this->genManifest());
-        $zip->addFile(fileName: 'meta.xml', data: $this->genMeta());
-        $zip->addFile(fileName: 'styles.xml', data: $this->genStyles());
-
-        $contentStream = $this->genContent($data);
-        try {
-            rewind($contentStream);
-            $zip->addFileFromStream(fileName: 'content.xml', stream: $contentStream);
-
-            $zip->finish();
-        } finally {
-            if (is_resource($contentStream)) {
-                fclose($contentStream);
-            }
-        }
-    }
-
-    protected function canStream(): bool
-    {
-        return class_exists(\ZipStream\ZipStream::class);
     }
 
     // -- Internal --
@@ -301,7 +245,8 @@ class OdsWriter implements WriterInterface
                 if ($this->boldHeaders) {
                     $headerRowsRemaining = 1;
                 } elseif (is_array($data)) {
-                    $firstRow = reset($data);
+                    $firstKey = array_key_first($data);
+                    $firstRow = $firstKey !== null ? $data[$firstKey] : null;
                     if (is_array($firstRow) && !array_is_list($firstRow)) {
                         $headerRowsRemaining = 1;
                     }

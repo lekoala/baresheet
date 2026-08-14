@@ -17,13 +17,20 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     $file = $argv[3];
     $rowCount = isset($argv[4]) ? (int)$argv[4] : 50000;
 
-    // Generate data in-process to match main benchmark
-    $data = [];
-    for ($i = 1; $i <= $rowCount; $i++) {
-        $data[] = [$i, "fname $i", "sname $i", "email-$i@domain.com"];
+    // Generator input isolates writer memory from the input dataset.
+    $data = (static function () use ($rowCount): Generator {
+        for ($i = 1; $i <= $rowCount; $i++) {
+            yield [$i, "fname $i", "sname $i", "email-$i@domain.com"];
+        }
+    })();
+    if ($key === 'simplexlsxgen-xlsx') {
+        $data = iterator_to_array($data, false);
     }
 
     gc_collect_cycles();
+    if (function_exists('memory_reset_peak_usage')) {
+        memory_reset_peak_usage();
+    }
     $startMem = memory_get_usage();
 
     switch ($key) {
@@ -111,7 +118,17 @@ function measureWriteMemory(string $key, string $format, int $rowCount): float
     return $bytes / 1024 / 1024;
 }
 
-$reps = 3;
+$reps = 5;
+
+/** @param list<float> $values */
+function median(array $values): float
+{
+    sort($values);
+    $middle = intdiv(count($values), 2);
+    return count($values) % 2 === 0
+        ? ($values[$middle - 1] + $values[$middle]) / 2
+        : $values[$middle];
+}
 
 $libraries = [
     'csv' => [
@@ -194,33 +211,38 @@ foreach ($rowCounts as $rowCount) {
 
     foreach ($libraries as $format => $adapters) {
         echo "## Write Benchmark: " . strtoupper($format) . PHP_EOL . PHP_EOL;
-        echo "| Library | Avg Time (s) | Peak Memory (MB) |" . PHP_EOL;
+        echo "| Library | Median Time (s) | Peak PHP Memory (MB) |" . PHP_EOL;
         echo "|---|---|---|" . PHP_EOL;
 
         $results = [];
+        $timings = array_fill_keys(array_keys($adapters), []);
 
-        foreach ($adapters as $label => $config) {
-            $times = [];
-
-            for ($i = 0; $i < $reps; $i++) {
+        // Interleave libraries in a fresh random order each round to reduce
+        // fixed-order effects from filesystem, thermal and background load.
+        for ($i = 0; $i < $reps; $i++) {
+            $order = array_keys($adapters);
+            shuffle($order);
+            foreach ($order as $label) {
                 $baseTemp = tempnam(sys_get_temp_dir(), 'bench_');
                 $tempFile = $baseTemp . '.' . $format;
                 rename($baseTemp, $tempFile);
 
                 $start = microtime(true);
-                ($config['fn'])($tempFile, $genData);
-                $times[] = microtime(true) - $start;
+                ($adapters[$label]['fn'])($tempFile, $genData);
+                $timings[$label][] = microtime(true) - $start;
 
                 if (file_exists($tempFile)) {
                     unlink($tempFile);
                 }
             }
+        }
 
+        foreach ($adapters as $label => $config) {
             // Memory measured in isolated subprocess
             $memory = measureWriteMemory($config['key'], $format, $rowCount);
 
             $results[$label] = [
-                'time' => array_sum($times) / count($times),
+                'time' => median($timings[$label]),
                 'memory' => $memory
             ];
         }

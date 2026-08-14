@@ -7,22 +7,19 @@ namespace LeKoala\Baresheet\Internal;
 use DateTimeImmutable;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
-use RuntimeException;
 
 /**
- * Minimal seekable ZIP writer used to package XLSX output.
+ * Minimal streaming ZIP writer used to package XLSX output.
  *
- * Streams each entry directly into the output: chunks are hashed and compressed
- * as they arrive, then the local file header is patched in-place with the final
- * CRC and sizes via fseek(). This avoids the data descriptors and the
- * measure-then-send double pass that streaming ZIP libraries need on
- * non-seekable sinks, keeping peak memory bounded by the producer's chunk size.
+ * Seekable outputs patch final metadata into a reserved local header. For
+ * non-seekable outputs, ZIP64 headers and signed data descriptors carry the
+ * final CRC and sizes without requiring ftell() or fseek().
  *
  * Capabilities:
  *  - classic ZIP and ZIP64 (entry- and archive-level, only when required)
  *  - DEFLATE and STORE compression
  *  - UTF-8 filenames (EFS flag)
- *  - seekable output only
+ *  - seekable and non-seekable output
  *  - DOS timestamps
  *
  * This is an XLSX packaging primitive, not a general-purpose ZIP library.
@@ -31,6 +28,7 @@ final class DirectZipWriter
 {
     private const LOCAL_FILE_HEADER_SIGNATURE = 0x0403_4b50;
     private const CENTRAL_DIRECTORY_SIGNATURE = 0x0201_4b50;
+    private const DATA_DESCRIPTOR_SIGNATURE = 0x0807_4b50;
     private const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x0605_4b50;
     private const ZIP64_END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x0606_4b50;
     private const ZIP64_END_OF_CENTRAL_DIRECTORY_LOCATOR_SIGNATURE = 0x0706_4b50;
@@ -42,6 +40,7 @@ final class DirectZipWriter
     private const METHOD_STORE = 0;
     private const METHOD_DEFLATE = 8;
 
+    private const DATA_DESCRIPTOR_FLAG = 0x0008;
     private const UTF8_FLAG = 0x0800;
 
     private const UINT16_MAX = 0xFFFF;
@@ -51,6 +50,11 @@ final class DirectZipWriter
      * @var resource
      */
     private $output;
+
+    private readonly bool $seekable;
+
+    /** Current byte offset in the output stream. */
+    private int $position;
 
     /**
      * @var list<array{
@@ -62,7 +66,8 @@ final class DirectZipWriter
      *     dosTime:int,
      *     dosDate:int,
      *     flags:int,
-     *     method:int
+     *     method:int,
+     *     version:int
      * }>
      */
     private array $entries = [];
@@ -70,20 +75,19 @@ final class DirectZipWriter
     private bool $finished = false;
 
     /**
-     * @param resource $output Seekable writable stream.
+     * @param resource $output Writable stream. Seekable streams use header
+     * patching; non-seekable streams use ZIP64 data descriptors.
      */
     public function __construct(
         $output,
         private readonly int $compressionLevel = 6,
     ) {
         if (!is_resource($output)) {
-            throw new RuntimeException('DirectZipWriter output must be a writable stream resource');
+            throw new WriteException('DirectZipWriter output must be a writable stream resource');
         }
 
         $meta = stream_get_meta_data($output);
-        if ($meta['seekable'] !== true) {
-            throw new WriteException('DirectZipWriter requires a seekable output stream');
-        }
+        $this->seekable = $meta['seekable'] === true;
 
         if ($compressionLevel < -1 || $compressionLevel > 9) {
             throw new WriteException('Compression level must be between -1 and 9');
@@ -94,6 +98,8 @@ final class DirectZipWriter
         }
 
         $this->output = $output;
+        $position = ftell($output);
+        $this->position = $position === false ? 0 : $position;
     }
 
     public static function create(string $filename, int $compressionLevel = 6): self
@@ -104,6 +110,11 @@ final class DirectZipWriter
         }
 
         return new self($stream, $compressionLevel);
+    }
+
+    public function isSeekable(): bool
+    {
+        return $this->seekable;
     }
 
     /**
@@ -136,6 +147,7 @@ final class DirectZipWriter
         $stream,
         int $readChunkSize = 1024 * 1024,
         ?DateTimeInterface $lastModificationDateTime = null,
+        bool $store = false,
     ): void {
         if (!is_resource($stream)) {
             throw new WriteException('DirectZipWriter input must be a readable stream resource');
@@ -152,7 +164,7 @@ final class DirectZipWriter
             readChunkSize: $readChunkSize,
             producer: null,
             lastModificationDateTime: $lastModificationDateTime,
-            store: false,
+            store: $store,
         );
     }
 
@@ -168,6 +180,7 @@ final class DirectZipWriter
         string $name,
         callable $producer,
         ?DateTimeInterface $lastModificationDateTime = null,
+        bool $store = false,
     ): void {
         $this->addEntry(
             name: $name,
@@ -176,7 +189,7 @@ final class DirectZipWriter
             readChunkSize: null,
             producer: $producer,
             lastModificationDateTime: $lastModificationDateTime,
-            store: false,
+            store: $store,
         );
     }
 
@@ -203,31 +216,44 @@ final class DirectZipWriter
             $lastModificationDateTime ?? new DateTimeImmutable(),
         );
 
-        $flags = self::UTF8_FLAG;
         $nameLength = strlen($name);
         if ($nameLength > self::UINT16_MAX) {
             throw new WriteException('ZIP entry name is too long');
         }
 
-        // Every local header reserves exactly 20 bytes for the ZIP64 extra
-        // field. It is initially a valid Microsoft Open Packaging Growth Hint
-        // (0xA220) so classic entries remain spec-conformant; if the entry
-        // turns out to exceed 4 GiB, the same 20 bytes are rewritten in place
-        // as the ZIP64 0x0001 field (also exactly 20 bytes). This keeps the
-        // classic/ZIP64 decision transparent and single-pass.
-        $localExtra = self::packGrowthHint();
+        $flags = self::UTF8_FLAG;
+        if (!$this->seekable) {
+            $flags |= self::DATA_DESCRIPTOR_FLAG;
+        }
+
+        if ($this->seekable) {
+            // Reserve exactly 20 bytes. For a classic entry they remain a
+            // valid Microsoft Open Packaging Growth Hint. If the final entry
+            // needs ZIP64, the same bytes are rewritten as the ZIP64 extra.
+            $version = self::VERSION_ZIP64;
+            $localExtra = self::packGrowthHint();
+            $localCompressedSize = 0;
+            $localUncompressedSize = 0;
+        } else {
+            // Unknown-length output cannot be patched. Advertise ZIP64 up
+            // front and append a signed ZIP64 data descriptor after the data.
+            $version = self::VERSION_ZIP64;
+            $localExtra = self::packStreamingZip64Extra();
+            $localCompressedSize = self::UINT32_MAX;
+            $localUncompressedSize = self::UINT32_MAX;
+        }
 
         $localHeader = pack(
             'VvvvvvVVVvv',
             self::LOCAL_FILE_HEADER_SIGNATURE,
-            self::VERSION_ZIP64, // patched in place to 20 if the entry is classic
+            $version,
             $flags,
             $method,
             $dosTime,
             $dosDate,
             0, // CRC-32 placeholder, patched after streaming
-            0, // compressed size placeholder
-            0, // uncompressed size placeholder
+            $localCompressedSize,
+            $localUncompressedSize,
             $nameLength,
             strlen($localExtra),
         );
@@ -307,28 +333,31 @@ final class DirectZipWriter
             }
         }
 
-        $crcHex = hash_final($crcContext);
         // crc32b returns network-byte-order bytes; hexdec reads them as the
         // unsigned numeric CRC, which ZIP stores little-endian via pack('V').
-        $crc = (int) hexdec($crcHex);
-        $endOffset = $this->position();
+        $crc = (int) hexdec(hash_final($crcContext));
 
-        // Decide classic vs ZIP64 from the actual sizes and patch in place.
-        [$version, $zip64, $sizePatch, $extraPatch] = self::localHeaderMetadata(
-            $crc,
-            $compressedSize,
-            $uncompressedSize,
-        );
+        if ($this->seekable) {
+            $endOffset = $this->position();
+            [$version, , $sizePatch, $extraPatch] = self::localHeaderMetadata(
+                $crc,
+                $compressedSize,
+                $uncompressedSize,
+            );
 
-        $this->seek($offset + 4);
-        $this->writeAll(pack('v', $version));
-        $this->seek($offset + 14);
-        $this->writeAll($sizePatch);
-        if ($extraPatch !== null) {
-            $this->seek($offset + 30 + $nameLength);
-            $this->writeAll($extraPatch);
+            $this->seek($offset + 4);
+            $this->writeAll(pack('v', $version));
+            $this->seek($offset + 14);
+            $this->writeAll($sizePatch);
+            if ($extraPatch !== null) {
+                $this->seek($offset + 30 + $nameLength);
+                $this->writeAll($extraPatch);
+            }
+            $this->seek($endOffset);
+        } else {
+            $this->writeZip64DataDescriptor($crc, $compressedSize, $uncompressedSize);
+            $version = self::VERSION_ZIP64;
         }
-        $this->seek($endOffset);
 
         $this->entries[] = [
             'name' => $name,
@@ -340,6 +369,7 @@ final class DirectZipWriter
             'dosDate' => $dosDate,
             'flags' => $flags,
             'method' => $method,
+            'version' => $version,
         ];
     }
 
@@ -387,6 +417,23 @@ final class DirectZipWriter
         return pack('vvvv', 0xA220, 0x0010, 0xA028, 0x000C) . str_repeat("\0", 12);
     }
 
+    /** ZIP64 local extra with unknown sizes for non-seekable output. */
+    private static function packStreamingZip64Extra(): string
+    {
+        return pack('vv', self::ZIP64_EXTRA_FIELD_TAG, 16) . pack('PP', 0, 0);
+    }
+
+    private function writeZip64DataDescriptor(int $crc, int $compressedSize, int $uncompressedSize): void
+    {
+        $this->writeAll(pack(
+            'VVPP',
+            self::DATA_DESCRIPTOR_SIGNATURE,
+            $crc,
+            $compressedSize,
+            $uncompressedSize,
+        ));
+    }
+
     /**
      * Write the central directory (with ZIP64 records when required) and the
      * end-of-central-directory records.
@@ -427,7 +474,14 @@ final class DirectZipWriter
                 $cdExtraLength = strlen($cdExtra);
             }
 
-            $version = $ucsOverflow || $csOverflow ? self::VERSION_ZIP64 : self::VERSION_CLASSIC;
+            // Preserve ZIP64 when the local header used it for streaming, and
+            // require it whenever any actual central-directory field overflows.
+            $version = max(
+                $entry['version'],
+                $ucsOverflow || $csOverflow || $offsetOverflow
+                    ? self::VERSION_ZIP64
+                    : self::VERSION_CLASSIC,
+            );
 
             $header = pack(
                 'VvvvvvvVVVvvvvvVV',
@@ -550,19 +604,19 @@ final class DirectZipWriter
 
     private function seek(int $offset): void
     {
+        if (!$this->seekable) {
+            throw new WriteException('Unable to seek in a non-seekable ZIP output stream');
+        }
         if (fseek($this->output, $offset, SEEK_SET) !== 0) {
             throw new WriteException('Unable to seek in ZIP output stream');
         }
+
+        $this->position = $offset;
     }
 
     private function position(): int
     {
-        $position = ftell($this->output);
-        if ($position === false) {
-            throw new WriteException('Unable to determine ZIP output position');
-        }
-
-        return $position;
+        return $this->position;
     }
 
     private function writeAll(string $data): void
@@ -577,6 +631,7 @@ final class DirectZipWriter
             }
 
             $offset += $written;
+            $this->position += $written;
         }
     }
 

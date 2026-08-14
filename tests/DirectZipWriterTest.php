@@ -138,12 +138,36 @@ class DirectZipWriterTest extends TestCase
         @unlink($file);
     }
 
-    public function testNonSeekableOutputThrows(): void
+    public function testNonSeekableOutputUsesZip64Descriptor(): void
     {
-        $stream = fopen('php://output', 'w');
+        ob_start();
+        $stream = fopen('php://output', 'wb');
         self::assertIsResource($stream);
-        $this->expectException(WriteException::class);
-        new DirectZipWriter($stream);
+        $writer = new DirectZipWriter($stream);
+        self::assertFalse($writer->isSeekable());
+        $writer->addString('hello.txt', "hello\n");
+        $writer->finish();
+        fclose($stream);
+        $bytes = ob_get_clean();
+
+        self::assertIsString($bytes);
+        self::assertSame(45, unpack('v', substr($bytes, 4, 2))[1]);
+        self::assertSame(0x0808, unpack('v', substr($bytes, 6, 2))[1]);
+        self::assertSame(0xFFFF_FFFF, unpack('V', substr($bytes, 18, 4))[1]);
+        self::assertSame(0xFFFF_FFFF, unpack('V', substr($bytes, 22, 4))[1]);
+        self::assertSame(0x0001, unpack('v', substr($bytes, 30 + strlen('hello.txt'), 2))[1]);
+        self::assertNotFalse(strpos($bytes, pack('V', 0x0807_4b50)));
+
+        $centralOffset = strpos($bytes, pack('V', 0x0201_4b50));
+        self::assertIsInt($centralOffset);
+        self::assertSame(45, unpack('v', substr($bytes, $centralOffset + 6, 2))[1]);
+        self::assertNotSame(0xFFFF_FFFF, unpack('V', substr($bytes, $centralOffset + 20, 4))[1]);
+        self::assertNotSame(0xFFFF_FFFF, unpack('V', substr($bytes, $centralOffset + 24, 4))[1]);
+
+        $file = $this->tempFile('zip');
+        file_put_contents($file, $bytes);
+        self::assertSame("hello\n", $this->readEntry($file, 'hello.txt'));
+        @unlink($file);
     }
 
     public function testDoubleFinishThrows(): void

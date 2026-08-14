@@ -25,12 +25,12 @@
         "ext-mbstring": "*",
         "ext-simplexml": "*",
         "ext-xmlreader": "*",
-        "ext-zip": "*"
+        "ext-zip": "*",
+        "ext-zlib": "*"
     },
     "require-dev": {
         "ext-iconv": "*",
         "league/csv": "^9.28",
-        "maennchen/zipstream-php": "^3.1",
         "openspout/openspout": "^4.24 || ^5.0",
         "phpstan/phpstan": "^2.2.6",
         "phpunit/phpunit": "^10|^11",
@@ -39,8 +39,7 @@
         "squizlabs/php_codesniffer": "^4.0.1"
     },
     "suggest": {
-        "ext-iconv": "Required for encoding conversion",
-        "maennchen/zipstream-php": "Required for non-seekable streaming output to php://output (output())"
+        "ext-iconv": "Required for encoding conversion"
     },
     "autoload": {
         "psr-4": {
