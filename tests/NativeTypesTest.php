@@ -285,10 +285,12 @@ class NativeTypesTest extends TestCase
         self::assertInstanceOf(TimeValue::class, $rows[0][0]);
         self::assertSame(12 * 3_600_000_000, $rows[0][0]->toMicroseconds());
 
-        // A duration style marks an elapsed duration even under 24 hours;
-        // without the Time\Duration class the internal layer falls back to a
-        // canonical duration string.
-        self::assertSame('12:00:00', $rows[0][1]);
+        // A duration style marks an elapsed duration even under 24 hours.
+        $duration = $rows[0][1];
+        self::assertInstanceOf(\Time\Duration::class, $duration);
+        self::assertSame(43_200, $duration->seconds);
+        self::assertSame(0, $duration->nanoseconds);
+        self::assertFalse($duration->negative);
 
         unlink($file);
     }
@@ -316,8 +318,47 @@ class NativeTypesTest extends TestCase
         $reader = new OdsReader();
         $reader->stringifyValues = false;
         $rows = iterator_to_array($reader->readFile($file));
-        self::assertSame('-1:00:00', $rows[0][0]);
+
+        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
+        self::assertTrue($rows[0][0]->negative);
+        self::assertSame(3_600, $rows[0][0]->seconds);
 
         unlink($file);
+    }
+
+    public function testXlsxDurationRoundTrip(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $writer->inferNumericStrings = false;
+        $writer->writeFile([[\Time\Duration::fromMicroseconds(131_415_000_000)]], $tempFile);
+
+        $reader = new XlsxReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($tempFile));
+        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
+        self::assertSame(131_415, $rows[0][0]->seconds);
+        self::assertSame(0, $rows[0][0]->nanoseconds);
+        self::assertFalse($rows[0][0]->negative);
+
+        unlink($tempFile);
+    }
+
+    public function testOdsDurationRoundTrip(): void
+    {
+        $tempFile = $this->tempFile('ods');
+        $writer = new OdsWriter();
+        $writer->inferNumericStrings = false;
+        $writer->writeFile([[\Time\Duration::fromMicroseconds(131_415_000_000)]], $tempFile);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($tempFile));
+        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
+        self::assertSame(131_415, $rows[0][0]->seconds);
+        self::assertSame(0, $rows[0][0]->nanoseconds);
+        self::assertFalse($rows[0][0]->negative);
+
+        unlink($tempFile);
     }
 }

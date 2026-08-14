@@ -235,14 +235,27 @@ class SpreadNativeTest extends TestCase
         ];
     }
 
-    public function testDurationFromSerialReturnsCanonicalStringWithoutPolyfill(): void
+    public function testDurationFromSerial(): void
     {
-        // Time\Duration is not present on PHP < 8.6 without the polyfill, so the
-        // internal layer falls back to a canonical duration string.
-        self::assertSame('36:00:00', Spread::durationFromSerial(1.5));
-        self::assertSame('14:30:00', Spread::durationFromSerial(0.604_166_666_666_666_6));
-        self::assertSame('-36:00:00', Spread::durationFromSerial(-1.5));
-        self::assertSame('12:00:00', Spread::durationFromSerial(0.5));
+        // With the Symfony polyfill (or PHP 8.6) present, durations come back
+        // as real Time\Duration objects.
+        $positive = Spread::durationFromSerial(1.5);
+        self::assertInstanceOf(\Time\Duration::class, $positive);
+        self::assertSame(129_600, $positive->seconds);
+        self::assertSame(0, $positive->nanoseconds);
+        self::assertFalse($positive->negative);
+        self::assertSame('36:00:00', Spread::stringifyDuration($positive));
+
+        $negative = Spread::durationFromSerial(-1.5);
+        self::assertInstanceOf(\Time\Duration::class, $negative);
+        self::assertTrue($negative->negative);
+        self::assertSame(129_600, $negative->seconds);
+        self::assertSame('-36:00:00', Spread::stringifyDuration($negative));
+
+        $halfDay = Spread::durationFromSerial(0.5);
+        self::assertInstanceOf(\Time\Duration::class, $halfDay);
+        self::assertSame(43_200, $halfDay->seconds);
+        self::assertSame('12:00:00', Spread::stringifyDuration($halfDay));
     }
 
     #[DataProvider('isoDurationProvider')]
