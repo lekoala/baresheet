@@ -306,9 +306,9 @@ class Spread
     }
 
     /**
-     * Convert a DateTime to an Excel serial date number.
+     * Convert a DateTimeInterface to an Excel serial date number.
      *
-     * The conversion reasons purely on the DateTime's own civil calendar
+     * The conversion reasons purely on the DateTimeInterface's own civil calendar
      * components (as displayed in its timezone), never on absolute time:
      * spreadsheet dates carry no timezone semantics, so no timezone
      * conversion is ever performed. The default PHP timezone is never read.

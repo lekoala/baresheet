@@ -146,8 +146,8 @@ class Transform
      * 'int', 'float', 'bool', 'string', 'date'.
      *
      * For 'date', values are parsed as ISO 8601 strings and returned as
-     * DateTimeInterface. A native DateTimeInterface value passes through
-     * unchanged (a mutable DateTime is converted to DateTimeImmutable).
+     * DateTimeImmutable. A DateTimeInterface value passes through as an
+     * immutable instance (a mutable DateTime is converted to DateTimeImmutable).
      *
      * @param iterable<array<mixed>> $data
      * @param array<int|string, string> $types
