@@ -40,7 +40,7 @@
     },
     "suggest": {
         "ext-iconv": "Required for encoding conversion",
-        "maennchen/zipstream-php": "Required for streaming XLSX and ODS output"
+        "maennchen/zipstream-php": "Required for non-seekable streaming output to php://output (output())"
     },
     "autoload": {
         "psr-4": {

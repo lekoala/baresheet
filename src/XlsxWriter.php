@@ -6,10 +6,11 @@ namespace LeKoala\Baresheet;
 
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
-use ZipArchive;
+use LeKoala\Baresheet\Internal\DirectZipWriter;
 
 /**
- * Zero-dependency XLSX writer using ZipArchive + raw XML.
+ * Zero-dependency XLSX writer producing raw XML packaged by DirectZipWriter
+ * (seekable output) or ZipStream (non-seekable output).
  *
  * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
  */
@@ -51,29 +52,7 @@ class XlsxWriter implements WriterInterface
     public function writeStream(iterable $data)
     {
         $stream = Spread::getMaxMemTempStream();
-
-        if ($this->canStream()) {
-            $this->streamIterative($data, $stream);
-        } else {
-            // Buffer to temp file, then copy to stream
-            $tempFilename = Spread::getTempFilename();
-            try {
-                $this->buildFile($data, $tempFilename);
-                $tmpStream = fopen($tempFilename, 'r');
-                if ($tmpStream) {
-                    $result = stream_copy_to_stream($tmpStream, $stream);
-                    fclose($tmpStream);
-                    if ($result === false) {
-                        throw new WriteException('Failed to copy temp file to stream');
-                    }
-                }
-            } finally {
-                if (is_file($tempFilename)) {
-                    unlink($tempFilename);
-                }
-            }
-        }
-
+        $this->buildDirectZip($data, $stream);
         rewind($stream);
         return $stream;
     }
@@ -150,12 +129,13 @@ class XlsxWriter implements WriterInterface
      * @param iterable<WritableRow> $data
      * @param resource|null $outputStream
      */
-    private function streamIterative(iterable $data, $outputStream = null): void
+    private function streamIterative(iterable $data, $outputStream = null, bool $enableZeroHeader = true): void
     {
         $zipArgs = [
             // We handle headers ourselves via Spread::outputHeaders() to maintain consistency
             // across all writers (CSV/XLSX/ODS) and support PSR-7 StreamedResponses.
             'sendHttpHeaders' => false,
+            'defaultEnableZeroHeader' => $enableZeroHeader,
         ];
         if ($outputStream) {
             $zipArgs['outputStream'] = $outputStream;
@@ -223,8 +203,8 @@ class XlsxWriter implements WriterInterface
             throw new WriteException("Directory '{$destinationDir}' is not writable");
         }
 
-        $mode = ZipArchive::CREATE | ZipArchive::OVERWRITE;
-        // Use tempPath when the destination filesystem doesn't support ZipArchive well
+        // Use tempPath when the destination filesystem is not suitable for
+        // direct writes; the archive is built there then copied over.
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'xlsx_native');
             if (!$baseName) {
@@ -234,33 +214,24 @@ class XlsxWriter implements WriterInterface
             $baseName = $filename;
         }
 
-        $zip = new ZipArchive();
-        $result = $zip->open($baseName, $mode);
-        if ($result !== true) {
-            throw new WriteException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
+        $stream = @fopen($baseName, 'w+b');
+        if (!$stream) {
+            throw new WriteException("Failed to open '{$baseName}' for writing");
         }
 
-        $stream = null;
         try {
-            $stream = $this->writeToZip($zip, $data);
-            $destinationFile = $zip->filename;
-            $closeResult = $zip->close();
-            if ($closeResult === false) {
-                throw new WriteException("Failed to close file '{$destinationFile}'");
-            }
+            $this->buildDirectZip($data, $stream);
         } finally {
-            if (is_resource($stream)) {
-                fclose($stream);
-            }
+            fclose($stream);
         }
 
         // Copy from temp location to final destination when using tempPath
         if ($this->tempPath) {
             try {
-                copy($destinationFile, $filename);
+                copy($baseName, $filename);
             } finally {
-                if (is_file($destinationFile)) {
-                    unlink($destinationFile);
+                if (is_file($baseName)) {
+                    unlink($baseName);
                 }
             }
         }
@@ -269,13 +240,17 @@ class XlsxWriter implements WriterInterface
     }
 
     /**
-     * @param ZipArchive $zip
+     * Package the full XLSX (static parts + worksheet + optional shared strings)
+     * into a seekable stream via DirectZipWriter.
+     *
      * @param iterable<WritableRow> $data
-     * @return resource
+     * @param resource $stream
      */
-    private function writeToZip(ZipArchive $zip, iterable $data)
+    private function buildDirectZip(iterable $data, $stream): void
     {
-        $allFiles = [
+        $zip = new DirectZipWriter($stream, compressionLevel: 6);
+
+        $files = [
             '_rels/.rels' => $this->genRels(),
             'docProps/app.xml' => $this->genAppXml(),
             'docProps/core.xml' => $this->genCoreXml(),
@@ -285,25 +260,87 @@ class XlsxWriter implements WriterInterface
             '[Content_Types].xml' => $this->genContentTypes(),
         ];
 
-        foreach ($allFiles as $path => $xml) {
-            $zip->addFromString($path, $xml);
+        foreach ($files as $path => $xml) {
+            $zip->addString($path, $xml);
         }
 
         $sharedStrings = [];
         $sharedStringKeys = [];
-        $worksheetStream = $this->genWorksheet($data, $sharedStrings, $sharedStringKeys);
-        rewind($worksheetStream);
+
+        $zip->addCallback(
+            'xl/worksheets/sheet1.xml',
+            function (callable $write) use ($data, &$sharedStrings, &$sharedStringKeys): void {
+                $this->streamWorksheetToWrite($data, $write, $sharedStrings, $sharedStringKeys);
+            },
+        );
 
         if ($this->sharedStrings) {
-            $ssXml = $this->genSharedStrings($sharedStrings);
-            $zip->addFromString('xl/sharedStrings.xml', $ssXml);
+            $zip->addString('xl/sharedStrings.xml', $this->genSharedStrings($sharedStrings));
         }
 
-        $meta = stream_get_meta_data($worksheetStream);
-        $uri = (string) ($meta['uri'] ?? '');
-        $zip->addFile($uri, 'xl/worksheets/sheet1.xml');
-        // Do not fclose() here otherwise the temp file is deleted before the zip is closed/built!
-        return $worksheetStream;
+        $zip->finish();
+    }
+
+    /**
+     * Stream the worksheet (header + rows + footer) through a $write callback.
+     *
+     * When autoWidth is disabled (the default) this is a single pass with no
+     * intermediate temp file. With autoWidth the rows are first written to a
+     * temp stream so column widths are known before the <cols> section, then
+     * replayed through the callback with the header prefixed.
+     *
+     * @param iterable<WritableRow> $data
+     * @param callable(string):void $write
+     * @param array<string> $sharedStrings
+     * @param array<string,int> $sharedStringKeys
+     */
+    private function streamWorksheetToWrite(
+        iterable $data,
+        callable $write,
+        array &$sharedStrings,
+        array &$sharedStringKeys,
+    ): void {
+        if (!$this->autoWidth) {
+            $write($this->buildWorksheetPrefix(false, []) . '<sheetData>');
+            $colWidths = [];
+            $this->streamRows($data, $write, $sharedStrings, $sharedStringKeys, false, $colWidths);
+            $write('</sheetData>' . $this->buildWorksheetSuffix());
+            return;
+        }
+
+        $tmp = tmpfile();
+        if (!$tmp) {
+            throw new WriteException('Failed to get temp file for sheet data');
+        }
+
+        try {
+            $colWidths = [];
+            $this->streamRows(
+                $data,
+                static function (string $chunk) use ($tmp): void {
+                    fwrite($tmp, $chunk);
+                },
+                $sharedStrings,
+                $sharedStringKeys,
+                true,
+                $colWidths,
+            );
+
+            rewind($tmp);
+            $write($this->buildWorksheetPrefix(true, $colWidths) . '<sheetData>');
+            while (!feof($tmp)) {
+                $chunk = fread($tmp, 65_536);
+                if ($chunk === false) {
+                    throw new WriteException('Failed to read sheet data temp file');
+                }
+                if ($chunk !== '') {
+                    $write($chunk);
+                }
+            }
+            $write('</sheetData>' . $this->buildWorksheetSuffix());
+        } finally {
+            fclose($tmp);
+        }
     }
 
     /**
@@ -328,7 +365,8 @@ class XlsxWriter implements WriterInterface
                 yield array_keys($row);
             }
             $first = false;
-            yield array_values($row);
+            // Avoid a copy for rows that are already a list.
+            yield array_is_list($row) ? $row : array_values($row);
         }
     }
 
@@ -338,177 +376,252 @@ class XlsxWriter implements WriterInterface
      * @param array<string,int> $sharedStringKeys
      * @return resource
      */
-    private function genWorksheet(iterable $data, array &$sharedStrings, array &$sharedStringKeys)
-    {
-        // We write the sheet data to a separate temp stream first so we can
-        // calculate column widths and write the <cols> section before <sheetData>.
-        $dataStream = tmpfile();
-        if (!$dataStream) {
-            throw new WriteException('Failed to get temp file for sheet data');
+    /**
+     * Encode the wrapped rows through a $write callback, tracking column
+     * widths when requested.
+     *
+     * @param iterable<WritableRow> $data
+     * @param callable(string):void $write
+     * @param array<string> $sharedStrings
+     * @param array<string,int> $sharedStringKeys
+     * @param array<int,int> $colWidths
+     */
+    private function streamRows(
+        iterable $data,
+        callable $write,
+        array &$sharedStrings,
+        array &$sharedStringKeys,
+        bool $trackWidths,
+        array &$colWidths,
+    ): void {
+        $r = 0;
+        $colCache = [];
+        $boldStyle = $this->boldHeaders ? ' s="2"' : '';
+        $autoWidth = $trackWidths;
+        $sharedStringsOpt = $this->sharedStrings;
+        $bufferSizeOpt = self::BUFFER_SIZE;
+        $buffer = '';
+
+        $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
+        if ($headerSchema !== null) {
+            $headerRowsRemaining = count($headerSchema->headerRows());
+        } else {
+            $headerRowsRemaining = 0;
+            if ($this->boldHeaders) {
+                $headerRowsRemaining = 1;
+            } elseif (is_array($data)) {
+                // Peek at the first row without moving the array pointer: reset()
+                // would copy the whole array when it is shared with a callback.
+                $firstKey = array_key_first($data);
+                $firstRow = $firstKey !== null ? $data[$firstKey] : null;
+                if (is_array($firstRow) && !array_is_list($firstRow)) {
+                    $headerRowsRemaining = 1;
+                }
+            }
+        }
+        $wrappedData = $this->wrapRows($data, $headerSchema);
+
+        foreach ($wrappedData as $dataRow) {
+            $r++;
+            $i = 0;
+            $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
+            $buffer .= "<row r=\"{$r}\">";
+            foreach ($dataRow as $value) {
+                if (!isset($colCache[$i])) {
+                    $colCache[$i] = Spread::columnLetter($i + 1);
+                }
+                $cn = $colCache[$i] . $r;
+
+                if ($value instanceof DateTimeInterface) {
+                    $excelDate = Spread::dateToExcel($value);
+                    $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
+                    $vl = 16;
+                } elseif (is_bool($value)) {
+                    $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
+                    $vl = 1;
+                } elseif (
+                    $value === null
+                    || $value === ''
+                    || (!is_scalar($value)
+                    && !$value instanceof \Stringable)
+                ) {
+                    $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
+                    $vl = 0;
+                } else {
+                    $isNumeric = false;
+                    if (Spread::isNumericCellValue($value)) {
+                        $isNumeric = true;
+                        $strValue = (string) $value;
+                    } else {
+                        $strValue = (string) $value;
+                    }
+
+                    if ($isNumeric) {
+                        $vl = strlen($strValue);
+                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    } else {
+                        // ⚡ Bolt: Fast-path optimization
+                        // mb_strlen is significantly slower than strlen in tight loops.
+                        // Use strlen (byte-length) as a fast threshold check for shared strings.
+                        // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
+                        $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
+
+                        $escaped = Spread::escapeXml($strValue);
+
+                        // For shared strings logic, use strlen for byte-length threshold checking
+                        $strByteLen = $autoWidth ? strlen($strValue) : $vl;
+
+                        if ($sharedStringsOpt && $strByteLen <= 160) {
+                            $skey = '~' . $escaped;
+                            if (isset($sharedStringKeys[$skey])) {
+                                $ssIdx = $sharedStringKeys[$skey];
+                            } else {
+                                $sharedStrings[] = $escaped;
+                                $ssIdx = count($sharedStrings) - 1;
+                                $sharedStringKeys[$skey] = $ssIdx;
+                            }
+                            $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                        } else {
+                            $buffer .=
+                                '<c r="'
+                                . $cn
+                                . '" t="inlineStr"'
+                                . $cellStyle
+                                . '><is><t>'
+                                . $escaped
+                                . '</t></is></c>';
+                        }
+                    }
+                }
+                $buffer .= "\r\n";
+                if ($autoWidth) {
+                    if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
+                        $colWidths[$i] = $vl;
+                    }
+                }
+                $i++;
+            }
+            $buffer .= "</row>\r\n";
+            if (($r % $bufferSizeOpt) === 0) {
+                $write($buffer);
+                $buffer = '';
+            }
+            if ($headerRowsRemaining > 0) {
+                $headerRowsRemaining--;
+            }
         }
 
-        $worksheetStream = null;
+        if ($buffer !== '') {
+            $write($buffer);
+        }
+    }
+
+    /**
+     * Worksheet opening markup (declaration, <worksheet>, freeze pane, optional
+     * <cols>). Does not include <sheetData>.
+     *
+     * @param array<int,int> $colWidths
+     */
+    private function buildWorksheetPrefix(bool $includeCols, array $colWidths): string
+    {
+        $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
+        $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+        $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+
+        $freezePaneXml = $this->genFreezePaneXml();
+        if ($freezePaneXml !== '') {
+            $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
+            $header .= $freezePaneXml;
+            $header .= '</sheetView></sheetViews>';
+        }
+
+        if ($includeCols) {
+            $header .= $this->genColsXml($colWidths);
+        }
+
+        return $header;
+    }
+
+    /**
+     * Worksheet closing markup (sheet protection, optional auto filter,
+     * </worksheet>). Does not include </sheetData>.
+     */
+    private function buildWorksheetSuffix(): string
+    {
+        $footer = $this->genSheetProtectionXml();
+        if ($this->autofilter) {
+            $autofilter = $this->autofilter;
+            if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
+                $footer .= '<autoFilter ref="' . Spread::escapeXmlAttr($autofilter) . '"/>';
+            }
+        }
+        return $footer . '</worksheet>';
+    }
+
+    /**
+     * Build the full worksheet into a temp stream (used by the ZipStream path).
+     *
+     * @param iterable<WritableRow> $data
+     * @param array<string> $sharedStrings
+     * @param array<string,int> $sharedStringKeys
+     * @return resource
+     */
+    private function genWorksheet(iterable $data, array &$sharedStrings, array &$sharedStringKeys)
+    {
+        $worksheetStream = tmpfile();
+        if (!$worksheetStream) {
+            throw new WriteException('Failed to get temp file for worksheet');
+        }
+
+        $dataStream = null;
+        if ($this->autoWidth) {
+            $dataStream = tmpfile();
+            if (!$dataStream) {
+                fclose($worksheetStream);
+                throw new WriteException('Failed to get temp file for sheet data');
+            }
+        }
+
         try {
-            $r = 0;
             $colWidths = [];
-            $boldStyle = $this->boldHeaders ? ' s="2"' : '';
-            $colCache = [];
+            $suffix = '</sheetData>' . $this->buildWorksheetSuffix();
 
-            $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
-            if ($headerSchema !== null) {
-                $headerRowsRemaining = count($headerSchema->headerRows());
-            } else {
-                $headerRowsRemaining = 0;
-                if ($this->boldHeaders) {
-                    $headerRowsRemaining = 1;
-                } elseif (is_array($data)) {
-                    $firstRow = reset($data);
-                    if (is_array($firstRow) && !array_is_list($firstRow)) {
-                        $headerRowsRemaining = 1;
-                    }
-                }
-            }
-            $wrappedData = $this->wrapRows($data, $headerSchema);
-
-            $autoWidth = $this->autoWidth;
-            $sharedStringsOpt = $this->sharedStrings;
-            $bufferSizeOpt = self::BUFFER_SIZE;
-            $buffer = '';
-
-            foreach ($wrappedData as $dataRow) {
-                $r++;
-                $i = 0;
-                $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
-                $buffer .= "<row r=\"{$r}\">";
-                foreach ($dataRow as $value) {
-                    if (!isset($colCache[$i])) {
-                        $colCache[$i] = Spread::columnLetter($i + 1);
-                    }
-                    $cn = $colCache[$i] . $r;
-
-                    if ($value instanceof DateTimeInterface) {
-                        $excelDate = Spread::dateToExcel($value);
-                        $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
-                        $vl = 16;
-                    } elseif (is_bool($value)) {
-                        $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
-                        $vl = 1;
-                    } elseif (
-                        $value === null
-                        || $value === ''
-                        || (!is_scalar($value)
-                        && !$value instanceof \Stringable)
-                    ) {
-                        $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
-                        $vl = 0;
-                    } else {
-                        $isNumeric = false;
-                        if (Spread::isNumericCellValue($value)) {
-                            $isNumeric = true;
-                            $strValue = (string) $value;
-                        } else {
-                            $strValue = (string) $value;
-                        }
-
-                        if ($isNumeric) {
-                            $vl = strlen($strValue);
-                            $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
-                        } else {
-                            // ⚡ Bolt: Fast-path optimization
-                            // mb_strlen is significantly slower than strlen in tight loops.
-                            // Use strlen (byte-length) as a fast threshold check for shared strings.
-                            // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
-                            $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
-
-                            $escaped = Spread::escapeXml($strValue);
-
-                            // For shared strings logic, use strlen for byte-length threshold checking
-                            $strByteLen = $autoWidth ? strlen($strValue) : $vl;
-
-                            if ($sharedStringsOpt && $strByteLen <= 160) {
-                                $skey = '~' . $escaped;
-                                if (isset($sharedStringKeys[$skey])) {
-                                    $ssIdx = $sharedStringKeys[$skey];
-                                } else {
-                                    $sharedStrings[] = $escaped;
-                                    $ssIdx = count($sharedStrings) - 1;
-                                    $sharedStringKeys[$skey] = $ssIdx;
-                                }
-                                $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
-                            } else {
-                                $buffer .=
-                                    '<c r="'
-                                    . $cn
-                                    . '" t="inlineStr"'
-                                    . $cellStyle
-                                    . '><is><t>'
-                                    . $escaped
-                                    . '</t></is></c>';
-                            }
-                        }
-                    }
-                    $buffer .= "\r\n";
-                    if ($autoWidth) {
-                        if (!isset($colWidths[$i]) || $vl > $colWidths[$i]) {
-                            $colWidths[$i] = $vl;
-                        }
-                    }
-                    $i++;
-                }
-                $buffer .= "</row>\r\n";
-                if (($r % $bufferSizeOpt) === 0) {
-                    fwrite($dataStream, $buffer);
-                    $buffer = '';
-                }
-                if ($headerRowsRemaining > 0) {
-                    $headerRowsRemaining--;
-                }
+            if (!$this->autoWidth) {
+                // Single pass: header, rows, footer stream straight through.
+                fwrite($worksheetStream, $this->buildWorksheetPrefix(false, []) . '<sheetData>');
+                $this->streamRows(
+                    $data,
+                    static function (string $chunk) use ($worksheetStream): void {
+                        fwrite($worksheetStream, $chunk);
+                    },
+                    $sharedStrings,
+                    $sharedStringKeys,
+                    false,
+                    $colWidths,
+                );
+                fwrite($worksheetStream, $suffix);
+                return $worksheetStream;
             }
 
-            if ($buffer !== '') {
-                fwrite($dataStream, $buffer);
-            }
+            // Two-pass (autoWidth): rows go to a temp stream first, then the
+            // final stream is assembled with <cols> preceding <sheetData>.
+            $this->streamRows(
+                $data,
+                static function (string $chunk) use ($dataStream): void {
+                    fwrite($dataStream, $chunk);
+                },
+                $sharedStrings,
+                $sharedStringKeys,
+                true,
+                $colWidths,
+            );
 
-            // Now assemble the final worksheet stream
-            $worksheetStream = tmpfile();
-            if (!$worksheetStream) {
-                throw new WriteException('Failed to get temp file for worksheet');
-            }
-
-            $header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
-            $header .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
-            $header .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-
-            $freezePaneXml = $this->genFreezePaneXml();
-            if ($freezePaneXml !== '') {
-                $header .= '<sheetViews><sheetView tabSelected="1" workbookViewId="0">';
-                $header .= $freezePaneXml;
-                $header .= '</sheetView></sheetViews>';
-            }
-
-            if ($autoWidth) {
-                $header .= $this->genColsXml($colWidths);
-            }
-
-            $header .= '<sheetData>';
-            fwrite($worksheetStream, $header);
-
+            fwrite($worksheetStream, $this->buildWorksheetPrefix(true, $colWidths) . '<sheetData>');
             rewind($dataStream);
             stream_copy_to_stream($dataStream, $worksheetStream);
             fclose($dataStream);
             $dataStream = null;
-
-            $footer = '</sheetData>';
-            $footer .= $this->genSheetProtectionXml();
-            if ($this->autofilter) {
-                $autofilter = $this->autofilter;
-                if (preg_match('/^[A-Z]+\d+:[A-Z]+\d+$/i', $autofilter)) {
-                    $escapedFilter = Spread::escapeXmlAttr($autofilter);
-                    $footer .= '<autoFilter ref="' . $escapedFilter . '"/>';
-                }
-            }
-            $footer .= '</worksheet>';
-            fwrite($worksheetStream, $footer);
+            fwrite($worksheetStream, $suffix);
 
             return $worksheetStream;
         } catch (\Throwable $e) {
