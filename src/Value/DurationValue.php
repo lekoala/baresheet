@@ -20,7 +20,8 @@ final class DurationValue implements \Stringable
 {
     public function __construct(
         public readonly int $microseconds,
-    ) {}
+    ) {
+    }
 
     public static function fromMicroseconds(int $microseconds): self
     {

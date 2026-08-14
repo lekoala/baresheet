@@ -54,6 +54,9 @@ final class TimeValue implements \Stringable
      */
     public static function fromMicroseconds(int $microseconds): self
     {
+        if (PHP_INT_SIZE < 8) {
+            throw new \RuntimeException('TimeValue microsecond conversions require 64-bit PHP.');
+        }
         if ($microseconds < 0 || $microseconds >= self::MICROSECONDS_PER_DAY) {
             throw new InvalidArgumentException(
                 'Microseconds must be in range [0, 86400000000), got ' . $microseconds,
@@ -70,6 +73,9 @@ final class TimeValue implements \Stringable
 
     public function toMicroseconds(): int
     {
+        if (PHP_INT_SIZE < 8) {
+            throw new \RuntimeException('TimeValue microsecond conversions require 64-bit PHP.');
+        }
         return (
             ($this->hour * 3_600_000_000)
             + ($this->minute * 60_000_000)

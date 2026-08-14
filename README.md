@@ -6,7 +6,7 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 
 ## Requirements
 
-- PHP 8.1.2+ (64-bit)
+- PHP 8.1.2+
 - ext-mbstring (Required for all formats)
 
 ### Format Specific (Required for XLSX/ODS)
@@ -646,6 +646,8 @@ $writer->writeFile([
 `TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP.
 
 Temporal values are represented at **microsecond precision**. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
+
+> **Baresheet does not require 64-bit PHP.** Native temporal helpers and marker values are intended for 64-bit builds; use stringified temporal values on 32-bit PHP.
 
 ## Streaming Output
 
