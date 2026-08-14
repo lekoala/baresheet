@@ -1,15 +1,15 @@
 # Baresheet
 
-Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
+Fast, lightweight CSV, XLSX, and ODS reader/writer for PHP with no runtime Composer dependencies.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Requirements
 
 - PHP 8.1.2+
-- ext-mbstring (Required for all formats)
+- ext-mbstring (required for all formats)
 
-### Format Specific (Required for XLSX/ODS)
+### Format-specific (XLSX/ODS)
 
 - ext-zip
 - ext-zlib
@@ -17,7 +17,7 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 
 ### Optional
 
-- ext-iconv (Required only for CSV BOM transcoding)
+- ext-iconv (required only for CSV BOM transcoding)
 
 ## Installation
 
@@ -30,40 +30,53 @@ composer require lekoala/baresheet
 ```php
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\Options;
-use LeKoala\Baresheet\Spread;
 
-// Auto-detect format from extension
+// Read — format is auto-detected from the extension
 $rows = Baresheet::read('data.xlsx', new Options(assoc: true));
 foreach ($rows as $row) {
     echo $row['email'];
 }
 
-// Inspect a spreadsheet before choosing the table to import
-$sheetNames = Spread::getSheetNames('import.xlsx');
-// ['Patients', 'Archive', 'Instructions']
-
-$rows = Baresheet::read('import.xlsx'); // Reads the first sheet by default
-$archiveRows = Baresheet::read('import.xlsx', new Options(sheet: 'Archive'));
-// CSV is a single table, so do not inspect it for sheets.
-
 // Write — format from extension
-Baresheet::write($data, 'output.csv', new Options(bom: false));
-Baresheet::write($data, 'output.xlsx', new Options(meta: ['creator' => 'My App']));
-Baresheet::write($data, 'output.ods');
-
-// Write to string
-$csv = Baresheet::writeString($data, 'csv');
-$xlsx = Baresheet::writeString($data, 'xlsx');
-$ods = Baresheet::writeString($data, 'ods');
-
-// Write to PHP resource (for PSR-7 or Laravel Responses)
-$stream = Baresheet::writeStream($data, 'xlsx');
-
-// Stream as download (sends HTTP headers)
-Baresheet::output($data, 'report.xlsx');
+Baresheet::write($data, 'output.xlsx');
 ```
 
-## Direct Reader/Writer Usage
+That's it. The `Baresheet` facade always creates a fresh reader/writer, applies the options, and reads/writes once.
+
+## Why Baresheet?
+
+|                              | CSV | XLSX | ODS |
+| ---------------------------- | --- | ---- | --- |
+| Streaming read/write         | ✓   | ✓    | ✓   |
+| Sheet selection              | —   | ✓    | ✓   |
+| Native values                | ✓   | ✓    | ✓   |
+| Column selection             | ✓   | ✓    | ✓   |
+| Hierarchical headers         | ✓   | ✓    | ✓   |
+| Auto width / freeze / filter | —   | ✓    | —   |
+
+- **Streaming by default** — reads and writes (including browser `output()`) are streamed, so PHP memory stays flat regardless of file size.
+- **Low memory** — a 0.63 MB peak reading or ~1.1 MB writing 50,000 XLSX rows (see [Performance](#performance)).
+- **No runtime Composer dependencies** — only PHP core extensions; XLSX/ODS packaging uses an internal ZIP writer.
+- **Pragmatic headers** — required columns, selection, aliases, injected and hierarchical headers, header discovery, normalization, and strict mode ([docs/headers.md](docs/headers.md)).
+- **Native values** — numbers, booleans, and dates come back as real PHP types, not strings ([Native values](#native-values)).
+
+## Core API
+
+### Baresheet facade
+
+Format is detected from the extension (or from the content when a string is passed):
+
+```php
+$rows = Baresheet::read('data.csv');                            // Generator of rows
+$rows = Baresheet::read('data.xlsx', new Options(assoc: true));
+$rows = Baresheet::readString($contents, 'csv');                // from string content
+Baresheet::write($data, 'output.ods');                          // to file
+$string = Baresheet::writeString($data, 'csv');                 // to string
+$stream = Baresheet::writeStream($data, 'xlsx');                // to resource
+Baresheet::output($data, 'report.xlsx');                        // to browser download
+```
+
+### Direct readers/writers
 
 Concrete classes allow setting properties directly or passing an `Options` object to the constructor:
 
@@ -71,127 +84,36 @@ Concrete classes allow setting properties directly or passing an `Options` objec
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
-// CSV - Manual pattern
+// CSV — manual pattern
 $reader = new CsvReader();
 $reader->assoc = true;
 $rows = $reader->readFile('data.csv');
 
-// CSV - Options pattern
-$writer = new CsvWriter(new Options(
-    escapeFormulas: true,
-));
-$writer->writeFile($data, 'safe-export.csv');
-
-// XLSX - Manual pattern
-$reader = new XlsxReader();
-$reader->sheet = 'Data';
-$rows = $reader->readFile('report.xlsx');
-
-// XLSX - Options pattern
+// XLSX — Options pattern
 $writer = new XlsxWriter(new Options(
     meta: ['creator' => 'My App'],
 ));
 $writer->writeFile($data, 'report.xlsx');
 ```
 
-## Features
+### Options
 
-### CSV
-
-- **Auto delimiter detection** — analyzes a sample to pick the best separator (default: `auto`)
-- **BOM handling** — detects and natively transcodes UTF-8/16/32 BOM sequences on the fly via stream filters
-- **Formula injection protection** — `escapeFormulas: true` (opt-in security flag, see Security section)
-- **RFC 4180 compliant** — handles enclosures, double-quote escaping, and **CRLF (`\r\n`)** line endings by default for maximum interoperability.
-- **Column Selection & Aliasing** — Select, reorder, and rename columns during read. Supports hierarchical column selection and aliasing.
-- **Stream reading** — `readStream()` for reading from any PHP resource
-
-### XLSX
-
-- **Blazing fast reading** — optimized `XMLReader` with direct `zip://` streaming (2x faster than SimpleXLSX)
-- **Data offset** & **Empty line skipping** — safely skip arbitrary leading rows or completely empty lines
-- **Extreme memory efficiency** — unified 0.63MB footprint regardless of file size
-- **Column Selection** — Skip XML parsing for unselected cells for massive performance gains.
-- **Shared string table** — opt-in de-duplication for smaller files (default: `false` for speed)
-- **Auto column widths** — opt-in automatic column sizing (default: `false` for speed)
-- **Single-pass streaming writer** — the worksheet XML is compressed directly into the archive by an internal ZIP writer (`DirectZipWriter`), with approximately flat incremental PHP memory for generator input and ZIP64 support for seekable and non-seekable outputs
-- **DateTime support** — pass `DateTimeInterface` objects directly, seamlessly handles 1900/1904 calendar systems
-- **Freeze Pane & Autofilter** — simple options for improved sheet usability
-- **Document properties** — set creator, title, subject, keywords, etc. via `meta`
-
-> [!NOTE]
-> XLSX dates are identified from their cell number format. A numeric Excel serial stored with the `General` format cannot reliably be distinguished from an ordinary number, so it is read back as a raw value.
-
-### ODS
-
-- **Streaming reader** — handles large files with minimal 0.63MB memory usage
-- **Single-pass streaming writer** — `content.xml` is compressed directly into the archive by `DirectZipWriter`, including true non-seekable `output()` streaming
-- **Data offset** & **Empty line skipping** — safely skip arbitrary leading rows or completely empty lines
-- **Column Selection** — Skip XML parsing for unselected cells for significant performance gains.
-- **Zero-dependency packaging** — writing uses the internal ZIP engine; reading uses native `ZipArchive` + `XMLReader`
-- **DateTime support** — dates stored accurately in ISO 8601
-- **Document properties** — set creator and title via `meta`
-- **Sheet selection** — read specific sheets by name or index
-
-> [!NOTE]
-> ODS is supported for reading and writing tables. Advanced presentation features — such as `freezePane`, `autoWidth`, and `autofilter` — are intentionally XLSX-only. Baresheet does not aim for feature parity between the formats; use XLSX when those features matter.
-
-### XLSX Sheet Protection
-
-Lock an exported sheet to discourage accidental edits:
+Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration.
 
 ```php
-// The user can remove the protection without a password.
-Baresheet::write($data, 'readonly.xlsx', new Options(sheetProtection: true));
-
-// The user must enter the password to remove the protection in Excel.
-Baresheet::write($data, 'protected.xlsx', new Options(sheetProtection: 'change-me'));
-```
-
-Sheet protection is not encryption and does not secure the workbook's contents. It is intentionally limited to Excel's legacy sheet-protection verifier: adding a stronger password hash would give a false impression of security because the protection can still be removed from the XLSX archive. It is intended to prevent ordinary edits, not to protect sensitive data.
-
-To prevent the workbook from being read, encrypt the completed file with a separate encryption process before delivering or storing it.
-
-## Options
-
-Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration. There are three ways to configure an instance:
-
-**1. Directly on properties:**
-
-```php
-$reader = new CsvReader();
-$reader->assoc = true;
-$reader->separator = ";";
-```
-
-**2. Via the constructor:**
-
-```php
-$reader = new CsvReader(new Options(assoc: true, separator: ";"));
-```
-
-**3. Via `Options::applyTo()`**, which gives **full IDE autocomplete** and can reconfigure an already-constructed instance:
-
-```php
-use LeKoala\Baresheet\Options;
-
 $opts = new Options(
     assoc: true,
     separator: 'auto',
-    meta: ['creator' => 'My App']
+    meta: ['creator' => 'My App'],
 );
-$opts->applyTo($reader);
+$opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing instance
 ```
 
-`readFile()`, `readString()`, `writeFile()`, etc. no longer accept an `Options` argument directly — they simply read/write using whatever configuration the reader/writer instance currently holds. This avoids ambiguity about whether a per-call option leaks into subsequent calls: the instance's configuration *is* its state.
+`readFile()`, `readString()`, `writeFile()`, etc. no longer accept an `Options` argument — they simply read/write using whatever configuration the reader/writer instance currently holds. This avoids ambiguity about whether a per-call option leaks into subsequent calls: the instance's configuration *is* its state. The `Baresheet` facade keeps the convenient one-shot form, since it always creates a fresh reader/writer internally, applies the options to it, then reads/writes once.
 
-The `Baresheet` facade keeps the convenient one-shot form, since it always creates a fresh reader/writer internally, applies the options to it, then reads/writes once:
-
-```php
-$rows = Baresheet::read('data.csv', $opts);
-```
+## Options
 
 | Option             | Type                                       | Default     | Applies to                |
 |--------------------|--------------------------------------------|-------------|---------------------------|
@@ -244,6 +166,7 @@ BaresheetException
 
 ```php
 use LeKoala\Baresheet\Baresheet;
+use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\BaresheetException;
 
@@ -260,348 +183,7 @@ try {
 
 `InvalidRowException` exposes `$row` and `$column` when available, and `MissingColumnException` exposes the missing `$columns` list, for building precise error messages.
 
-## Required Columns Validation
-
-Validate that input files contain expected columns before processing. This catches malformed files early, avoiding wasted cycles parsing invalid data.
-
-```php
-// Throws MissingColumnException if 'email' or 'price' columns are missing
-$rows = Baresheet::read('products.csv', new Options(
-    assoc: true,
-    requiredColumns: ['sku', 'price', 'qty']
-));
-
-foreach ($rows as $row) {
-    // All required columns are guaranteed to exist
-    processProduct($row);
-}
-```
-
-The validation occurs immediately after reading the header row and throws a `MissingColumnException` listing the missing columns:
-
-```
-Missing required columns: price, qty
-```
-
-Works with all reader formats (CSV, XLSX, ODS) and the `Baresheet` facade.
-
-## Column Selection
-
-Select and reorder specific columns when reading. This is useful for wide files where you only need a subset of columns, or when you need columns in a specific order. Selected columns must exist in the file headers (they are implicitly required).
-
-```php
-// Select specific columns (assoc mode returns named array)
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    columns: ['email', 'name']  // Only these columns, in this order
-));
-
-foreach ($rows as $row) {
-    // $row contains only ['email' => '...', 'name' => '...']
-}
-```
-
-### Reordering Columns
-
-Column selection also allows reordering:
-
-```php
-// File has: name, email, age (in that order)
-// Output: age first, then name
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    columns: ['age', 'name']
-));
-```
-
-### Plain Mode with Column Selection
-
-When using `assoc: false`, provide explicit headers and receive values in plain arrays:
-
-```php
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: false,
-    headers: ['email', 'name', 'age'],
-    columns: ['name', 'email']
-));
-
-foreach ($rows as $row) {
-    // $row contains: ['John', 'john@example.com'] (values only)
-}
-```
-
-### Working with Headerless Files
-
-When reading files without header rows, you can inject column names using the `headers` option. This enables column selection and associative output even for plain data files:
-
-```php
-// File has no headers, just raw data:
-// 1,John Doe,john@example.com,50000
-// 2,Jane Smith,jane@example.com,60000
-
-$rows = Baresheet::read('data.csv', new Options(
-    headers: ['id', 'name', 'email', 'salary'],  // Define column structure
-    columns: ['id', 'email', 'salary'],          // Select specific columns
-    assoc: true                                  // Get named array output
-));
-
-foreach ($rows as $row) {
-    // $row contains: ['id' => 1, 'email' => 'john@example.com', 'salary' => 50000]
-}
-```
-
-This works with all reader formats (CSV, XLSX, ODS) and is useful when:
-
-- Processing legacy data exports without headers
-- Working with fixed-format data feeds
-- Converting plain arrays to structured data
-
-Column selection provides dramatic performance improvements for XLSX and ODS files by skipping XML parsing for unselected cells. For CSV, it provides a zero-overhead "direct indexing" fast path that avoids intermediate array allocations.
-
-| Format   | 20 columns → 5 columns | **Speedup**      | **Memory/CPU Savings**            |
-|----------|------------------------|------------------|-----------------------------------|
-| **XLSX** | 2.94s → 1.33s          | **~2.2x faster** | **High** (Skips XML Nodes)        |
-| **ODS**  | 1.80s → 1.25s          | **~1.4x faster** | **High** (Skips XML Nodes)        |
-| **CSV**  | 0.28s → 0.28s          | **Baseline**     | **90%+** fewer hash-table entries |
-
-> [!TIP]
-> **XLSX & ODS Performance**: Column selection provides dramatic speedups for XLSX and ODS files by skipping XML parsing for unselected cells. CSV benefits from a streamlined mapping path with zero intermediate allocations.
-
-### Error Handling
-
-Missing columns throw immediately:
-
-```
-MissingColumnException: Missing required columns: missing_column
-```
-
-### Hierarchical Headers
-
-Baresheet supports multi-row spreadsheet headers, common in real-world exports where column groups span multiple rows:
-
-```csv
-Identity,,,Contact,,,Meta,,
-id,first name,last name,role,email,phone,type,status,level,department
-1,John,Doe,Admin,john@example.com,555-1000,full-time,active,senior,Engineering
-```
-
-### Multi-Row Headers
-
-Use `headerRows` to specify how many consecutive rows define the header structure. Baresheet automatically propagates parent cells horizontally and builds a nested schema:
-
-```php
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    headerRows: 2,
-));
-
-foreach ($rows as $row) {
-    // $row = [
-    //   'Identity'  => ['id' => 1, 'first name' => 'John', ...],
-    //   'Contact'   => ['email' => 'john@example.com', ...],
-    //   'Meta'      => ['status' => 'active', ...],
-    // ]
-}
-```
-
-### Hierarchical Selection
-
-Select nested columns using the same tree-like syntax:
-
-```php
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    headerRows: 2,
-    columns: [
-        'Contact' => ['email', 'phone'],
-    ],
-));
-// $row = ['Contact' => ['email' => '...', 'phone' => '...']]
-```
-
-### Hierarchical Required Columns
-
-Validate that expected nested columns exist before processing:
-
-```php
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    headerRows: 2,
-    requiredColumns: [
-        'Identity' => ['id'],
-        'Contact' => ['email'],
-    ],
-));
-// Throws MissingColumnException if Identity.id or Contact.email are absent
-```
-
-### Column Aliases
-
-Rename columns to standardized keys after selection and validation, keeping your business logic decoupled from file-specific naming:
-
-```php
-$rows = Baresheet::read('data.csv', new Options(
-    assoc: true,
-    headerRows: 2,
-    aliases: [
-        'E-mail' => 'email',
-        'Contact' => ['phone' => 'phone_number'],
-    ],
-));
-```
-
-Aliases are applied after `requiredColumns` and `columns`, so those options always reference the original column names present in the file. Duplicate aliases created by renaming (e.g. two columns both renamed to `email`) are rejected with an `InvalidDocumentException`.
-
-### Header Offset
-
-Skip preamble rows (titles, metadata, comments) before the header block:
-
-```php
-// Explicit: skip 4 rows before the header
-$rows = Baresheet::read('report.csv', new Options(
-    assoc: true,
-    headerOffset: 4,
-));
-
-// Auto-detection: scan forward until required columns are found
-$rows = Baresheet::read('export.csv', new Options(
-    assoc: true,
-    headerOffset: 'auto',
-    requiredColumns: ['customer_id', 'email'],
-));
-```
-
-`headerOffset` works with CSV, XLSX, and ODS readers. The `'auto'` mode uses a streaming rolling window — no second pass, no `maxScan` limit — and requires `requiredColumns` to be set.
-
-### Header Normalization
-
-Normalize source headers once, before schema validation and before `requiredColumns`, `columns`, and `aliases` are applied:
-
-```php
-$rows = Baresheet::read('export.csv', new Options(
-    assoc: true,
-    headerNormalizer: fn(string $header): string => strtolower(trim($header)),
-    requiredColumns: ['first name', 'email'],
-    columns: ['email', 'first name'],
-));
-```
-
-The callback receives each non-empty header cell and must return the normalized string. It applies to headers read from the file (including `headerOffset: 'auto'` detection) and to injected `headers`. It does **not** apply to `requiredColumns`, `columns`, or `aliases` — those must already be written in the normalized form.
-
-```php
-// Source: " First Name " → normalized to "first_name"
-$rows = Baresheet::read('export.csv', new Options(
-    assoc: true,
-    headerOffset: 'auto',
-    requiredColumns: ['first_name'],
-    headerNormalizer: fn(string $header): string => strtolower(str_replace(' ', '_', trim($header))),
-));
-```
-
-Two source headers that normalize to the same value (e.g. `"Name"` and `"name"` under `strtolower`) are rejected with an `InvalidDocumentException`, since the resulting schema would contain a duplicate path.
-
-### Writing Hierarchical Headers
-
-All writers (CSV, XLSX, ODS) accept the same hierarchical definition for `headers` and produce multi-row output. Nested data rows are automatically flattened to match the schema:
-
-```php
-use LeKoala\Baresheet\CsvWriter;
-use LeKoala\Baresheet\XlsxWriter;
-use LeKoala\Baresheet\OdsWriter;
-
-$headers = [
-    'Identity' => ['id', 'first name', 'last name'],
-    'Contact'  => ['email', 'phone'],
-];
-
-$data = [
-    [
-        'Identity' => ['id' => 1, 'first name' => 'John', 'last name' => 'Doe'],
-        'Contact'  => ['email' => 'john@example.com', 'phone' => '555-1000'],
-    ],
-];
-
-// CSV
-(new CsvWriter())->writeFile($data, 'output.csv');
-
-// XLSX — supports boldHeaders for all header rows
-$writer = new XlsxWriter();
-$writer->headers = $headers;
-$writer->boldHeaders = true;
-$writer->writeFile($data, 'output.xlsx');
-
-// ODS — same API
-$writer = new OdsWriter();
-$writer->headers = $headers;
-$writer->writeFile($data, 'output.ods');
-```
-
-This generates:
-
-```csv
-Identity,,,Contact,
-id,first name,last name,email,phone
-1,John,Doe,john@example.com,555-1000
-```
-
-### Strict Mode
-
-When `strict` is enabled, every data row must match the schema's expected column count. During header collection (with `headerRows > 1`), rows may legitimately differ in width — strict validation is deferred until the header block is resolved.
-
-```php
-// Read — throws InvalidRowException on mismatched data rows
-$reader = new CsvReader(new Options(assoc: true, strict: true, headers: ['a', 'b', 'c']));
-
-// Write — throws WriteException before flattening, catching short/long rows early
-$writer = new CsvWriter(new Options(strict: true, headers: ['a', 'b', 'c']));
-```
-
-## Data Transformation
-
-Baresheet preserves raw cell values by design. For cleaning, casting, or filtering, use the `Transform` class — generator-based pipelines that compose with readers and writers without loading data into memory.
-
-```php
-use LeKoala\Baresheet\Transform;
-
-// Trim whitespace from all string values
-$rows = Transform::trim($reader->readFile('data.csv'));
-
-// Chain multiple transforms (PHP 8.5+ pipe operator)
-$clean = $reader->readFile('data.csv')
-    |> Transform::trim(...)
-    |> Transform::nullAs(..., 'N/A')
-    |> Transform::boolAs(..., 'Yes', 'No');
-
-// Cast types for database inserts
-$typed = Transform::cast($rows, [
-    'qty' => 'int',
-    'price' => 'float',
-    'active' => 'bool',
-    'created' => 'date',  // returns DateTimeInterface
-]);
-
-// Tell your IDE / PHPStan the expected shape after casting
-/** @var Generator<array{qty: int, price: float, active: bool, created: ?DateTimeInterface}> $typed */
-$typed = Transform::cast($rows, [
-    'qty' => 'int',
-    'price' => 'float',
-    'active' => 'bool',
-    'created' => 'date',
-]);
-
-// Filter rows
-$active = Transform::filter($rows, fn($row) => $row['active'] === 'Yes');
-
-// Batch insert in chunks of 1000
-foreach (Transform::chunk($rows, 1000) as $batch) {
-    $db->bulkInsert($batch);
-}
-
-// Slice a page of results, without loading everything into memory
-$page = Transform::slice($rows, offset: 100, limit: 20);
-```
-
-## Value Types
+## Native Values
 
 Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natural representation. In native mode (`stringifyValues: false`), the readers return:
 
@@ -613,10 +195,6 @@ Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natu
 | date/datetime | `DateTimeImmutable`                    |
 | time          | canonical string (`HH:MM:SS[.ffffff]`) |
 | duration      | canonical string (`H:MM:SS[.ffffff]`)  |
-
-Spreadsheet dates are **timezone-free civil values**: an offset present in the source is used for validation only and is not part of the round-trip contract.
-
-`int\|float` is a convenient PHP representation of a spreadsheet Number; the distinction itself is not guaranteed to survive a round-trip (`12.0` reads back as `12`).
 
 The writers map PHP values to spreadsheet cells:
 
@@ -643,86 +221,25 @@ $writer->writeFile([
 ], 'report.xlsx');
 ```
 
-`TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP.
+`TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP. See [docs/value-types.md](docs/value-types.md) for timezone semantics, precision, and 32-bit notes.
 
-Temporal values are **stored at microsecond precision**. XLSX serials preserve the full microsecond value even though the default number formats display `hh:mm:ss` / `[h]:mm:ss`. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
+## Advanced Usage
 
-> Baresheet supports 32-bit PHP for normal temporal reading and writing. `TimeValue::fromMicroseconds()` and `toMicroseconds()` require 64-bit integers.
+- [Headers and column mapping](docs/headers.md) — required columns, column selection, injected and hierarchical headers, aliases, header discovery, normalization, strict mode
+- [Streaming](docs/streaming.md) — buffering and `Content-Length`, ZIP64 and non-seekable output, PSR-7 / Symfony / Laravel responses
+- [Value types](docs/value-types.md) — timezone-free civil dates, microsecond precision, 32-bit PHP
+- [Security](docs/security.md) — CSV formula injection, XLSX sheet protection
 
-## Streaming Output
+Also in the package:
 
-For large files, streaming avoids writing a temporary file to disk. **Baresheet streams CSV, XLSX, and ODS `output()` by default.**
-
-However, keep in mind that **streaming changes how data is sent to the browser**. Because the total file size is unknown before the transfer starts, the server cannot send a `Content-Length` header. This means the browser download will not display a progress bar or an estimated time of completion.
-
-To bypass streaming and force buffering, use `stream: false` with `output()`. Baresheet will buffer the file (either in memory for CSV, or via a temporary zip file for XLSX/ODS) to precisely calculate and send the `Content-Length` header along with it.
-
-> **Note on XLSX/ODS:** Both formats use Baresheet's built-in ZIP writer (`DirectZipWriter`) for seekable destinations and true non-seekable streaming to `php://output`; no ZIP streaming dependency is needed. For ODS, the required first `mimetype` entry is written from known metadata as STORE, without an extra field or data descriptor, while subsequent entries use the normal streaming strategy.
-
-Non-seekable XLSX output uses standard ZIP64-capable local headers and data descriptors. The interoperability suite exercises the captured `php://output` bytes directly:
-
-| Reader     | Non-seekable XLSX output                                                       |
-|------------|--------------------------------------------------------------------------------|
-| ZipArchive | Supported                                                                      |
-| Baresheet  | Supported                                                                      |
-| OpenSpout  | Supported                                                                      |
-| xlswriter  | Supported when the extension is installed                                      |
-| SimpleXLSX | Not supported; its ZIP parser does not currently accept this descriptor layout |
-
-The SimpleXLSX limitation is specific to this non-seekable ZIP layout. Seekable XLSX files written by Baresheet use patched local headers and remain compatible with SimpleXLSX.
-
-```php
-$writer = new XlsxWriter();
-$writer->stream = false;
-$writer->output($data, 'report.xlsx');
-
-// or via Options
-Baresheet::output($data, 'report.xlsx', new Options(stream: false));
-```
-
-## PSR-7 / Response Objects (Symfony, Laravel)
-
-To avoid breaking the flow of your application or sending explicit `header()` calls directly, you should create a Response object when applicable in your framework.
-
-Use the `writeStream()` method to generate the spreadsheet as a memory-capped `php://temp` stream resource, and feed it into your Response class:
-
-### Symfony / Laravel (StreamedResponse)
-
-```php
-use LeKoala\Baresheet\XlsxWriter;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-
-$writer = new XlsxWriter();
-$stream = $writer->writeStream($data);
-
-return new StreamedResponse(function () use ($stream) {
-    fpassthru($stream);
-    fclose($stream);
-}, 200, [
-    'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'Content-Disposition' => 'attachment; filename="report.xlsx"',
-]);
-```
-
-### PSR-7 (Guzzle, Nyholm, etc.)
-
-```php
-$stream = Baresheet::writeStream($data, 'xlsx');
-$body = new \GuzzleHttp\Psr7\Stream($stream); // wrap the native resource
-
-return $response
-    ->withHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    ->withHeader('Content-Disposition', 'attachment; filename="report.xlsx"')
-    ->withBody($body);
-```
+- `Transform` — generator-based pipelines for trimming, casting, filtering, and chunking without loading data into memory
+- `Spread::getSheetNames()` — inspect the sheets of a workbook before choosing which to import
 
 ## Performance
 
 > **Indicative benchmarks** — These numbers are intended to catch large performance regressions and highlight architectural differences. Absolute results vary by PHP version, hardware, filesystem and workload. Run `php bin/bench-read.php` / `bin/bench-write.php` / `bin/bench-write-memory.php` / `bin/bench-xlsx-stream.php` / `bin/bench-ods-stream.php` locally for results relevant to your environment.
 >
 > Environment: PHP 8.3.6, 64-bit, 50,000 rows × 4 columns, median of 5 runs. Libraries are compared end-to-end through their public APIs; this is not a compressor-only comparison.
-
-Baresheet is engineered to minimize server resource footprint. The XLSX and ODS readers use an optimized `XMLReader` approach that opens `zip://` streams directly, avoiding temporary file extraction entirely.
 
 ### Reading 50,000 Rows
 
@@ -742,51 +259,11 @@ Baresheet is engineered to minimize server resource footprint. The XLSX and ODS 
 | SimpleXLSXGen | —    | 3.3× | —    | 109.85 MB                                      |
 | OpenSpout     | 2.8× | 4.2× | 6.4× | 0.12–0.70 MB                                   |
 
-> **XLSX write memory**: with generator input and default options, worksheet XML is compressed in a single pass and incremental PHP-managed memory remains approximately flat as row count grows. Pre-built arrays remain owned by the caller and are intentionally excluded from this streaming guarantee. Enabling `sharedStrings` keeps the de-duplication table in memory. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
+Memory is measured in an isolated subprocess via `memory_get_peak_usage()`, covering PHP-managed allocations only (not native allocations inside zlib or libzip). Baresheet's stream-based `XMLReader` never loads the entire worksheet document into PHP memory. See [docs/streaming.md](docs/streaming.md) for write-memory details.
 
-> **ODS write memory**: `content.xml` now follows the same generator-based direct compression path. The approximately 1.39 MB PHP peak reflects its 1,000-row XML buffer; native zlib allocations are not included.
+## Security
 
-> **XLSX write modes**: By default, Baresheet uses the fastest mode (shared strings and auto column width disabled). Enabling shared strings or auto-width trades speed for file size or presentation — see the Options table for `sharedStrings` and `autoWidth`.
-
-Memory is measured in an isolated subprocess via `memory_get_peak_usage()` and therefore covers PHP-managed allocations only, not native allocations inside extensions such as zlib or libzip. Baresheet's stream-based `XMLReader` does not load the entire worksheet document into PHP memory.
-
-## Security Considerations
-
-### CSV Formula Injection
-
-When writing CSV files, any cell beginning with `=`, `+`, `-`, or `@` could be interpreted as a formula if the file is opened in spreadsheet software like Microsoft Excel. A maliciously crafted input could lead to execution of arbitrary functions or system commands on the user's local machine.
-
-By default, Baresheet prioritizes **data round-trip integrity**. Attempting to automatically prefix formulas with a single quote (`'`) to disable formula execution corrupts otherwise valid user inputs.
-
-If you are exporting data to be consumed by clients opening the file in Excel, you **must opt-in** to the protection logic:
-
-```php
-$writer = new CsvWriter();
-$writer->escapeFormulas = true; // Protects against formula injection by prefixing a single-quote
-```
-
-#### Selective Formula Escaping
-
-For advanced use cases, `escapeFormulas` also accepts a **callable** that receives the cell value and column index, allowing you to selectively escape only specific columns:
-
-```php
-$writer = new CsvWriter();
-$writer->escapeFormulas = function (string $cell, int $colIndex): string {
-    // Skip phone columns (column 1) to preserve + prefixes
-    if ($colIndex === 1) {
-        return $cell;
-    }
-    // Apply default escaping for everything else
-    $chars = "=+-@\t\r";
-    if ($cell !== '' && str_contains($chars, $cell[0])) {
-        return "'" . $cell;
-    }
-    return $cell;
-};
-$writer->writeFile($data, 'export.csv');
-```
-
-**Important:** Heuristic detection of "malicious" formulas is fundamentally unreliable. Attackers can use `CHAR()` functions to build strings character-by-character, and new attack vectors emerge constantly. The library takes a conservative approach: blanket escaping by default when enabled, or user-controlled selective escaping via callback. For maximum security with user-generated content, prefer **XLSX** format, which has explicit cell type metadata and is immune to formula injection.
+CSV formula escaping is opt-in via `escapeFormulas`. See [docs/security.md](docs/security.md).
 
 ## License
 
