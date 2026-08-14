@@ -6,12 +6,14 @@ namespace LeKoala\Baresheet\Tests;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Value\DurationValue;
 use LeKoala\Baresheet\Value\TimeValue;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Core contract of the native-type evolution.
@@ -224,10 +226,22 @@ class NativeTypesTest extends TestCase
      */
     private function xlsxWithWorksheet(string $sheetXml): string
     {
+        return $this->xlsxWithParts($sheetXml);
+    }
+
+    /**
+     * Build a minimal XLSX archive containing the given worksheet XML plus
+     * optional extra parts (e.g. styles.xml) keyed by archive path.
+     */
+    private function xlsxWithParts(string $sheetXml, array $extra = []): string
+    {
         $file = $this->tempFile('xlsx');
         $zip = new \ZipArchive();
         $zip->open($file, \ZipArchive::CREATE);
         $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
+        foreach ($extra as $path => $content) {
+            $zip->addFromString($path, $content);
+        }
         $zip->close();
         return $file;
     }
@@ -466,5 +480,101 @@ class NativeTypesTest extends TestCase
 
             unlink($tempFile);
         }
+    }
+
+    public function testNegativeDurationRoundTrip(): void
+    {
+        foreach (['xlsx', 'ods'] as $ext) {
+            $tempFile = $this->tempFile($ext);
+            $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
+            $writer->inferNumericStrings = false;
+            $writer->writeFile([[new DurationValue(1, 30, negative: true)]], $tempFile);
+
+            $reader = $ext === 'xlsx' ? new XlsxReader() : new OdsReader();
+            $reader->stringifyValues = false;
+            $rows = iterator_to_array($reader->readFile($tempFile));
+            self::assertSame('-1:30:00', $rows[0][0], $ext);
+
+            unlink($tempFile);
+        }
+    }
+
+    public function testNegativeTimeDurationRoundTrip(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $writer->inferNumericStrings = false;
+        $writer->writeFile([[\Time\Duration::fromMicroseconds(5_400_000_000)->negate()]], $tempFile);
+
+        $reader = new XlsxReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($tempFile));
+        self::assertSame('-1:30:00', $rows[0][0]);
+
+        unlink($tempFile);
+    }
+
+    public function testNumericCellDoesNotInheritColumnDateClassification(): void
+    {
+        $file = $this->xlsxWithParts(
+            <<<'XML'
+                <?xml version="1.0" encoding="UTF-8"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData>
+                    <row r="1">
+                      <c r="A1" s="1"><v>45292</v></c>
+                    </row>
+                    <row r="2">
+                      <c r="A2" t="n"><v>42</v></c>
+                    </row>
+                  </sheetData>
+                </worksheet>
+                XML,
+            [
+                'xl/styles.xml' => <<<'XML'
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                      <cellXfs count="2">
+                        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+                        <xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0"/>
+                      </cellXfs>
+                    </styleSheet>
+                    XML,
+            ],
+        );
+
+        $reader = new XlsxReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+
+        // A1 is an explicitly date-styled cell.
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][0]);
+        // A2 is an unstyled raw number: it must NOT be reinterpreted as a date
+        // just because the cell above it in the same column carries a date style.
+        self::assertSame(42, $rows[1][0]);
+
+        // Legacy stringify mode keeps the column inheritance heuristic.
+        $reader2 = new XlsxReader();
+        $reader2->stringifyValues = true;
+        $rows2 = iterator_to_array($reader2->readFile($file));
+        self::assertNotSame('42', $rows2[1][0]);
+
+        unlink($file);
+    }
+
+    #[DataProvider('writerFormatProvider')]
+    public function testWriterRejectsNonFiniteFloat(string $ext): void
+    {
+        $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
+        $this->expectException(WriteException::class);
+        $writer->writeFile([[INF]], $this->tempFile($ext));
+    }
+
+    public static function writerFormatProvider(): array
+    {
+        return [
+            'xlsx' => ['xlsx'],
+            'ods' => ['ods'],
+        ];
     }
 }

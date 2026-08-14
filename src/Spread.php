@@ -1225,7 +1225,7 @@ class Spread
         }
         $result = sprintf('%s%d:%02d:%02d', $negative ? '-' : '', $hours, $minutes, $seconds);
         if ($microsecond > 0) {
-            $result .= '.' . rtrim(str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT), '0');
+            $result .= '.' . str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT);
         }
         return $result;
     }
@@ -1341,7 +1341,7 @@ class Spread
         }
         $secondsString = (string) $seconds;
         if ($microsecond > 0) {
-            $secondsString .= '.' . rtrim(str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT), '0');
+            $secondsString .= '.' . str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT);
         }
         return ($negative ? '-' : '') . "PT{$hours}H{$minutes}M{$secondsString}S";
     }

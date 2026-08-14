@@ -40,7 +40,8 @@
         "symfony/polyfill-time": "1.x-dev"
     },
     "suggest": {
-        "ext-iconv": "Required for encoding conversion"
+        "ext-iconv": "Required for encoding conversion",
+        "symfony/polyfill-time": "Provides the PHP 8.6 Time API (Time\\Duration) on PHP < 8.6"
     },
     "autoload": {
         "psr-4": {

@@ -378,6 +378,9 @@ class OdsWriter implements WriterInterface
                 } elseif ($value === null || $value === '') {
                     $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
                 } elseif (is_int($value) || is_float($value)) {
+                    if (is_float($value) && !is_finite($value)) {
+                        throw new WriteException('Cannot write a non-finite numeric value');
+                    }
                     $strValue = (string) $value;
                     $buffer .=
                         '<table:table-cell'

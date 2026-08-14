@@ -32,7 +32,7 @@ class DurationValueTest extends TestCase
         self::assertSame('36:30:15', (string) new DurationValue(36, 30, 15));
         self::assertSame('12:00:00', (string) new DurationValue(12));
         self::assertSame('-1:30:00', (string) new DurationValue(1, 30, negative: true));
-        self::assertSame('0:00:01.5', (string) new DurationValue(0, 0, 1, 500_000));
+        self::assertSame('0:00:01.500000', (string) new DurationValue(0, 0, 1, 500_000));
         self::assertSame('26:00:00', (string) new DurationValue(26));
         // A zero duration is never negative.
         self::assertSame('0:00:00', (string) new DurationValue(0, negative: true));

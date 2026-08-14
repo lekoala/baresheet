@@ -411,6 +411,9 @@ class XlsxWriter implements WriterInterface
                     $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } elseif (is_int($value) || is_float($value)) {
+                    if (is_float($value) && !is_finite($value)) {
+                        throw new WriteException('Cannot write a non-finite numeric value');
+                    }
                     $strValue = (string) $value;
                     $vl = strlen($strValue);
                     $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';

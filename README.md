@@ -645,7 +645,7 @@ $writer->writeFile([
 
 `TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP.
 
-Temporal values are represented at **microsecond precision**. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
+Temporal values are **stored at microsecond precision**. XLSX serials preserve the full microsecond value even though the default number formats display `hh:mm:ss` / `[h]:mm:ss`. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
 
 > Baresheet supports 32-bit PHP for normal temporal reading and writing. `TimeValue::fromMicroseconds()` and `toMicroseconds()` require 64-bit integers.
 

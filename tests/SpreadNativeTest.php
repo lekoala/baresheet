@@ -443,7 +443,7 @@ class SpreadNativeTest extends TestCase
         return [
             'h m s' => [[false, 14, 30, 15, 0], 'PT14H30M15S'],
             'over a day' => [[false, 36, 30, 15, 0], 'PT36H30M15S'],
-            'fraction' => [[false, 0, 0, 0, 500_000], 'PT0H0M0.5S'],
+            'fraction' => [[false, 0, 0, 0, 500_000], 'PT0H0M0.500000S'],
             'negative' => [[true, 1, 0, 0, 0], '-PT1H0M0S'],
         ];
     }

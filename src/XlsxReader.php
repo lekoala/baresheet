@@ -392,7 +392,11 @@ class XlsxReader implements ReaderInterface
                         }
 
                         if ($t === 'n' && is_numeric($v)) {
-                            if ($excelFormat === null) {
+                            // Legacy stringify mode may inherit a date/time/duration
+                            // classification from a previous cell in the same column
+                            // (benign there). Native mode never does: an unstyled
+                            // numeric cell must stay a number, not become a date.
+                            if ($excelFormat === null && $this->stringifyValues) {
                                 $classification = $colFormats[$col] ?? null;
                             }
                         }
