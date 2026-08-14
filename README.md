@@ -605,14 +605,14 @@ $page = Transform::slice($rows, offset: 100, limit: 20);
 
 Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natural representation. In native mode (`stringifyValues: false`), the readers return:
 
-| Spreadsheet | PHP                              |
-|-------------|----------------------------------|
-| text        | `string`                         |
-| number      | `int\|float`                     |
-| boolean     | `bool`                           |
-| date/datetime | `DateTimeImmutable`            |
-| time        | canonical string (`HH:MM:SS[.ffffff]`) |
-| duration    | canonical string (`H:MM:SS[.ffffff]`) |
+| Spreadsheet   | PHP                                    |
+|---------------|----------------------------------------|
+| text          | `string`                               |
+| number        | `int\|float`                           |
+| boolean       | `bool`                                 |
+| date/datetime | `DateTimeImmutable`                    |
+| time          | canonical string (`HH:MM:SS[.ffffff]`) |
+| duration      | canonical string (`H:MM:SS[.ffffff]`)  |
 
 Spreadsheet dates are **timezone-free civil values**: an offset present in the source is used for validation only and is not part of the round-trip contract.
 
@@ -620,16 +620,16 @@ Spreadsheet dates are **timezone-free civil values**: an offset present in the s
 
 The writers map PHP values to spreadsheet cells:
 
-| PHP                    | Spreadsheet |
-|------------------------|-------------|
-| `string`               | text        |
-| `int\|float`           | number      |
-| `bool`                 | boolean     |
-| `DateTimeInterface`    | date/datetime |
-| `null`                 | blank       |
-| `TimeValue`            | time (explicit marker) |
-| `DurationValue`        | duration (explicit marker) |
-| `Time\Duration`        | duration (when available) |
+| PHP                 | Spreadsheet                |
+|---------------------|----------------------------|
+| `string`            | text                       |
+| `int\|float`        | number                     |
+| `bool`              | boolean                    |
+| `DateTimeInterface` | date/datetime              |
+| `null`              | blank                      |
+| `TimeValue`         | time (explicit marker)     |
+| `DurationValue`     | duration (explicit marker) |
+| `Time\Duration`     | duration (when available)  |
 
 ```php
 use LeKoala\Baresheet\Value\TimeValue;
@@ -638,7 +638,7 @@ use LeKoala\Baresheet\Value\DurationValue;
 $writer->writeFile([
     [
         'opening_time' => new TimeValue(9, 30),
-        'elapsed' => DurationValue::fromTime(hours: 36, minutes: 30, seconds: 15),
+        'elapsed' => new DurationValue(hours: 36, minutes: 30, seconds: 15),
     ],
 ], 'report.xlsx');
 ```
@@ -647,7 +647,7 @@ $writer->writeFile([
 
 Temporal values are represented at **microsecond precision**. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
 
-> **Baresheet does not require 64-bit PHP.** Native temporal helpers and marker values are intended for 64-bit builds; use stringified temporal values on 32-bit PHP.
+> Baresheet supports 32-bit PHP for normal temporal reading and writing. `TimeValue::fromMicroseconds()` and `toMicroseconds()` require 64-bit integers.
 
 ## Streaming Output
 
@@ -735,12 +735,12 @@ Baresheet is engineered to minimize server resource footprint. The XLSX and ODS 
 
 ### Writing 50,000 Rows
 
-| Library       | CSV  | XLSX | ODS  | Peak PHP Memory                         |
-|---------------|------|------|------|-----------------------------------------|
+| Library       | CSV  | XLSX | ODS  | Peak PHP Memory                                |
+|---------------|------|------|------|------------------------------------------------|
 | Baresheet     | 1.0× | 1.0× | 1.0× | 0.28 MB (CSV) · 1.09 MB (XLSX) · 1.39 MB (ODS) |
-| League        | 1.6× | —    | —    | 0.25 MB                                 |
-| SimpleXLSXGen | —    | 3.3× | —    | 109.85 MB                               |
-| OpenSpout     | 2.8× | 4.2× | 6.4× | 0.12–0.70 MB                            |
+| League        | 1.6× | —    | —    | 0.25 MB                                        |
+| SimpleXLSXGen | —    | 3.3× | —    | 109.85 MB                                      |
+| OpenSpout     | 2.8× | 4.2× | 6.4× | 0.12–0.70 MB                                   |
 
 > **XLSX write memory**: with generator input and default options, worksheet XML is compressed in a single pass and incremental PHP-managed memory remains approximately flat as row count grows. Pre-built arrays remain owned by the caller and are intentionally excluded from this streaming guarantee. Enabling `sharedStrings` keeps the de-duplication table in memory. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
 

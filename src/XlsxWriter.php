@@ -382,7 +382,13 @@ class XlsxWriter implements WriterInterface
                     $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
                     $vl = 16;
                 } elseif ($value instanceof DurationValue) {
-                    $excelSerial = Spread::durationMicrosecondsToSerial($value->microseconds);
+                    $excelSerial = Spread::durationComponentsToSerial(
+                        $value->negative,
+                        $value->hours,
+                        $value->minutes,
+                        $value->seconds,
+                        $value->microsecond,
+                    );
                     $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {

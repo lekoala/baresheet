@@ -293,7 +293,7 @@ class OdsWriter implements WriterInterface
 
             foreach ($row as $value) {
                 if ($value instanceof \Time\Duration) {
-                    $iso = Spread::formatIsoDurationFromMicroseconds(Spread::durationToMicroseconds($value));
+                    $iso = Spread::formatIsoDuration($value);
                     $display = Spread::stringifyDuration($value);
                     $buffer .=
                         '<table:table-cell'
@@ -307,7 +307,13 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 } elseif ($value instanceof DurationValue) {
-                    $iso = Spread::formatIsoDurationFromMicroseconds($value->microseconds);
+                    $iso = Spread::formatIsoDurationComponents(
+                        $value->negative,
+                        $value->hours,
+                        $value->minutes,
+                        $value->seconds,
+                        $value->microsecond,
+                    );
                     $display = (string) $value;
                     $buffer .=
                         '<table:table-cell'
@@ -321,7 +327,13 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 } elseif ($value instanceof TimeValue) {
-                    $iso = Spread::formatIsoDurationFromMicroseconds($value->toMicroseconds());
+                    $iso = Spread::formatIsoDurationComponents(
+                        false,
+                        $value->hour,
+                        $value->minute,
+                        $value->second,
+                        $value->microsecond,
+                    );
                     $display = (string) $value;
                     $buffer .=
                         '<table:table-cell'

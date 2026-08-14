@@ -141,6 +141,12 @@ class SpreadNativeTest extends TestCase
             'datetime offset civil kept' => ['1976-11-22T08:30:00+02:00', '1976-11-22 08:30:00.000000'],
             'datetime fraction' => ['1976-11-22T08:30:00.123456Z', '1976-11-22 08:30:00.123456'],
             'datetime fraction offset' => ['1976-11-22T08:30:00.123456+02:00', '1976-11-22 08:30:00.123456'],
+            'offset max +14' => ['1976-11-22T08:30:00+14:00', '1976-11-22 08:30:00.000000'],
+            'offset max -14' => ['1976-11-22T08:30:00-14:00', '1976-11-22 08:30:00.000000'],
+            'offset +13:59' => ['1976-11-22T08:30:00+13:59', '1976-11-22 08:30:00.000000'],
+            'invalid offset +14:01' => ['1976-11-22T08:30:00+14:01', null],
+            'invalid offset -14:01' => ['1976-11-22T08:30:00-14:01', null],
+            'invalid offset +23:59' => ['1976-11-22T08:30:00+23:59', null],
             'invalid garbage' => ['not-a-date', null],
             'invalid month' => ['1976-13-01', null],
             'invalid day out of range' => ['1976-02-30', null],
@@ -149,13 +155,34 @@ class SpreadNativeTest extends TestCase
         ];
     }
 
-    public function testFormatTimeMicroseconds(): void
+    public function testFormatTimeComponents(): void
     {
-        self::assertSame('00:00:00', Spread::formatTimeMicroseconds(0));
-        self::assertSame('08:30:00', Spread::formatTimeMicroseconds((8 * 3_600_000_000) + (30 * 60_000_000)));
-        self::assertSame('14:30:15', Spread::formatTimeMicroseconds(52_215_000_000));
-        self::assertSame('14:30:15.500000', Spread::formatTimeMicroseconds(52_215_500_000));
-        self::assertSame('23:59:59.999999', Spread::formatTimeMicroseconds(86_399_999_999));
+        self::assertSame('00:00:00', Spread::formatTimeComponents(0, 0, 0));
+        self::assertSame('08:30:00', Spread::formatTimeComponents(8, 30, 0));
+        self::assertSame('14:30:15', Spread::formatTimeComponents(14, 30, 15));
+        self::assertSame('14:30:15.500000', Spread::formatTimeComponents(14, 30, 15, 500_000));
+        self::assertSame('23:59:59.999999', Spread::formatTimeComponents(23, 59, 59, 999_999));
+    }
+
+    public function testExcelTimeToString(): void
+    {
+        self::assertSame('00:00:00', Spread::excelTimeToString(0.0));
+        self::assertSame('08:30:00', Spread::excelTimeToString(8.5 / 24));
+        self::assertSame('12:00:00', Spread::excelTimeToString(1.5));
+        self::assertSame('14:30:15', Spread::excelTimeToString(52_215 / 86_400));
+    }
+
+    public function testDurationSerialToString(): void
+    {
+        self::assertSame('36:30:15', Spread::durationSerialToString(131_415 / 86_400));
+        self::assertSame('-36:00:00', Spread::durationSerialToString(-1.5));
+        self::assertSame('12:00:00', Spread::durationSerialToString(0.5));
+    }
+
+    public function testDurationSerialToStringRejectsNonFinite(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Spread::durationSerialToString(INF);
     }
 
     #[DataProvider('civilRoundTripProvider')]
@@ -286,44 +313,92 @@ class SpreadNativeTest extends TestCase
         ];
     }
 
-    public function testDurationFromSerial(): void
+    public function testStringifyDuration(): void
     {
-        // With the Symfony polyfill (or PHP 8.6) present, durations come back
-        // as real Time\Duration objects.
-        $positive = Spread::durationFromSerial(1.5);
-        self::assertInstanceOf(\Time\Duration::class, $positive);
-        self::assertSame(129_600, $positive->seconds);
-        self::assertSame(0, $positive->nanoseconds);
-        self::assertFalse($positive->negative);
+        $positive = \Time\Duration::fromMicroseconds(129_600_000_000);
         self::assertSame('36:00:00', Spread::stringifyDuration($positive));
 
-        $negative = Spread::durationFromSerial(-1.5);
-        self::assertInstanceOf(\Time\Duration::class, $negative);
-        self::assertTrue($negative->negative);
-        self::assertSame(129_600, $negative->seconds);
+        $negative = $positive->negate();
         self::assertSame('-36:00:00', Spread::stringifyDuration($negative));
 
-        $halfDay = Spread::durationFromSerial(0.5);
-        self::assertInstanceOf(\Time\Duration::class, $halfDay);
-        self::assertSame(43_200, $halfDay->seconds);
+        $halfDay = \Time\Duration::fromMicroseconds(43_200_000_000);
         self::assertSame('12:00:00', Spread::stringifyDuration($halfDay));
     }
 
     #[DataProvider('isoDurationProvider')]
-    public function testParseIsoDurationToMicroseconds(string $iso, int $expected): void
+    public function testParseIsoDuration(string $iso, array $expected): void
     {
-        self::assertSame($expected, Spread::parseIsoDurationToMicroseconds($iso));
+        self::assertSame($expected, Spread::parseIsoDuration($iso));
     }
 
     public static function isoDurationProvider(): array
     {
         return [
-            'h m s' => ['PT14H30M15S', 52_215_000_000],
-            'over a day' => ['PT36H30M15S', 131_415_000_000],
-            'day plus hours' => ['P1DT2H', 93_600_000_000],
-            'fractional second' => ['PT0.5S', 500_000],
-            'negative' => ['-PT1H', -3_600_000_000],
-            'm s only' => ['PT1M30S', 90_000_000],
+            'h m s' => [
+                'PT14H30M15S',
+                ['negative' => false, 'days' => 0, 'hours' => 14, 'minutes' => 30, 'seconds' => 15, 'microsecond' => 0],
+            ],
+            'over a day' => [
+                'PT36H30M15S',
+                ['negative' => false, 'days' => 0, 'hours' => 36, 'minutes' => 30, 'seconds' => 15, 'microsecond' => 0],
+            ],
+            'day plus hours' => [
+                'P1DT2H',
+                ['negative' => false, 'days' => 1, 'hours' => 2, 'minutes' => 0, 'seconds' => 0, 'microsecond' => 0],
+            ],
+            'fractional second' => [
+                'PT0.5S',
+                [
+                    'negative' => false,
+                    'days' => 0,
+                    'hours' => 0,
+                    'minutes' => 0,
+                    'seconds' => 0,
+                    'microsecond' => 500_000,
+                ],
+            ],
+            'negative' => [
+                '-PT1H',
+                ['negative' => true, 'days' => 0, 'hours' => 1, 'minutes' => 0, 'seconds' => 0, 'microsecond' => 0],
+            ],
+            'm s only' => [
+                'PT1M30S',
+                ['negative' => false, 'days' => 0, 'hours' => 0, 'minutes' => 1, 'seconds' => 30, 'microsecond' => 0],
+            ],
+            'day only without T' => [
+                'P1D',
+                ['negative' => false, 'days' => 1, 'hours' => 0, 'minutes' => 0, 'seconds' => 0, 'microsecond' => 0],
+            ],
+            'overflow minutes' => [
+                'PT90M',
+                ['negative' => false, 'days' => 0, 'hours' => 1, 'minutes' => 30, 'seconds' => 0, 'microsecond' => 0],
+            ],
+            'overflow seconds' => [
+                'PT1M90S',
+                ['negative' => false, 'days' => 0, 'hours' => 0, 'minutes' => 2, 'seconds' => 30, 'microsecond' => 0],
+            ],
+            'overflow mixed' => [
+                'PT1H90M90.5S',
+                [
+                    'negative' => false,
+                    'days' => 0,
+                    'hours' => 2,
+                    'minutes' => 31,
+                    'seconds' => 30,
+                    'microsecond' => 500_000,
+                ],
+            ],
+            'negative zero normalized' => [
+                '-PT0H',
+                [
+                    'negative' => false,
+                    'days' => 0,
+                    'hours' => 0,
+                    'minutes' => 0,
+                    'seconds' => 0,
+                    'microsecond' => 0,
+                ],
+            ],
         ];
     }
 
@@ -331,7 +406,7 @@ class SpreadNativeTest extends TestCase
     public function testParseIsoDurationRejectsGarbage(string $bad): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        Spread::parseIsoDurationToMicroseconds($bad);
+        Spread::parseIsoDuration($bad);
     }
 
     public static function isoGarbageProvider(): array
@@ -351,36 +426,48 @@ class SpreadNativeTest extends TestCase
 
     public function testParseIsoDurationAcceptsZero(): void
     {
-        self::assertSame(0, Spread::parseIsoDurationToMicroseconds('PT0H'));
+        self::assertSame(
+            ['negative' => false, 'days' => 0, 'hours' => 0, 'minutes' => 0, 'seconds' => 0, 'microsecond' => 0],
+            Spread::parseIsoDuration('PT0H'),
+        );
     }
 
     #[DataProvider('isoFormatProvider')]
-    public function testFormatIsoDurationFromMicroseconds(int $microseconds, string $expected): void
+    public function testFormatIsoDurationComponents(array $components, string $expected): void
     {
-        self::assertSame($expected, Spread::formatIsoDurationFromMicroseconds($microseconds));
+        self::assertSame($expected, Spread::formatIsoDurationComponents(...$components));
     }
 
     public static function isoFormatProvider(): array
     {
         return [
-            [52_215_000_000, 'PT14H30M15S'],
-            [131_415_000_000, 'PT36H30M15S'],
-            [500_000, 'PT0H0M0.5S'],
-            [-3_600_000_000, '-PT1H0M0S'],
+            'h m s' => [[false, 14, 30, 15, 0], 'PT14H30M15S'],
+            'over a day' => [[false, 36, 30, 15, 0], 'PT36H30M15S'],
+            'fraction' => [[false, 0, 0, 0, 500_000], 'PT0H0M0.5S'],
+            'negative' => [[true, 1, 0, 0, 0], '-PT1H0M0S'],
         ];
     }
 
     public function testParseIsoDurationRoundTrip(): void
     {
         foreach (['PT14H30M15S', 'PT36H30M15.5S', 'P1DT2H'] as $iso) {
-            $microseconds = Spread::parseIsoDurationToMicroseconds($iso);
-            self::assertSame(
-                $microseconds,
-                Spread::parseIsoDurationToMicroseconds(
-                    Spread::formatIsoDurationFromMicroseconds($microseconds),
-                ),
-                $iso,
+            $c = Spread::parseIsoDuration($iso);
+            $canonical = Spread::formatIsoDurationComponents(
+                $c['negative'],
+                ($c['days'] * 24) + $c['hours'],
+                $c['minutes'],
+                $c['seconds'],
+                $c['microsecond'],
             );
+            $back = Spread::parseIsoDuration($canonical);
+            $backCanonical = Spread::formatIsoDurationComponents(
+                $back['negative'],
+                ($back['days'] * 24) + $back['hours'],
+                $back['minutes'],
+                $back['seconds'],
+                $back['microsecond'],
+            );
+            self::assertSame($canonical, $backCanonical, $iso);
         }
     }
 }

@@ -48,7 +48,9 @@ class XlsxReader implements ReaderInterface
     public ?int $maxWorksheetSize = 500_000_000;
     /**
      * @var bool If true, values are stringified (CSV-like, lossy). If false,
-     *           the semantic source type is preserved (int|float|bool|DateTimeImmutable|...).
+     *           readers expose natural PHP value kinds: numbers and booleans are
+     *           typed, dates become DateTimeImmutable, while time and duration
+     *           remain canonical strings.
      *
      *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
      *           for the 1.0 release together with Options::$stringifyValues.
@@ -587,7 +589,7 @@ class XlsxReader implements ReaderInterface
         $floatValue = (float) $v;
         return match ($classification) {
             'date', 'datetime' => Spread::excelDateToImmutable($v, $is1904),
-            'time' => (string) Spread::excelTimeToTimeValue($floatValue),
+            'time' => Spread::excelTimeToString($floatValue),
             'duration' => Spread::durationSerialToString($floatValue),
             default => Spread::parseNumericValue($v),
         };

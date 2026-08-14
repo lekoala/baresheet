@@ -9,7 +9,6 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
-use LeKoala\Baresheet\Value\TimeValue;
 use ZipArchive;
 
 /**
@@ -54,7 +53,9 @@ class OdsReader implements ReaderInterface
     public ?int $maxWorksheetSize = 500_000_000;
     /**
      * @var bool If true, values are stringified (CSV-like, lossy). If false,
-     *           the semantic source type is preserved (int|float|bool|DateTimeImmutable|...).
+     *           readers expose natural PHP value kinds: numbers and booleans are
+     *           typed, dates become DateTimeImmutable, while time and duration
+     *           remain canonical strings.
      *
      *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
      *           for the 1.0 release together with Options::$stringifyValues.
@@ -692,15 +693,26 @@ class OdsReader implements ReaderInterface
             if ($value === null || $value === '') {
                 return null;
             }
-            $microseconds = Spread::parseIsoDurationToMicroseconds($value);
+            $duration = Spread::parseIsoDuration($value);
             // A duration style marks an elapsed duration regardless of magnitude;
             // a negative value can never be a time of day. Otherwise a time-style
             // (or an unknown style) only carries a duration past a single day.
             $isDuration = $timeStyles[$cellStyleName ?? ''] ?? false;
-            if ($isDuration || $microseconds < 0 || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
-                return Spread::formatDurationMicroseconds($microseconds);
+            if ($isDuration || $duration['negative'] || $duration['days'] > 0 || $duration['hours'] >= 24) {
+                return Spread::formatDurationComponents(
+                    $duration['negative'],
+                    ($duration['days'] * 24) + $duration['hours'],
+                    $duration['minutes'],
+                    $duration['seconds'],
+                    $duration['microsecond'],
+                );
             }
-            return Spread::formatTimeMicroseconds($microseconds);
+            return Spread::formatTimeComponents(
+                $duration['hours'],
+                $duration['minutes'],
+                $duration['seconds'],
+                $duration['microsecond'],
+            );
         }
         if ($valueType === 'boolean') {
             return $value === 'true' || $value === '1';

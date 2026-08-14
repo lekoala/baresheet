@@ -87,7 +87,7 @@ function timeValue(int $i): TimeValue
 
 function durationValue(int $i): DurationValue
 {
-    return DurationValue::fromTime(
+    return new DurationValue(
         hours: 36 + ($i % 40),
         minutes: ($i * 5) % 60,
         seconds: $i % 60,

@@ -62,8 +62,10 @@ class Options
         public int|string|null $headerOffset = null,
         // ─── Value semantics ─────────────────────
         /**
-         * @var bool If true, XLSX/ODS readers stringify values (CSV-like, lossy).
-         *           If false, readers preserve the semantic value type available in the source.
+         * @var bool If true, XLSX/ODS readers return legacy CSV-like strings.
+         *           If false, readers expose natural PHP value kinds: numbers and
+         *           booleans are typed, dates become DateTimeImmutable, while time
+         *           and duration remain canonical strings.
          *
          *           INTERIM DEFAULT: currently true to preserve BC behavior. Flip to false
          *           for the 1.0 release, together with Options::$inferNumericStrings.

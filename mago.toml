@@ -21,6 +21,9 @@ use-tabs = false
 # own lines; Mago's default collapses it to `{}`, which conflicted with phpcs
 # on src/Exception's marker classes.
 inline-empty-classlike-braces = false
+# Same for empty constructor bodies (DurationValue's promoted-property
+# constructor has no body): phpcs requires the closing brace on its own line.
+inline-empty-constructor-braces = false
 preserve-breaking-member-access-chain = true
 preserve-breaking-member-access-chain-first-method-on-same-line = true
 preserve-breaking-argument-list = true

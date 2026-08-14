@@ -417,7 +417,9 @@ class Spread
 
         if ($m[4] !== null && $m[4] !== 'Z') {
             [$offsetHours, $offsetMinutes] = array_map('intval', explode(':', substr($m[4], 1)));
-            if ($offsetHours > 23 || $offsetMinutes > 59) {
+            // XML Schema timezone offsets range from -14:00 to +14:00, with
+            // minutes forced to zero at the ±14 hour boundary.
+            if ($offsetHours > 14 || $offsetMinutes > 59 || ($offsetHours === 14 && $offsetMinutes !== 0)) {
                 return null;
             }
         }
@@ -444,20 +446,12 @@ class Spread
     }
 
     /**
-     * Format microseconds since midnight as a canonical time-of-day string
-     * ("HH:MM:SS[.ffffff]"), without allocating a TimeValue.
+     * Canonical time-of-day string ("HH:MM:SS[.ffffff]").
      *
-     * The value is expected to be within a single day, matching TimeValue.
+     * @internal
      */
-    public static function formatTimeMicroseconds(int $microseconds): string
+    public static function formatTimeComponents(int $hour, int $minute, int $second, int $microsecond = 0): string
     {
-        $hour = intdiv($microseconds, 3_600_000_000);
-        $microseconds %= 3_600_000_000;
-        $minute = intdiv($microseconds, 60_000_000);
-        $microseconds %= 60_000_000;
-        $second = intdiv($microseconds, 1_000_000);
-        $microsecond = $microseconds % 1_000_000;
-
         $result = sprintf('%02d:%02d:%02d', $hour, $minute, $second);
         if ($microsecond > 0) {
             $result .= '.' . str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT);
@@ -470,10 +464,35 @@ class Spread
      */
     public static function excelTimeToTimeValue(float|string $value): TimeValue
     {
+        $clock = self::excelTimeToClock($value);
+        return new TimeValue($clock['hour'], $clock['minute'], $clock['second'], $clock['microsecond']);
+    }
+
+    /**
+     * Convert an Excel day fraction into a canonical time-of-day string.
+     */
+    public static function excelTimeToString(float|string $value): string
+    {
+        $clock = self::excelTimeToClock($value);
+        return self::formatTimeComponents($clock['hour'], $clock['minute'], $clock['second'], $clock['microsecond']);
+    }
+
+    /**
+     * Decompose an Excel day fraction into clock components (within a day).
+     *
+     * @return array{hour: int, minute: int, second: int, microsecond: int}
+     */
+    private static function excelTimeToClock(float|string $value): array
+    {
         $fraction = is_string($value) ? (float) $value : $value;
         $fraction -= floor($fraction);
         $clock = self::clockFromSecondsFloat($fraction * 86_400);
-        return new TimeValue($clock['hour'], $clock['minute'], $clock['second'], $clock['microsecond']);
+        return [
+            'hour' => $clock['hour'],
+            'minute' => $clock['minute'],
+            'second' => $clock['second'],
+            'microsecond' => $clock['microsecond'],
+        ];
     }
 
     /**
@@ -481,7 +500,9 @@ class Spread
      */
     public static function timeToExcel(TimeValue $time): float
     {
-        return $time->toMicroseconds() / TimeValue::MICROSECONDS_PER_DAY;
+        return (
+            (($time->hour * 3600.0) + ($time->minute * 60) + $time->second + ($time->microsecond / 1_000_000)) / 86_400
+        );
     }
 
     /**
@@ -552,7 +573,7 @@ class Spread
 
         [$year, $month, $day] = self::daysToCivil($totalDays);
 
-        if ($fraction == 0.0) {
+        if ($fraction === 0.0) {
             // Fast path: midnight date-only cells avoid the full clock math.
             $clock = ['hour' => 0, 'minute' => 0, 'second' => 0, 'microsecond' => 0, 'carryDay' => false];
         } else {
@@ -1176,24 +1197,35 @@ class Spread
      */
     public static function stringifyDuration(\Time\Duration $duration): string
     {
-        return self::formatDurationMicroseconds(self::durationToMicroseconds($duration));
+        $c = self::durationComponents($duration);
+        return self::formatDurationComponents(
+            $c['negative'],
+            $c['hours'],
+            $c['minutes'],
+            $c['seconds'],
+            $c['microsecond'],
+        );
     }
 
     /**
-     * @return string Canonical duration string (see {@see stringifyDuration()}).
+     * Canonical duration string ("[-]H:MM:SS[.ffffff]").
+     *
+     * @internal
      */
-    public static function formatDurationMicroseconds(int $microseconds): string
-    {
-        $sign = $microseconds < 0 ? '-' : '';
-        $microseconds = abs($microseconds);
-        $totalSeconds = intdiv($microseconds, 1_000_000);
-        $micro = $microseconds % 1_000_000;
-        $hours = intdiv($totalSeconds, 3_600);
-        $minutes = intdiv($totalSeconds % 3_600, 60);
-        $seconds = $totalSeconds % 60;
-        $result = sprintf('%s%d:%02d:%02d', $sign, $hours, $minutes, $seconds);
-        if ($micro > 0) {
-            $result .= '.' . rtrim(str_pad((string) $micro, 6, '0', STR_PAD_LEFT), '0');
+    public static function formatDurationComponents(
+        bool $negative,
+        int $hours,
+        int $minutes,
+        int $seconds,
+        int $microsecond = 0,
+    ): string {
+        // A zero duration is never negative.
+        if ($negative && $hours === 0 && $minutes === 0 && $seconds === 0 && $microsecond === 0) {
+            $negative = false;
+        }
+        $result = sprintf('%s%d:%02d:%02d', $negative ? '-' : '', $hours, $minutes, $seconds);
+        if ($microsecond > 0) {
+            $result .= '.' . rtrim(str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT), '0');
         }
         return $result;
     }
@@ -1203,103 +1235,160 @@ class Spread
      */
     public static function durationToSerial(\Time\Duration $duration): float
     {
-        return self::durationMicrosecondsToSerial(self::durationToMicroseconds($duration));
-    }
-
-    public static function durationMicrosecondsToSerial(int $microseconds): float
-    {
-        return $microseconds / TimeValue::MICROSECONDS_PER_DAY;
-    }
-
-    /**
-     * Convert a Time\Duration to total microseconds.
-     *
-     * Baresheet represents temporal values at microsecond precision:
-     * sub-microsecond precision is truncated toward zero (not rounded), so a
-     * duration of 999 nanoseconds maps to 0 microseconds.
-     */
-    public static function durationToMicroseconds(\Time\Duration $duration): int
-    {
-        $microseconds = ($duration->seconds * 1_000_000) + intdiv($duration->nanoseconds, 1_000);
-        return $duration->negative ? -$microseconds : $microseconds;
+        $c = self::durationComponents($duration);
+        return self::durationComponentsToSerial(
+            $c['negative'],
+            $c['hours'],
+            $c['minutes'],
+            $c['seconds'],
+            $c['microsecond'],
+        );
     }
 
     /**
-     * Convert an Excel serial (days) to a duration.
+     * Convert a duration in components to an Excel serial (days).
      *
-     * Returns a \Time\Duration when the PHP 8.6 Time API is available (native
-     * on 8.6+, Symfony polyfill below), otherwise the canonical duration string.
-     * This keeps the public value type stable across PHP versions without ever
-     * exposing a Baresheet-specific duration class.
+     * @internal
      */
-    public static function durationFromSerial(float $serial): object|string
-    {
-        return self::durationFromMicroseconds((int) round($serial * TimeValue::MICROSECONDS_PER_DAY));
+    public static function durationComponentsToSerial(
+        bool $negative,
+        int $hours,
+        int $minutes,
+        int $seconds,
+        int $microsecond = 0,
+    ): float {
+        $totalSeconds = ($hours * 3600.0) + ($minutes * 60) + $seconds + ($microsecond / 1_000_000);
+        $serial = $totalSeconds / 86_400;
+        return $negative ? -$serial : $serial;
     }
 
     /**
      * Convert an Excel serial (days) to the canonical duration string.
      *
-     * Always microseconds-based, independent of the PHP Time API availability,
-     * so readers never depend on Time\Duration.
+     * Component/float based so it never needs a 64-bit microsecond total.
+     *
+     * @throws InvalidArgumentException On non-finite serials.
      */
     public static function durationSerialToString(float $serial): string
     {
-        return self::formatDurationMicroseconds((int) round($serial * TimeValue::MICROSECONDS_PER_DAY));
+        if (!is_finite($serial)) {
+            throw new InvalidArgumentException('Invalid duration serial: ' . var_export($serial, true));
+        }
+
+        $negative = $serial < 0;
+        $secondsFloat = abs($serial) * 86_400.0;
+        $hours = (int) floor($secondsFloat / 3600);
+        $secondsFloat -= $hours * 3600;
+        $minutes = (int) floor($secondsFloat / 60);
+        $secondsFloat -= $minutes * 60;
+        $seconds = (int) floor($secondsFloat);
+        $microsecond = (int) round(($secondsFloat - $seconds) * 1_000_000);
+        if ($microsecond >= 1_000_000) {
+            $microsecond = 0;
+            $seconds++;
+            if ($seconds >= 60) {
+                $seconds = 0;
+                $minutes++;
+                if ($minutes >= 60) {
+                    $minutes = 0;
+                    $hours++;
+                }
+            }
+        }
+
+        return self::formatDurationComponents($negative, $hours, $minutes, $seconds, $microsecond);
     }
 
     /**
-     * @return object|string See {@see durationFromSerial()}.
+     * Decompose a Time\Duration into its components.
+     *
+     * Sub-microsecond precision is truncated toward zero (not rounded), so a
+     * duration of 999 nanoseconds maps to 0 microseconds.
+     *
+     * @return array{negative: bool, hours: int, minutes: int, seconds: int, microsecond: int}
      */
-    public static function durationFromMicroseconds(int $microseconds): object|string
+    private static function durationComponents(\Time\Duration $duration): array
     {
-        if (class_exists('Time\\Duration')) {
-            $duration = \Time\Duration::fromMicroseconds(abs($microseconds));
-            return $microseconds < 0 ? $duration->negate() : $duration;
-        }
-        return self::formatDurationMicroseconds($microseconds);
+        $seconds = $duration->seconds;
+        $hours = intdiv($seconds, 3_600);
+        $seconds %= 3_600;
+        $minutes = intdiv($seconds, 60);
+        $seconds %= 60;
+        return [
+            'negative' => $duration->negative,
+            'hours' => $hours,
+            'minutes' => $minutes,
+            'seconds' => $seconds,
+            'microsecond' => intdiv($duration->nanoseconds, 1_000),
+        ];
     }
 
     /**
      * ISO-8601 duration for ODS time cells, e.g. "PT14H30M15S" or "-PT36H30M15.5S".
+     *
+     * @internal
      */
-    public static function formatIsoDurationFromMicroseconds(int $microseconds): string
-    {
-        $negative = $microseconds < 0;
-        $microseconds = abs($microseconds);
-        $hours = intdiv($microseconds, 3_600_000_000);
-        $microseconds %= 3_600_000_000;
-        $minutes = intdiv($microseconds, 60_000_000);
-        $microseconds %= 60_000_000;
-        $seconds = intdiv($microseconds, 1_000_000);
-        $microseconds %= 1_000_000;
+    public static function formatIsoDurationComponents(
+        bool $negative,
+        int $hours,
+        int $minutes,
+        int $seconds,
+        int $microsecond = 0,
+    ): string {
+        // A zero duration is never negative.
+        if ($negative && $hours === 0 && $minutes === 0 && $seconds === 0 && $microsecond === 0) {
+            $negative = false;
+        }
         $secondsString = (string) $seconds;
-        if ($microseconds > 0) {
-            $secondsString .= '.' . rtrim(str_pad((string) $microseconds, 6, '0', STR_PAD_LEFT), '0');
+        if ($microsecond > 0) {
+            $secondsString .= '.' . rtrim(str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT), '0');
         }
         return ($negative ? '-' : '') . "PT{$hours}H{$minutes}M{$secondsString}S";
     }
 
     /**
+     * ISO-8601 duration for a Time\Duration (ODS writer).
+     *
+     * @internal
+     */
+    public static function formatIsoDuration(\Time\Duration $duration): string
+    {
+        $c = self::durationComponents($duration);
+        return self::formatIsoDurationComponents(
+            $c['negative'],
+            $c['hours'],
+            $c['minutes'],
+            $c['seconds'],
+            $c['microsecond'],
+        );
+    }
+
+    /**
      * Parse an ISO-8601 duration (as stored in ODS office:time-value) into
-     * total microseconds.
+     * its components.
      *
      * Only the spreadsheet-relevant subset is accepted:
      *
-     *     -?P[nD]T[nH][nM][n[.ffffff]S]
+     *     -?P[nD][T[nH][nM][n[.ffffff]S]]
      *
-     * Every part is optional (at least one must be present), the optional
-     * fraction is limited to six digits, the whole string must be consumed,
-     * and a leading minus is supported. Any other component (Y, M-as-month,
-     * W) or trailing garbage is rejected.
+     * Every part is optional (at least one must be present) and the T is
+     * required only when a time component is present; the optional fraction is
+     * limited to six digits, the whole string must be consumed, and a leading
+     * minus is supported. Any other component (Y, M-as-month, W) or trailing
+     * garbage is rejected.
      *
+     * Out-of-range components are normalized upward (PT90M parses as 1h30m),
+     * and a negative zero parses as positive zero.
+     *
+     * @return array{negative: bool, days: int, hours: int, minutes: int, seconds: int, microsecond: int}
      * @throws InvalidArgumentException On malformed or unsupported input.
+     * @internal
      */
-    public static function parseIsoDurationToMicroseconds(string $value): int
+    public static function parseIsoDuration(string $value): array
     {
         if (
             preg_match(
-                '/^-?P(?:(?<days>\d+)D)?T(?:(?<hours>\d+)H)?(?:(?<minutes>\d+)M)?(?:(?<seconds>\d+(?:\.\d{1,6})?)S)?$/D',
+                '/^-?P(?:(?<days>\d+)D)?(?:T(?:(?<hours>\d+)H)?(?:(?<minutes>\d+)M)?(?:(?<seconds>\d+(?:\.\d{1,6})?)S)?)?$/D',
                 $value,
                 $matches,
                 PREG_UNMATCHED_AS_NULL,
@@ -1317,21 +1406,39 @@ class Spread
             throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
         }
 
-        $total = 0;
-        if ($matches['days'] !== null) {
-            $total += (int) $matches['days'] * 86_400_000_000;
-        }
-        if ($matches['hours'] !== null) {
-            $total += (int) $matches['hours'] * 3_600_000_000;
-        }
-        if ($matches['minutes'] !== null) {
-            $total += (int) $matches['minutes'] * 60_000_000;
-        }
+        $seconds = 0;
+        $microsecond = 0;
         if ($matches['seconds'] !== null) {
-            $total += (int) round((float) $matches['seconds'] * 1_000_000);
+            [$secondsPart, $fractionPart] = array_pad(explode('.', $matches['seconds']), 2, '');
+            $seconds = (int) $secondsPart;
+            if ($fractionPart !== '') {
+                $microsecond = (int) str_pad($fractionPart, 6, '0');
+            }
         }
 
-        return str_starts_with($value, '-') ? -$total : $total;
+        $days = $matches['days'] !== null ? (int) $matches['days'] : 0;
+        $hours = $matches['hours'] !== null ? (int) $matches['hours'] : 0;
+        $minutes = $matches['minutes'] !== null ? (int) $matches['minutes'] : 0;
+
+        // Normalize out-of-range components (external files may carry e.g. PT90M).
+        $minutes += intdiv($seconds, 60);
+        $seconds %= 60;
+        $hours += intdiv($minutes, 60);
+        $minutes %= 60;
+
+        $negative = str_starts_with($value, '-');
+        if ($negative && $days === 0 && $hours === 0 && $minutes === 0 && $seconds === 0 && $microsecond === 0) {
+            $negative = false;
+        }
+
+        return [
+            'negative' => $negative,
+            'days' => $days,
+            'hours' => $hours,
+            'minutes' => $minutes,
+            'seconds' => $seconds,
+            'microsecond' => $microsecond,
+        ];
     }
 
     /**

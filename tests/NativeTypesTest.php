@@ -339,6 +339,37 @@ class NativeTypesTest extends TestCase
         unlink($file);
     }
 
+    public function testOdsTimeNormalizesOverflowComponents(): void
+    {
+        // External ODS files may carry PT90M instead of PT1H30M; the reader
+        // normalizes out-of-range components instead of echoing them.
+        $file = $this->odsWithContent(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                office:version="1.3">
+              <office:body><office:spreadsheet>
+                <table:table table:name="Sheet1">
+                  <table:table-row>
+                    <table:table-cell office:value-type="time" office:time-value="PT90M"><text:p>90:00</text:p></table:table-cell>
+                    <table:table-cell office:value-type="time" office:time-value="PT1H90M90.5S"><text:p>1:90:90.5</text:p></table:table-cell>
+                  </table:table-row>
+                </table:table>
+              </office:spreadsheet></office:body>
+            </office:document-content>
+            XML);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+
+        self::assertSame('01:30:00', $rows[0][0]);
+        self::assertSame('02:31:30.500000', $rows[0][1]);
+
+        unlink($file);
+    }
+
     public function testOdsNegativeTimeWithoutDurationStyleIsDuration(): void
     {
         // A negative time value cannot be a time of day: it must be a duration,
@@ -426,7 +457,7 @@ class NativeTypesTest extends TestCase
             $tempFile = $this->tempFile($ext);
             $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
             $writer->inferNumericStrings = false;
-            $writer->writeFile([[DurationValue::fromTime(36, 30, 15)]], $tempFile);
+            $writer->writeFile([[new DurationValue(36, 30, 15)]], $tempFile);
 
             $reader = $ext === 'xlsx' ? new XlsxReader() : new OdsReader();
             $reader->stringifyValues = false;
