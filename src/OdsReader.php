@@ -686,7 +686,7 @@ class OdsReader implements ReaderInterface
             if ($value === null || $value === '') {
                 return null;
             }
-            return new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
+            return new \DateTimeImmutable($value, Spread::utc());
         }
         if ($valueType === 'time') {
             if ($value === null || $value === '') {

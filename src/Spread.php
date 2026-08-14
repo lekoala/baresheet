@@ -25,6 +25,13 @@ class Spread
 {
     private const MAX_DATE_CACHE_SIZE = 10_000;
 
+    // Proleptic-Gregorian day numbers (civilToDays) of fixed calendar anchors,
+    // precomputed so the hot serial conversions never re-derive them per cell.
+    private const DAYS_1899_12_30 = -25_569;
+    private const DAYS_1899_12_31 = -25_568;
+    private const DAYS_1904_01_01 = -24_107;
+    private const DAYS_1582_10_15 = -141_427;
+
     /**
      * @return string
      */
@@ -317,9 +324,9 @@ class Spread
         $civilDays = self::civilToDays($year, $month, $day);
 
         if ($is1904) {
-            $days = $civilDays - self::civilToDays(1904, 1, 1);
+            $days = $civilDays - self::DAYS_1904_01_01;
         } else {
-            $days = $civilDays - self::civilToDays(1899, 12, 30);
+            $days = $civilDays - self::DAYS_1899_12_30;
 
             // Lotus 1-2-3 leap bug: 1900-01-01..1900-02-28 are shifted down by one
             // because Excel wrongly treats 1900 as a leap year (day 60).
@@ -330,7 +337,7 @@ class Spread
         }
 
         // Inverse Julian-to-Gregorian correction for historical dates
-        if ($civilDays < self::civilToDays(1582, 10, 15)) {
+        if ($civilDays < self::DAYS_1582_10_15) {
             $drift = (int) (floor($year / 100) - floor($year / 400) - 2);
             if ($drift > 0) {
                 $days += $drift;
@@ -344,6 +351,16 @@ class Spread
         $timeFraction = (($hour * 3600) + ($minute * 60) + $second + ($microsecond / 1_000_000)) / 86_400;
 
         return $days + $timeFraction;
+    }
+
+    private static ?DateTimeZone $utc = null;
+
+    /**
+     * Shared neutral timezone for spreadsheet civil dates.
+     */
+    public static function utc(): DateTimeZone
+    {
+        return self::$utc ??= new DateTimeZone('UTC');
     }
 
     /**
@@ -364,7 +381,7 @@ class Spread
             $c['minute'],
             $c['second'],
             $c['microsecond'],
-        ), new DateTimeZone('UTC'));
+        ), self::utc());
     }
 
     /**
@@ -432,19 +449,19 @@ class Spread
         $fraction = $floatValue - $days;
 
         if ($is1904) {
-            $epoch = self::civilToDays(1904, 1, 1);
+            $epoch = self::DAYS_1904_01_01;
         } else {
             // Serial 0 = 1899-12-30. Serials 1-59 are anchored to 1899-12-31
             // because Excel skips the non-existent 1900-02-29 (Lotus bug);
             // serials 60+ fall back onto 1899-12-30, so day 60 collapses to
             // 1900-02-28 exactly like Excel displays it.
-            $epoch = self::civilToDays(1899, 12, $days > 0 && $days < 60 ? 31 : 30);
+            $epoch = $days > 0 && $days < 60 ? self::DAYS_1899_12_31 : self::DAYS_1899_12_30;
         }
         $totalDays = $epoch + $days;
 
         // Pre-Gregorian correction: serials are treated as Julian dates before
         // the 1582-10-15 Gregorian transition, mirroring excelDateToString().
-        if ($totalDays < self::civilToDays(1582, 10, 15)) {
+        if ($totalDays < self::DAYS_1582_10_15) {
             $year = self::daysToCivil($totalDays)[0];
             $drift = (int) (floor($year / 100) - floor($year / 400) - 2);
             if ($drift > 0) {
@@ -454,10 +471,15 @@ class Spread
 
         [$year, $month, $day] = self::daysToCivil($totalDays);
 
-        $clock = self::clockFromSecondsFloat($fraction * 86_400);
-        if ($clock['carryDay']) {
-            $totalDays++;
-            [$year, $month, $day] = self::daysToCivil($totalDays);
+        if ($fraction == 0.0) {
+            // Fast path: midnight date-only cells avoid the full clock math.
+            $clock = ['hour' => 0, 'minute' => 0, 'second' => 0, 'microsecond' => 0, 'carryDay' => false];
+        } else {
+            $clock = self::clockFromSecondsFloat($fraction * 86_400);
+            if ($clock['carryDay']) {
+                $totalDays++;
+                [$year, $month, $day] = self::daysToCivil($totalDays);
+            }
         }
 
         return [
