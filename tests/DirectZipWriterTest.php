@@ -40,6 +40,40 @@ class DirectZipWriterTest extends TestCase
         @unlink($file);
     }
 
+    public function testKnownStoredStringHasCompleteHeaderOnNonSeekableOutput(): void
+    {
+        $name = 'mimetype';
+        $contents = 'application/vnd.oasis.opendocument.spreadsheet';
+
+        ob_start();
+        $stream = fopen('php://output', 'wb');
+        self::assertIsResource($stream);
+        $writer = new DirectZipWriter($stream);
+        self::assertFalse($writer->isSeekable());
+        $writer->addString($name, $contents, store: true);
+        $writer->finish();
+        fclose($stream);
+        $bytes = ob_get_clean();
+
+        self::assertIsString($bytes);
+        self::assertSame(0x0403_4b50, unpack('V', substr($bytes, 0, 4))[1]);
+        self::assertSame(20, unpack('v', substr($bytes, 4, 2))[1]);
+        self::assertSame(0x0800, unpack('v', substr($bytes, 6, 2))[1]);
+        self::assertSame(0, unpack('v', substr($bytes, 8, 2))[1]);
+        self::assertSame((int) hexdec(hash('crc32b', $contents)), unpack('V', substr($bytes, 14, 4))[1]);
+        self::assertSame(strlen($contents), unpack('V', substr($bytes, 18, 4))[1]);
+        self::assertSame(strlen($contents), unpack('V', substr($bytes, 22, 4))[1]);
+        self::assertSame(strlen($name), unpack('v', substr($bytes, 26, 2))[1]);
+        self::assertSame(0, unpack('v', substr($bytes, 28, 2))[1]);
+        self::assertSame($name, substr($bytes, 30, strlen($name)));
+        self::assertSame($contents, substr($bytes, 38, strlen($contents)));
+        self::assertSame(
+            38 + strlen($contents),
+            strpos($bytes, pack('V', 0x0201_4b50)),
+            'A known STORE entry must have no data descriptor before the central directory',
+        );
+    }
+
     public function testSmallDeflatedEntry(): void
     {
         $file = $this->tempFile('zip');

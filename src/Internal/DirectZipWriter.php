@@ -11,9 +11,10 @@ use LeKoala\Baresheet\Exception\WriteException;
 /**
  * Minimal streaming ZIP writer used to package XLSX output.
  *
- * Seekable outputs patch final metadata into a reserved local header. For
- * non-seekable outputs, ZIP64 headers and signed data descriptors carry the
- * final CRC and sizes without requiring ftell() or fseek().
+ * Streamed entries on seekable outputs patch final metadata into a reserved
+ * local header. On non-seekable outputs, ZIP64 headers and signed data
+ * descriptors carry the final CRC and sizes without requiring ftell() or
+ * fseek(). Known STORE strings write complete classic headers up front.
  *
  * Capabilities:
  *  - classic ZIP and ZIP64; seekable outputs enable ZIP64 only when final
@@ -120,7 +121,8 @@ final class DirectZipWriter
     }
 
     /**
-     * Add a small in-memory entry.
+     * Add a small in-memory entry. Known STORE strings write their complete
+     * classic header immediately, without an extra field or descriptor.
      */
     public function addString(
         string $name,
@@ -128,6 +130,11 @@ final class DirectZipWriter
         ?DateTimeInterface $lastModificationDateTime = null,
         bool $store = false,
     ): void {
+        if ($store && strlen($contents) <= self::UINT32_MAX) {
+            $this->addKnownStoredString($name, $contents, $lastModificationDateTime);
+            return;
+        }
+
         $this->addEntry(
             name: $name,
             contents: $contents,
@@ -137,6 +144,63 @@ final class DirectZipWriter
             lastModificationDateTime: $lastModificationDateTime,
             store: $store,
         );
+    }
+
+    /**
+     * Write a known STORE entry with complete classic metadata in its header.
+     *
+     * Unlike streamed entries, this needs no reserved extra field, patch or
+     * data descriptor, even when the destination itself is non-seekable.
+     */
+    private function addKnownStoredString(
+        string $name,
+        string $contents,
+        ?DateTimeInterface $lastModificationDateTime,
+    ): void {
+        $this->assertOpen();
+        $this->validateName($name);
+
+        $nameLength = strlen($name);
+        if ($nameLength > self::UINT16_MAX) {
+            throw new WriteException('ZIP entry name is too long');
+        }
+
+        $size = strlen($contents);
+        $crc = (int) hexdec(hash('crc32b', $contents));
+        $offset = $this->position();
+        [$dosTime, $dosDate] = self::dosDateTime(
+            $lastModificationDateTime ?? new DateTimeImmutable(),
+        );
+
+        $this->writeAll(pack(
+            'VvvvvvVVVvv',
+            self::LOCAL_FILE_HEADER_SIGNATURE,
+            self::VERSION_CLASSIC,
+            self::UTF8_FLAG,
+            self::METHOD_STORE,
+            $dosTime,
+            $dosDate,
+            $crc,
+            $size,
+            $size,
+            $nameLength,
+            0, // extra field length
+        ));
+        $this->writeAll($name);
+        $this->writeAll($contents);
+
+        $this->entries[] = [
+            'name' => $name,
+            'crc' => $crc,
+            'compressedSize' => $size,
+            'uncompressedSize' => $size,
+            'offset' => $offset,
+            'dosTime' => $dosTime,
+            'dosDate' => $dosDate,
+            'flags' => self::UTF8_FLAG,
+            'method' => self::METHOD_STORE,
+            'version' => self::VERSION_CLASSIC,
+        ];
     }
 
     /**

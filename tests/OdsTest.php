@@ -12,6 +12,29 @@ use LeKoala\Baresheet\Options;
 
 class OdsTest extends TestCase
 {
+    public function testWriteFilePreservesTempPathBehavior(): void
+    {
+        $tempPath = sys_get_temp_dir() . '/baresheet_ods_stage_' . bin2hex(random_bytes(6));
+        self::assertTrue(mkdir($tempPath));
+        $file = $this->tempFile('ods');
+
+        try {
+            $writer = new OdsWriter();
+            $writer->tempPath = $tempPath;
+            self::assertTrue($writer->writeFile([['A', 'B'], ['1', '2']], $file));
+            self::assertFileExists($file);
+            self::assertSame([['A', 'B'], ['1', '2']], iterator_to_array((new OdsReader())->readFile($file)));
+            $stagedFiles = scandir($tempPath);
+            self::assertIsArray($stagedFiles);
+            self::assertSame([], array_values(array_diff($stagedFiles, ['.', '..'])));
+        } finally {
+            if (is_file($file)) {
+                unlink($file);
+            }
+            rmdir($tempPath);
+        }
+    }
+
     public function testReadString(): void
     {
         $writer = new OdsWriter();

@@ -116,7 +116,7 @@ $writer->writeFile($data, 'report.xlsx');
 - **Column Selection** — Skip XML parsing for unselected cells for massive performance gains.
 - **Shared string table** — opt-in de-duplication for smaller files (default: `false` for speed)
 - **Auto column widths** — opt-in automatic column sizing (default: `false` for speed)
-- **Single-pass streaming writer** — the worksheet XML is compressed directly into the archive by an internal ZIP writer (`DirectZipWriter`), with approximately flat incremental PHP memory for generator input and automatic ZIP64 for oversized worksheets
+- **Single-pass streaming writer** — the worksheet XML is compressed directly into the archive by an internal ZIP writer (`DirectZipWriter`), with approximately flat incremental PHP memory for generator input and ZIP64 support for seekable and non-seekable outputs
 - **DateTime support** — pass `DateTimeInterface` objects directly, seamlessly handles 1900/1904 calendar systems
 - **Freeze Pane & Autofilter** — simple options for improved sheet usability
 - **Document properties** — set creator, title, subject, keywords, etc. via `meta`
@@ -127,9 +127,10 @@ $writer->writeFile($data, 'report.xlsx');
 ### ODS
 
 - **Streaming reader** — handles large files with minimal 0.63MB memory usage
+- **Single-pass streaming writer** — `content.xml` is compressed directly into the archive by `DirectZipWriter`, including true non-seekable `output()` streaming
 - **Data offset** & **Empty line skipping** — safely skip arbitrary leading rows or completely empty lines
 - **Column Selection** — Skip XML parsing for unselected cells for significant performance gains.
-- **Zero-dependency** — uses native `ZipArchive` + `XMLReader`
+- **Zero-dependency packaging** — writing uses the internal ZIP engine; reading uses native `ZipArchive` + `XMLReader`
 - **DateTime support** — dates stored accurately in ISO 8601
 - **Document properties** — set creator and title via `meta`
 - **Sheet selection** — read specific sheets by name or index
@@ -602,13 +603,13 @@ $page = Transform::slice($rows, offset: 100, limit: 20);
 
 ## Streaming Output
 
-For large files, streaming avoids writing a temporary file to disk. **Baresheet streams CSV and XLSX `output()` by default.** ODS output remains buffered to preserve its package layout requirements.
+For large files, streaming avoids writing a temporary file to disk. **Baresheet streams CSV, XLSX, and ODS `output()` by default.**
 
 However, keep in mind that **streaming changes how data is sent to the browser**. Because the total file size is unknown before the transfer starts, the server cannot send a `Content-Length` header. This means the browser download will not display a progress bar or an estimated time of completion.
 
 To bypass streaming and force buffering, use `stream: false` with `output()`. Baresheet will buffer the file (either in memory for CSV, or via a temporary zip file for XLSX/ODS) to precisely calculate and send the `Content-Length` header along with it.
 
-> **Note on XLSX/ODS:** XLSX output uses Baresheet's built-in ZIP writer (`DirectZipWriter`) for both seekable destinations and true non-seekable streaming to `php://output`; no ZIP streaming dependency is needed. ODS output remains buffered through a temporary ZIP file to preserve the format's special uncompressed first `mimetype` entry.
+> **Note on XLSX/ODS:** Both formats use Baresheet's built-in ZIP writer (`DirectZipWriter`) for seekable destinations and true non-seekable streaming to `php://output`; no ZIP streaming dependency is needed. For ODS, the required first `mimetype` entry is written from known metadata as STORE, without an extra field or data descriptor, while subsequent entries use the normal streaming strategy.
 
 Non-seekable XLSX output uses standard ZIP64-capable local headers and data descriptors. The interoperability suite exercises the captured `php://output` bytes directly:
 
@@ -669,7 +670,7 @@ return $response
 
 ## Performance
 
-> **Indicative benchmarks** — These numbers are intended to catch large performance regressions and highlight architectural differences. Absolute results vary by PHP version, hardware, filesystem and workload. Run `php bin/bench-read.php` / `bin/bench-write.php` / `bin/bench-write-memory.php` / `bin/bench-xlsx-stream.php` locally for results relevant to your environment.
+> **Indicative benchmarks** — These numbers are intended to catch large performance regressions and highlight architectural differences. Absolute results vary by PHP version, hardware, filesystem and workload. Run `php bin/bench-read.php` / `bin/bench-write.php` / `bin/bench-write-memory.php` / `bin/bench-xlsx-stream.php` / `bin/bench-ods-stream.php` locally for results relevant to your environment.
 >
 > Environment: PHP 8.3.6, 64-bit, 50,000 rows × 4 columns, median of 5 runs. Libraries are compared end-to-end through their public APIs; this is not a compressor-only comparison.
 
@@ -688,12 +689,14 @@ Baresheet is engineered to minimize server resource footprint. The XLSX and ODS 
 
 | Library       | CSV  | XLSX | ODS  | Peak PHP Memory                         |
 |---------------|------|------|------|-----------------------------------------|
-| Baresheet     | 1.0× | 1.0× | 1.0× | 0.28–0.57 MB (CSV/ODS) · 1.08 MB (XLSX) |
+| Baresheet     | 1.0× | 1.0× | 1.0× | 0.28 MB (CSV) · 1.09 MB (XLSX) · 1.39 MB (ODS) |
 | League        | 1.6× | —    | —    | 0.25 MB                                 |
 | SimpleXLSXGen | —    | 3.3× | —    | 109.85 MB                               |
-| OpenSpout     | 2.8× | 4.2× | 1.8× | 0.12–0.70 MB                            |
+| OpenSpout     | 2.8× | 4.2× | 6.4× | 0.12–0.70 MB                            |
 
 > **XLSX write memory**: with generator input and default options, worksheet XML is compressed in a single pass and incremental PHP-managed memory remains approximately flat as row count grows. Pre-built arrays remain owned by the caller and are intentionally excluded from this streaming guarantee. Enabling `sharedStrings` keeps the de-duplication table in memory. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
+
+> **ODS write memory**: `content.xml` now follows the same generator-based direct compression path. The approximately 1.39 MB PHP peak reflects its 1,000-row XML buffer; native zlib allocations are not included.
 
 > **XLSX write modes**: By default, Baresheet uses the fastest mode (shared strings and auto column width disabled). Enabling shared strings or auto-width trades speed for file size or presentation — see the Options table for `sharedStrings` and `autoWidth`.
 
