@@ -378,15 +378,15 @@ class XlsxWriter implements WriterInterface
 
                 if ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
-                    $buffer .= '<c r="' . $cn . '" t="n" s="4"><v>' . $excelSerial . '</v></c>';
+                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {
                     $excelSerial = Spread::timeToExcel($value);
-                    $buffer .= '<c r="' . $cn . '" t="n" s="3"><v>' . $excelSerial . '</v></c>';
+                    $buffer .= sprintf('<c r="%s" t="n" s="3"><v>%.17g</v></c>', $cn, $excelSerial);
                     $vl = 8;
                 } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
-                    $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
+                    $buffer .= sprintf('<c r="%s" t="n" s="1"><v>%.17g</v></c>', $cn, $excelDate);
                     $vl = 16;
                 } elseif (is_bool($value)) {
                     $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';

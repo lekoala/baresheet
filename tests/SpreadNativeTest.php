@@ -182,6 +182,35 @@ class SpreadNativeTest extends TestCase
         self::assertEquals($time, Spread::excelTimeToTimeValue($fraction));
     }
 
+    #[DataProvider('endOfDayProvider')]
+    public function testEndOfDayFraction(float $secondsFloat, TimeValue $expected): void
+    {
+        self::assertEquals($expected, Spread::excelTimeToTimeValue($secondsFloat / 86_400));
+    }
+
+    public static function endOfDayProvider(): array
+    {
+        return [
+            '23:59:59.499999' => [86_399.499_999, new TimeValue(23, 59, 59, 499_999)],
+            '23:59:59.500000' => [86_399.5, new TimeValue(23, 59, 59, 500_000)],
+            '23:59:59.600000' => [86_399.6, new TimeValue(23, 59, 59, 600_000)],
+            '23:59:59.999999' => [86_399.999_999, new TimeValue(23, 59, 59, 999_999)],
+        ];
+    }
+
+    public function testEndOfDayDoesNotAdvanceTheDate(): void
+    {
+        // Serial 46233 is 2026-07-30; 23:59:59.6 must stay on the same date.
+        $dt = Spread::excelDateToImmutable(46_233 + (86_399.6 / 86_400));
+        self::assertSame('2026-07-30 23:59:59.600000', $dt->format('Y-m-d H:i:s.u'));
+    }
+
+    public function testTimeValueEndOfDayRoundTrip(): void
+    {
+        $time = new TimeValue(23, 59, 59, 999_999);
+        self::assertEquals($time, Spread::excelTimeToTimeValue(Spread::timeToExcel($time)));
+    }
+
     #[DataProvider('stringifyProvider')]
     public function testStringifyValue(mixed $value, string $expected): void
     {
@@ -232,6 +261,33 @@ class SpreadNativeTest extends TestCase
             'negative' => ['-PT1H', -3_600_000_000],
             'm s only' => ['PT1M30S', 90_000_000],
         ];
+    }
+
+    #[DataProvider('isoGarbageProvider')]
+    public function testParseIsoDurationRejectsGarbage(string $bad): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        Spread::parseIsoDurationToMicroseconds($bad);
+    }
+
+    public static function isoGarbageProvider(): array
+    {
+        return [
+            'trailing garbage' => ['PT1Hgarbage'],
+            'bare P' => ['P'],
+            'empty T' => ['PT'],
+            'week component' => ['P1W'],
+            'month component' => ['P1M'],
+            'year component' => ['PT1Y'],
+            'trailing junk' => ['PT0H0M0S0X'],
+            'too many fraction digits' => ['PT1.1234567S'],
+            'unconsumed minute' => ['PT1HX'],
+        ];
+    }
+
+    public function testParseIsoDurationAcceptsZero(): void
+    {
+        self::assertSame(0, Spread::parseIsoDurationToMicroseconds('PT0H'));
     }
 
     #[DataProvider('isoFormatProvider')]

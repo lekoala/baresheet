@@ -48,13 +48,19 @@ class TimeValueTest extends TestCase
         ];
     }
 
-    public function testFromMicrosecondsOutOfRangeThrows(): void
+    #[DataProvider('outOfRangeProvider')]
+    public function testFromMicrosecondsOutOfRangeThrows(int $microseconds): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        TimeValue::fromMicroseconds(86_400_000_000);
+        TimeValue::fromMicroseconds($microseconds);
+    }
 
-        $this->expectException(\InvalidArgumentException::class);
-        TimeValue::fromMicroseconds(-1);
+    public static function outOfRangeProvider(): array
+    {
+        return [
+            'one day' => [86_400_000_000],
+            'negative' => [-1],
+        ];
     }
 
     public function testMicrosecondsAreCarriedAcrossComponents(): void

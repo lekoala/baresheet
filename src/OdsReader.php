@@ -22,6 +22,8 @@ class OdsReader implements ReaderInterface
     private const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
     private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
+    private const NS_STYLE = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
+    private const NS_NUMBER = 'urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0';
 
     // Caps the total column count a row can reach, however many repeated
     // cells it takes to get there.
@@ -100,13 +102,16 @@ class OdsReader implements ReaderInterface
                     'ZIP entry \'content.xml\' exceeds maximum allowed size (' . $this->maxWorksheetSize . ' bytes).',
                 );
             }
+
+            // Data (number) styles live in styles.xml for many external writers.
+            $stylesXml = Spread::zipGetData($zip, 'styles.xml');
         } finally {
             $zip->close();
         }
 
         // Open content.xml as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
-        yield from $this->parseContent('zip://' . $filename . '#content.xml');
+        yield from $this->parseContent('zip://' . $filename . '#content.xml', $stylesXml);
     }
 
     /**
@@ -128,7 +133,7 @@ class OdsReader implements ReaderInterface
     /**
      * @return Generator<int, Row>
      */
-    private function parseContent(string $xmlFile): Generator
+    private function parseContent(string $xmlFile, ?string $stylesXml): Generator
     {
         $reader = new \XMLReader();
         if (!$reader->open($xmlFile, null, LIBXML_NONET)) {
@@ -136,6 +141,16 @@ class OdsReader implements ReaderInterface
         }
 
         try {
+            // Map of table-cell style name => whether it renders an elapsed
+            // duration (number:truncate-on-overflow="false"), distinguishing a
+            // time of day from a duration shorter than 24 hours in ODS.
+            $cellToDataStyles = [];
+            $dataStyleDurations = [];
+            if ($stylesXml !== null && $stylesXml !== '') {
+                self::scanTimeStyles($stylesXml, $cellToDataStyles, $dataStyleDurations);
+            }
+            $timeStyles = self::scanContentAutoStyles($reader, $cellToDataStyles, $dataStyleDurations);
+
             $tableIndex = 0;
             $schema = !empty($this->headers)
                 ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
@@ -191,6 +206,7 @@ class OdsReader implements ReaderInterface
                     $totalColumns,
                     $yieldCount,
                     $selectionSchema,
+                    $timeStyles,
                 );
 
                 return;
@@ -202,6 +218,118 @@ class OdsReader implements ReaderInterface
         } finally {
             $reader->close();
         }
+    }
+
+    /**
+     * Scan the <office:automatic-styles> section of content.xml, if any,
+     * merging into the given maps. The reader is left positioned right after
+     * the section (or at <office:body>) so the table loop can continue.
+     *
+     * @param array<string, string> $cellToDataStyles
+     * @param array<string, bool> $dataStyleDurations
+     * @return array<string, bool> cell style name => is duration
+     */
+    private static function scanContentAutoStyles(
+        \XMLReader $reader,
+        array &$cellToDataStyles,
+        array &$dataStyleDurations,
+    ): array {
+        while ($reader->read()) {
+            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                continue;
+            }
+            if ($reader->localName === 'automatic-styles' && $reader->namespaceURI === self::NS_OFFICE) {
+                if (!$reader->isEmptyElement) {
+                    $depth = $reader->depth;
+                    while ($reader->read() && $reader->depth > $depth) {
+                        if ($reader->nodeType === \XMLReader::ELEMENT) {
+                            self::scanTimeStyleNode($reader, $cellToDataStyles, $dataStyleDurations);
+                        }
+                    }
+                }
+                break;
+            }
+            if ($reader->localName === 'body' && $reader->namespaceURI === self::NS_OFFICE) {
+                break;
+            }
+        }
+
+        return self::buildTimeStyleMap($cellToDataStyles, $dataStyleDurations);
+    }
+
+    /**
+     * Scan an XML document (e.g. styles.xml) for table-cell styles referencing
+     * number:time-style data styles.
+     *
+     * @param array<string, string> $cellToDataStyles
+     * @param array<string, bool> $dataStyleDurations
+     */
+    private static function scanTimeStyles(
+        string $xml,
+        array &$cellToDataStyles,
+        array &$dataStyleDurations,
+    ): void {
+        $reader = new \XMLReader();
+        $uri = 'data://text/plain;base64,' . base64_encode($xml);
+        if (!$reader->open($uri, null, LIBXML_NONET)) {
+            return;
+        }
+        try {
+            while ($reader->read()) {
+                if ($reader->nodeType === \XMLReader::ELEMENT) {
+                    self::scanTimeStyleNode($reader, $cellToDataStyles, $dataStyleDurations);
+                }
+            }
+        } finally {
+            $reader->close();
+        }
+    }
+
+    /**
+     * @param array<string, string> $cellToDataStyles
+     * @param array<string, bool> $dataStyleDurations
+     */
+    private static function scanTimeStyleNode(
+        \XMLReader $reader,
+        array &$cellToDataStyles,
+        array &$dataStyleDurations,
+    ): void {
+        if ($reader->localName === 'style' && $reader->namespaceURI === self::NS_STYLE) {
+            if ($reader->getAttributeNs('family', self::NS_STYLE) === 'table-cell') {
+                $name = $reader->getAttributeNs('name', self::NS_STYLE);
+                $dataStyle = $reader->getAttributeNs('data-style-name', self::NS_STYLE);
+                if ($name !== null && $dataStyle !== null) {
+                    $cellToDataStyles[$name] = $dataStyle;
+                }
+            }
+        } elseif ($reader->localName === 'time-style' && $reader->namespaceURI === self::NS_NUMBER) {
+            $name = $reader->getAttributeNs('name', self::NS_STYLE);
+            if ($name !== null) {
+                $dataStyleDurations[$name] =
+                    $reader->getAttributeNs(
+                        'truncate-on-overflow',
+                        self::NS_NUMBER,
+                    ) === 'false';
+            }
+        }
+    }
+
+    /**
+     * Join the cell-style → data-style and data-style → duration maps.
+     *
+     * @param array<string, string> $cellToDataStyles
+     * @param array<string, bool> $dataStyleDurations
+     * @return array<string, bool> cell style name => is duration
+     */
+    private static function buildTimeStyleMap(array $cellToDataStyles, array $dataStyleDurations): array
+    {
+        $map = [];
+        foreach ($cellToDataStyles as $cellName => $dataStyle) {
+            if (array_key_exists($dataStyle, $dataStyleDurations)) {
+                $map[$cellName] = $dataStyleDurations[$dataStyle];
+            }
+        }
+        return $map;
     }
 
     /**
@@ -227,6 +355,7 @@ class OdsReader implements ReaderInterface
      * @param ?int $totalColumns
      * @param int $yieldCount
      * @param ?HeaderSchema $selectionSchema
+     * @param array<string, bool> $timeStyles cell style name => is duration
      * @return Generator<int, Row>
      */
     private function parseTable(
@@ -235,6 +364,7 @@ class OdsReader implements ReaderInterface
         ?int &$totalColumns,
         int &$yieldCount,
         ?HeaderSchema &$selectionSchema,
+        array $timeStyles,
     ): Generator {
         $tableDepth = $reader->depth;
         $moved = $reader->read();
@@ -310,6 +440,7 @@ class OdsReader implements ReaderInterface
                         }
 
                         $valueType = $reader->getAttributeNs('value-type', self::NS_OFFICE) ?? '';
+                        $cellStyleName = $reader->getAttributeNs('style-name', self::NS_TABLE);
                         $value = null;
 
                         if (
@@ -342,39 +473,13 @@ class OdsReader implements ReaderInterface
                             }
                         }
 
-                        $typed = null;
-                        if (
-                            $valueType === 'float'
-                            || $valueType === 'currency'
-                            || $valueType === 'percentage'
-                        ) {
-                            if ($value !== null) {
-                                $typed = Spread::parseNumericValue($value);
-                            }
-                        } elseif ($valueType === 'date') {
-                            if ($value !== null && $value !== '') {
-                                $typed = new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
-                            }
-                        } elseif ($valueType === 'time') {
-                            if ($value !== null && $value !== '') {
-                                $microseconds = Spread::parseIsoDurationToMicroseconds($value);
-                                $typed =
-                                    $microseconds >= 0 && $microseconds < TimeValue::MICROSECONDS_PER_DAY
-                                        ? TimeValue::fromMicroseconds($microseconds)
-                                        : Spread::durationFromMicroseconds($microseconds);
-                            }
-                        } elseif ($valueType === 'boolean') {
-                            $typed = $value === 'true' || $value === '1';
-                        }
-
-                        if ($typed === null) {
-                            if ($valueType === 'string' || $valueType === '') {
-                                $typed = $textP !== '' ? $textP : null;
-                            }
-                        }
-
-                        if ($this->stringifyValues && $typed !== null && !is_string($typed)) {
-                            $typed = Spread::stringifyValue($typed);
+                        if ($this->stringifyValues) {
+                            // Compatibility mode: preserve the raw ODF lexical value
+                            // (e.g. "2026-08-13T14:30:15", "PT14H30M15S"), exactly as
+                            // the historical reader returned it.
+                            $typed = $this->legacyCellValue($value, $valueType, $textP);
+                        } else {
+                            $typed = $this->decodeTypedCell($value, $valueType, $textP, $timeStyles, $cellStyleName);
                         }
 
                         if ($typed === null && $colRepeat > 100) {
@@ -537,5 +642,72 @@ class OdsReader implements ReaderInterface
                 'Could not auto-detect header position. Ensure required columns exist.',
             );
         }
+    }
+
+    /**
+     * Historical reader behavior for stringifyValues mode: return the raw ODF
+     * lexical value, falling back to the display text for string cells.
+     */
+    private function legacyCellValue(?string $value, string $valueType, string $textP): ?string
+    {
+        if ($value !== null) {
+            return $value;
+        }
+        if ($valueType !== 'string' && $valueType !== '') {
+            return null;
+        }
+        return $textP !== '' ? $textP : null;
+    }
+
+    /**
+     * Decode a raw ODF cell into its semantic PHP value (native mode).
+     *
+     * @param ?string $value Raw office:* attribute value for typed cells.
+     * @param string $valueType office:value-type value.
+     * @param string $textP Display text content of the cell.
+     * @param array<string, bool> $timeStyles cell style name => is duration
+     * @param ?string $cellStyleName table:style-name of the cell.
+     */
+    private function decodeTypedCell(
+        ?string $value,
+        string $valueType,
+        string $textP,
+        array $timeStyles,
+        ?string $cellStyleName,
+    ): mixed {
+        if (
+            $valueType === 'float'
+            || $valueType === 'currency'
+            || $valueType === 'percentage'
+        ) {
+            return $value !== null ? Spread::parseNumericValue($value) : null;
+        }
+        if ($valueType === 'date') {
+            if ($value === null || $value === '') {
+                return null;
+            }
+            return new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
+        }
+        if ($valueType === 'time') {
+            if ($value === null || $value === '') {
+                return null;
+            }
+            $microseconds = Spread::parseIsoDurationToMicroseconds($value);
+            // A duration style marks an elapsed duration regardless of magnitude;
+            // a time-of-day style (or an unknown style) only carries a duration
+            // when it exceeds a single day.
+            $isDuration = $timeStyles[$cellStyleName ?? ''] ?? false;
+            if ($isDuration || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
+                return Spread::durationFromMicroseconds($microseconds);
+            }
+            return $microseconds >= 0 ? TimeValue::fromMicroseconds($microseconds) : null;
+        }
+        if ($valueType === 'boolean') {
+            return $value === 'true' || $value === '1';
+        }
+        if ($valueType === 'string' || $valueType === '') {
+            return $textP !== '' ? $textP : null;
+        }
+        return null;
     }
 }

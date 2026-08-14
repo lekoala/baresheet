@@ -37,6 +37,7 @@ class NativeTypesTest extends TestCase
             ['datetime', new DateTimeImmutable('2026-08-13 14:30:15', new DateTimeZone('UTC'))],
             ['time', new TimeValue(14, 30, 15)],
             ['empty', null],
+            ['datetime_micros', new DateTimeImmutable('2026-08-13 14:30:15.123456', new DateTimeZone('UTC'))],
         ];
     }
 
@@ -88,7 +89,7 @@ class NativeTypesTest extends TestCase
      */
     private function assertTypedMatrix(array $rows): void
     {
-        self::assertCount(9, $rows);
+        self::assertCount(10, $rows);
 
         self::assertSame(123, $rows[0][1]);
         self::assertSame(12.5, $rows[1][1]);
@@ -109,6 +110,10 @@ class NativeTypesTest extends TestCase
         self::assertSame(52_215_000_000, $time->toMicroseconds());
 
         self::assertTrue($rows[8][1] === null || $rows[8][1] === '');
+
+        $datetimeMicros = $rows[9][1];
+        self::assertInstanceOf(DateTimeImmutable::class, $datetimeMicros);
+        self::assertSame('2026-08-13 14:30:15.123456', $datetimeMicros->format('Y-m-d H:i:s.u'));
     }
 
     public function testXlsxNativeNumberTextRoundTrip(): void
@@ -194,5 +199,97 @@ class NativeTypesTest extends TestCase
         self::assertSame('1904-02-29 23:59:59', $fmt($data[1][0]));
         self::assertSame('1904-03-02 00:00:00', $fmt($data[1][1]));
         self::assertSame('1904-03-01 11:00:00', $fmt($data[1][2]));
+    }
+
+    /**
+     * Build a minimal ODS archive containing the given content.xml.
+     * The Baresheet ODS reader only reads content.xml.
+     */
+    private function odsWithContent(string $contentXml): string
+    {
+        $file = $this->tempFile('ods');
+        $zip = new \ZipArchive();
+        $zip->open($file, \ZipArchive::CREATE);
+        $zip->addFromString('content.xml', $contentXml);
+        $zip->close();
+        return $file;
+    }
+
+    public function testOdsStringifyPreservesLegacyLexicalForms(): void
+    {
+        $file = $this->odsWithContent(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                office:version="1.3">
+              <office:body><office:spreadsheet>
+                <table:table table:name="Sheet1">
+                  <table:table-row>
+                    <table:table-cell office:value-type="date" office:date-value="2026-08-13T14:30:15"><text:p>2026-08-13 14:30:15</text:p></table:table-cell>
+                    <table:table-cell office:value-type="time" office:time-value="PT14H30M15S"><text:p>14:30:15</text:p></table:table-cell>
+                    <table:table-cell office:value-type="float" office:value="42"><text:p>42</text:p></table:table-cell>
+                  </table:table-row>
+                </table:table>
+              </office:spreadsheet></office:body>
+            </office:document-content>
+            XML);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = true;
+        $rows = iterator_to_array($reader->readFile($file));
+        self::assertSame(['2026-08-13T14:30:15', 'PT14H30M15S', '42'], $rows[0]);
+
+        unlink($file);
+    }
+
+    public function testOdsDistinguishesTimeOfDayFromDurationUnder24h(): void
+    {
+        $file = $this->odsWithContent(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+                xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+                office:version="1.3">
+              <office:automatic-styles>
+                <style:style style:name="ce-time" style:family="table-cell" style:data-style-name="timeOfDay"/>
+                <style:style style:name="ce-duration" style:family="table-cell" style:data-style-name="durationTime"/>
+                <number:time-style style:name="timeOfDay">
+                  <number:hours number:style="long"/><number:text>:</number:text>
+                  <number:minutes number:style="long"/><number:text>:</number:text>
+                  <number:seconds number:style="long"/>
+                </number:time-style>
+                <number:time-style style:name="durationTime" number:truncate-on-overflow="false">
+                  <number:hours number:style="long"/><number:text>:</number:text>
+                  <number:minutes number:style="long"/><number:text>:</number:text>
+                  <number:seconds number:style="long"/>
+                </number:time-style>
+              </office:automatic-styles>
+              <office:body><office:spreadsheet>
+                <table:table table:name="Sheet1">
+                  <table:table-row>
+                    <table:table-cell table:style-name="ce-time" office:value-type="time" office:time-value="PT12H"><text:p>12:00:00</text:p></table:table-cell>
+                    <table:table-cell table:style-name="ce-duration" office:value-type="time" office:time-value="PT12H"><text:p>12:00:00</text:p></table:table-cell>
+                  </table:table-row>
+                </table:table>
+              </office:spreadsheet></office:body>
+            </office:document-content>
+            XML);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+
+        self::assertInstanceOf(TimeValue::class, $rows[0][0]);
+        self::assertSame(12 * 3_600_000_000, $rows[0][0]->toMicroseconds());
+
+        // A duration style marks an elapsed duration even under 24 hours;
+        // without the Time\Duration class the internal layer falls back to a
+        // canonical duration string.
+        self::assertSame('12:00:00', $rows[0][1]);
+
+        unlink($file);
     }
 }

@@ -231,6 +231,7 @@ class OdsWriter implements WriterInterface
             . ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'
             . ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
             . ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"'
+            . ' xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"'
             . ' xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
             . ' office:version="1.3">'
             // Styles block (mandatory for some readers like OpenSpout)
@@ -239,6 +240,21 @@ class OdsWriter implements WriterInterface
             . '<style:style style:name="bold" style:family="table-cell">'
             . '<style:text-properties fo:font-weight="bold"/>'
             . '</style:style>'
+            // Time of day vs elapsed duration: distinguished via the standard
+            // number:truncate-on-overflow attribute on the data style, not via
+            // the magnitude of the value (a duration may be shorter than a day).
+            . '<style:style style:name="ce-time" style:family="table-cell" style:data-style-name="timeOfDay"/>'
+            . '<style:style style:name="ce-duration" style:family="table-cell" style:data-style-name="durationTime"/>'
+            . '<number:time-style style:name="timeOfDay">'
+            . '<number:hours number:style="long"/><number:text>:</number:text>'
+            . '<number:minutes number:style="long"/><number:text>:</number:text>'
+            . '<number:seconds number:style="long"/>'
+            . '</number:time-style>'
+            . '<number:time-style style:name="durationTime" number:truncate-on-overflow="false">'
+            . '<number:hours number:style="long"/><number:text>:</number:text>'
+            . '<number:minutes number:style="long"/><number:text>:</number:text>'
+            . '<number:seconds number:style="long"/>'
+            . '</number:time-style>'
             . '</office:automatic-styles>'
             . '<office:body><office:spreadsheet>'
             . '<table:table table:name="'
@@ -280,7 +296,7 @@ class OdsWriter implements WriterInterface
                     $display = Spread::stringifyDuration($value);
                     $buffer .=
                         '<table:table-cell'
-                        . $rowCellStyle
+                        . ' table:style-name="ce-duration"'
                         . ' office:value-type="time"'
                         . ' office:time-value="'
                         . Spread::escapeXmlAttr($iso)
@@ -294,7 +310,7 @@ class OdsWriter implements WriterInterface
                     $display = (string) $value;
                     $buffer .=
                         '<table:table-cell'
-                        . $rowCellStyle
+                        . ' table:style-name="ce-time"'
                         . ' office:value-type="time"'
                         . ' office:time-value="'
                         . Spread::escapeXmlAttr($iso)
@@ -304,7 +320,9 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 } elseif ($value instanceof DateTimeInterface) {
-                    $isoDate = $value->format('Y-m-d\TH:i:s');
+                    $isoDate = $value->format('u') === '000000'
+                        ? $value->format('Y-m-d\TH:i:s')
+                        : $value->format('Y-m-d\TH:i:s.u');
                     $display = $value->format('Y-m-d H:i:s');
                     $buffer .=
                         '<table:table-cell'

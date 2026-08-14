@@ -454,12 +454,11 @@ class Spread
 
         [$year, $month, $day] = self::daysToCivil($totalDays);
 
-        $secondsFloat = $fraction * 86_400;
-        if (round($secondsFloat) >= 86_400) {
+        $clock = self::clockFromSecondsFloat($fraction * 86_400);
+        if ($clock['carryDay']) {
             $totalDays++;
             [$year, $month, $day] = self::daysToCivil($totalDays);
         }
-        $clock = self::clockFromSecondsFloat($secondsFloat);
 
         return [
             'year' => $year,
@@ -475,33 +474,43 @@ class Spread
     /**
      * Convert a day fraction (seconds since midnight) into a clock time.
      *
-     * The conversion works in two steps — whole seconds first, then the
-     * microsecond remainder — because a direct fraction * 86_400_000_000
-     * amplifies the double error up to a full second. Values of exactly
-     * 86400 seconds wrap back to 00:00:00.
+     * The conversion works in two steps — whole seconds first (via floor),
+     * then the microsecond remainder — because a direct fraction
+     * * 86_400_000_000 amplifies the double error up to a full second.
      *
-     * @return array{hour:int, minute:int, second:int, microsecond:int}
+     * A fraction of exactly 86400 seconds (e.g. 86399.9999996 rounding to
+     * a whole microsecond) carries into the next day: carryDay is set and the
+     * clock wraps to 00:00:00. A fraction of 86399.6 (23:59:59.600000) does
+     * NOT carry — it is a time within the day.
+     *
+     * @return array{hour:int, minute:int, second:int, microsecond:int, carryDay:bool}
      */
     private static function clockFromSecondsFloat(float $secondsFloat): array
     {
-        $seconds = (int) round($secondsFloat);
-        if ($seconds >= 86_400) {
-            $seconds -= 86_400;
-        }
+        $seconds = (int) floor($secondsFloat);
         $microsecond = (int) round(($secondsFloat - $seconds) * 1_000_000);
         if ($microsecond >= 1_000_000) {
             $seconds++;
-            $microsecond -= 1_000_000;
-        } elseif ($microsecond < 0) {
-            $seconds--;
-            $microsecond += 1_000_000;
+            $microsecond = 0;
+        }
+
+        $carryDay = false;
+        if ($seconds >= 86_400) {
+            $seconds -= 86_400;
+            $carryDay = true;
         }
 
         $hour = intdiv($seconds, 3_600);
         $seconds %= 3_600;
         $minute = intdiv($seconds, 60);
         $second = $seconds % 60;
-        return ['hour' => $hour, 'minute' => $minute, 'second' => $second, 'microsecond' => $microsecond];
+        return [
+            'hour' => $hour,
+            'minute' => $minute,
+            'second' => $second,
+            'microsecond' => $microsecond,
+            'carryDay' => $carryDay,
+        ];
     }
 
     /**
@@ -1147,70 +1156,56 @@ class Spread
 
     /**
      * Parse an ISO-8601 duration (as stored in ODS office:time-value) into
-     * total microseconds. Supports day/hour/minute/second components and a
-     * leading minus. Month/year components are rejected as ambiguous for
-     * spreadsheet purposes.
+     * total microseconds.
+     *
+     * Only the spreadsheet-relevant subset is accepted:
+     *
+     *     -?P[nD]T[nH][nM][n[.ffffff]S]
+     *
+     * Every part is optional (at least one must be present), the optional
+     * fraction is limited to six digits, the whole string must be consumed,
+     * and a leading minus is supported. Any other component (Y, M-as-month,
+     * W) or trailing garbage is rejected.
      *
      * @throws InvalidArgumentException On malformed or unsupported input.
      */
     public static function parseIsoDurationToMicroseconds(string $value): int
     {
-        $trimmed = trim($value);
-        $negative = false;
-        if (str_starts_with($trimmed, '-')) {
-            $negative = true;
-            $trimmed = substr($trimmed, 1);
-        }
-        if ($trimmed === '' || $trimmed[0] !== 'P') {
+        if (
+            preg_match(
+                '/^-?P(?:(?<days>\d+)D)?T(?:(?<hours>\d+)H)?(?:(?<minutes>\d+)M)?(?:(?<seconds>\d+(?:\.\d{1,6})?)S)?$/D',
+                $value,
+                $matches,
+                PREG_UNMATCHED_AS_NULL,
+            ) !== 1
+        ) {
             throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
         }
-        $rest = substr($trimmed, 1);
-        $datePart = $rest;
-        $timePart = '';
-        $separator = strpos($rest, 'T');
-        if ($separator !== false) {
-            $datePart = substr($rest, 0, $separator);
-            $timePart = substr($rest, $separator + 1);
-        }
-        if ($datePart === '' && $timePart === '') {
+
+        $hasComponent =
+            $matches['days'] !== null
+            || $matches['hours'] !== null
+            || $matches['minutes'] !== null
+            || $matches['seconds'] !== null;
+        if (!$hasComponent) {
             throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
         }
 
         $total = 0;
-        if ($datePart !== '') {
-            $matched = preg_match_all('/(\d+(?:\.\d+)?)([YMWD])/', $datePart, $m, PREG_SET_ORDER);
-            if ($matched === false || $matched === 0) {
-                throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
-            }
-            foreach ($m as $component) {
-                $unit = $component[2];
-                if ($unit !== 'D' && $unit !== 'W') {
-                    throw new InvalidArgumentException("Unsupported ISO 8601 duration component '{$unit}': {$value}");
-                }
-                $amount = (float) $component[1];
-                $total += (int) round($amount * ($unit === 'D' ? 86_400_000_000 : 604_800_000_000));
-            }
+        if ($matches['days'] !== null) {
+            $total += (int) $matches['days'] * 86_400_000_000;
         }
-        if ($timePart !== '') {
-            $matched = preg_match_all('/(\d+(?:\.\d+)?)([HMS])/', $timePart, $m, PREG_SET_ORDER);
-            if ($matched === false || $matched === 0) {
-                throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
-            }
-            foreach ($m as $component) {
-                $amount = (float) $component[1];
-                $unitMicros = match ($component[2]) {
-                    'H' => 3_600_000_000,
-                    'M' => 60_000_000,
-                    'S' => 1_000_000,
-                };
-                $total += (int) round($amount * $unitMicros);
-            }
+        if ($matches['hours'] !== null) {
+            $total += (int) $matches['hours'] * 3_600_000_000;
+        }
+        if ($matches['minutes'] !== null) {
+            $total += (int) $matches['minutes'] * 60_000_000;
+        }
+        if ($matches['seconds'] !== null) {
+            $total += (int) round((float) $matches['seconds'] * 1_000_000);
         }
 
-        if ($negative) {
-            $total = -$total;
-        }
-        return $total;
+        return str_starts_with($value, '-') ? -$total : $total;
     }
 
     /**
