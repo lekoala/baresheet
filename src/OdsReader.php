@@ -687,7 +687,10 @@ class OdsReader implements ReaderInterface
             if ($value === null || $value === '') {
                 return null;
             }
-            return new \DateTimeImmutable($value, Spread::utc());
+            // Strict ISO-8601 parse neutralized to UTC civil components, mirroring
+            // the XLSX t="d" path. An embedded offset is validated but not kept;
+            // invalid dates and garbage are preserved as raw strings.
+            return Spread::parseIsoDate($value) ?? $value;
         }
         if ($valueType === 'time') {
             if ($value === null || $value === '') {

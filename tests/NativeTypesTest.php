@@ -277,6 +277,56 @@ class NativeTypesTest extends TestCase
         unlink($file);
     }
 
+    public function testOdsTypedDateCellDecodesToDateTimeImmutable(): void
+    {
+        $file = $this->odsWithContent(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                office:version="1.3">
+              <office:body><office:spreadsheet>
+                <table:table table:name="Sheet1">
+                  <table:table-row>
+                    <table:table-cell office:value-type="date" office:date-value="2026-08-13"><text:p>2026-08-13</text:p></table:table-cell>
+                    <table:table-cell office:value-type="date" office:date-value="2026-08-13T14:30:15"><text:p>2026-08-13 14:30:15</text:p></table:table-cell>
+                    <table:table-cell office:value-type="date" office:date-value="1976-11-22T08:30:00Z"><text:p>1976-11-22 08:30:00</text:p></table:table-cell>
+                    <table:table-cell office:value-type="date" office:date-value="1976-11-22T08:30:00+02:00"><text:p>1976-11-22 08:30:00</text:p></table:table-cell>
+                    <table:table-cell office:value-type="date" office:date-value="1976-02-30T08:30:00"><text:p>1976-02-30 08:30:00</text:p></table:table-cell>
+                    <table:table-cell office:value-type="date" office:date-value="not-a-date"><text:p>not-a-date</text:p></table:table-cell>
+                  </table:table-row>
+                </table:table>
+              </office:spreadsheet></office:body>
+            </office:document-content>
+            XML);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+
+        // Date-only and datetime forms decode to DateTimeImmutable.
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][0]);
+        self::assertSame('2026-08-13', $rows[0][0]->format('Y-m-d'));
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][1]);
+        self::assertSame('2026-08-13 14:30:15', $rows[0][1]->format('Y-m-d H:i:s'));
+
+        // Z and +02:00 are validated but neutralized: civil components are kept,
+        // the timezone is dropped (08:30+02:00 reads back as 08:30 UTC).
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][2]);
+        self::assertSame('1976-11-22 08:30:00', $rows[0][2]->format('Y-m-d H:i:s'));
+        self::assertSame('+00:00', $rows[0][2]->format('P'));
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][3]);
+        self::assertSame('1976-11-22 08:30:00', $rows[0][3]->format('Y-m-d H:i:s'));
+        self::assertSame('+00:00', $rows[0][3]->format('P'));
+
+        // Out-of-range dates and garbage are preserved as raw strings rather
+        // than normalized or throwing.
+        self::assertSame('1976-02-30T08:30:00', $rows[0][4]);
+        self::assertSame('not-a-date', $rows[0][5]);
+
+        unlink($file);
+    }
+
     public function testOdsStringifyPreservesLegacyLexicalForms(): void
     {
         $file = $this->odsWithContent(<<<'XML'

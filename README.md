@@ -46,10 +46,10 @@ That's it. The `Baresheet` facade always creates a fresh reader/writer, applies 
 ## Why Baresheet?
 
 |                              | CSV | XLSX | ODS |
-| ---------------------------- | --- | ---- | --- |
+|------------------------------|-----|------|-----|
 | Streaming read/write         | ✓   | ✓    | ✓   |
 | Sheet selection              | —   | ✓    | ✓   |
-| Native values                | ✓   | ✓    | ✓   |
+| Native values                | —   | ✓    | ✓   |
 | Column selection             | ✓   | ✓    | ✓   |
 | Hierarchical headers         | ✓   | ✓    | ✓   |
 | Auto width / freeze / filter | —   | ✓    | —   |
@@ -58,7 +58,7 @@ That's it. The `Baresheet` facade always creates a fresh reader/writer, applies 
 - **Low memory** — a 0.63 MB peak reading or ~1.1 MB writing 50,000 XLSX rows (see [Performance](#performance)).
 - **No runtime Composer dependencies** — only PHP core extensions; XLSX/ODS packaging uses an internal ZIP writer.
 - **Pragmatic headers** — required columns, selection, aliases, injected and hierarchical headers, header discovery, normalization, and strict mode ([docs/headers.md](docs/headers.md)).
-- **Native values** — numbers, booleans, and dates come back as real PHP types, not strings ([Native values](#native-values)).
+- **Native values** — in XLSX/ODS, numbers, booleans, and dates come back as real PHP types, not strings; CSV is textual by nature ([Native values](#native-values)).
 
 ## Core API
 
@@ -111,43 +111,45 @@ $opts = new Options(
 $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing instance
 ```
 
-`readFile()`, `readString()`, `writeFile()`, etc. no longer accept an `Options` argument — they simply read/write using whatever configuration the reader/writer instance currently holds. This avoids ambiguity about whether a per-call option leaks into subsequent calls: the instance's configuration *is* its state. The `Baresheet` facade keeps the convenient one-shot form, since it always creates a fresh reader/writer internally, applies the options to it, then reads/writes once.
+`readFile()`, `readString()`, `writeFile()`, etc. take no `Options` argument — they read/write using whatever configuration the reader/writer instance currently holds. This avoids ambiguity about whether a per-call option leaks into subsequent calls: the instance's configuration *is* its state. The `Baresheet` facade keeps the convenient one-shot form, since it always creates a fresh reader/writer internally, applies the options to it, then reads/writes once.
 
 ## Options
 
-| Option             | Type                                       | Default     | Applies to                |
-|--------------------|--------------------------------------------|-------------|---------------------------|
-| `assoc`            | bool                                       | `false`     | Read (All)                |
-| `strict`           | bool                                       | `false`     | Read (All), Write (CSV)   |
-| `stream`           | bool                                       | `true`      | Output (Any)              |
-| `limit`            | ?int                                       | `null`      | Read (All)                |
-| `offset`           | int                                        | `0`         | Read (All)                |
-| `skipEmptyLines`   | bool                                       | `true`      | Read (All)                |
-| `headers`          | string[]\|array<int, string[]>             | `[]`        | Read (All), Write (All)   |
-| `headerRows`       | int                                        | `1`         | Read (All), Write (All)   |
-| `headerOffset`     | int\|string\|null                          | `null`      | Read (All)                |
-| `headerNormalizer` | null\|callable(string): string             | `null`      | Read (All)                |
-| `requiredColumns`  | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
-| `columns`          | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
-| `aliases`          | array<string\|int,string\|array>           | `[]`        | Read (All)                |
-| `separator`        | string                                     | `"auto"`    | Read (CSV)                |
-| `enclosure`        | string                                     | `"`         | Read (CSV)                |
-| `escape`           | string                                     | `""`        | Read (CSV)                |
-| `eol`              | string                                     | `\r\n`      | Write (CSV)               |
-| `inputEncoding`    | ?string                                    | `null`      | Read (CSV)                |
-| `outputEncoding`   | ?string                                    | `null`      | Read/Write (CSV)          |
-| `bom`              | bool\|string\|Bom                          | `true`      | Write (CSV)               |
-| `escapeFormulas`   | bool/callable                              | `false`     | Write (CSV)               |
-| `meta`             | array/Meta                                 | `null`      | Write (XLSX, ODS)         |
-| `autofilter`       | ?string                                    | `null`      | Write (XLSX)              |
-| `freezePane`       | ?string                                    | `null`      | Write (XLSX)              |
-| `sheetProtection`  | bool\|string                               | `false`     | Write (XLSX)              |
-| `sheet`            | string/int                                 | `null`      | Read/Write (XLSX, ODS)    |
-| `boldHeaders`      | bool                                       | `false`     | Write (XLSX, ODS)         |
-| `tempPath`         | ?string                                    | `null`      | Any (Temp files location) |
-| `sharedStrings`    | bool                                       | `false`     | Write (XLSX)              |
-| `autoWidth`        | bool                                       | `false`     | Write (XLSX)              |
-| `maxWorksheetSize` | ?int                                       | `500000000` | Read (XLSX, ODS)          |
+| Option                | Type                                       | Default     | Applies to                |
+|-----------------------|--------------------------------------------|-------------|---------------------------|
+| `assoc`               | bool                                       | `false`     | Read (All)                |
+| `strict`              | bool                                       | `false`     | Read (All), Write (CSV)   |
+| `stream`              | bool                                       | `true`      | Output (Any)              |
+| `limit`               | ?int                                       | `null`      | Read (All)                |
+| `offset`              | int                                        | `0`         | Read (All)                |
+| `skipEmptyLines`      | bool                                       | `true`      | Read (All)                |
+| `headers`             | string[]\|array<int, string[]>             | `[]`        | Read (All), Write (All)   |
+| `headerRows`          | int                                        | `1`         | Read (All), Write (All)   |
+| `headerOffset`        | int\|string\|null                          | `null`      | Read (All)                |
+| `headerNormalizer`    | null\|callable(string): string             | `null`      | Read (All)                |
+| `requiredColumns`     | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
+| `columns`             | string[]\|array<string\|int,string\|array> | `[]`        | Read (All)                |
+| `aliases`             | array<string\|int,string\|array>           | `[]`        | Read (All)                |
+| `stringifyValues`     | bool                                       | `true`      | Read (XLSX, ODS)          |
+| `inferNumericStrings` | bool                                       | `true`      | Write (XLSX, ODS)         |
+| `separator`           | string                                     | `"auto"`    | Read (CSV)                |
+| `enclosure`           | string                                     | `"`         | Read (CSV)                |
+| `escape`              | string                                     | `""`        | Read (CSV)                |
+| `eol`                 | string                                     | `\r\n`      | Write (CSV)               |
+| `inputEncoding`       | ?string                                    | `null`      | Read (CSV)                |
+| `outputEncoding`      | ?string                                    | `null`      | Read/Write (CSV)          |
+| `bom`                 | bool\|string\|Bom                          | `true`      | Write (CSV)               |
+| `escapeFormulas`      | bool/callable                              | `false`     | Write (CSV)               |
+| `meta`                | array/Meta                                 | `null`      | Write (XLSX, ODS)         |
+| `autofilter`          | ?string                                    | `null`      | Write (XLSX)              |
+| `freezePane`          | ?string                                    | `null`      | Write (XLSX)              |
+| `sheetProtection`     | bool\|string                               | `false`     | Write (XLSX)              |
+| `sheet`               | string/int                                 | `null`      | Read/Write (XLSX, ODS)    |
+| `boldHeaders`         | bool                                       | `false`     | Write (XLSX, ODS)         |
+| `tempPath`            | ?string                                    | `null`      | Any (Temp files location) |
+| `sharedStrings`       | bool                                       | `false`     | Write (XLSX)              |
+| `autoWidth`           | bool                                       | `false`     | Write (XLSX)              |
+| `maxWorksheetSize`    | ?int                                       | `500000000` | Read (XLSX, ODS)          |
 
 ## Exceptions
 
@@ -232,7 +234,7 @@ $writer->writeFile([
 
 Also in the package:
 
-- `Transform` — generator-based pipelines for trimming, casting, filtering, and chunking without loading data into memory
+- [`Transform`](docs/transform.md) — generator-based pipelines for trimming, casting, filtering, and chunking without loading data into memory
 - `Spread::getSheetNames()` — inspect the sheets of a workbook before choosing which to import
 
 ## Performance

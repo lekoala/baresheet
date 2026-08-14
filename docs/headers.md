@@ -78,9 +78,9 @@ Column selection provides dramatic performance improvements for XLSX and ODS fil
 
 | Format   | 20 columns → 5 columns | **Speedup**      | **Memory/CPU Savings**            |
 |----------|------------------------|------------------|-----------------------------------|
-| **XLSX** | 2.94s → 1.33s          | **~2.2x faster** | **High** (Skips XML Nodes)        |
-| **ODS**  | 1.80s → 1.25s          | **~1.4x faster** | **High** (Skips XML Nodes)        |
-| **CSV**  | 0.28s → 0.28s          | **Baseline**     | **90%+** fewer hash-table entries |
+| **XLSX** | 1.87s → 1.33s          | **~1.4x faster** | **High** (Skips XML Nodes)        |
+| **ODS**  | 2.00s → 1.43s          | **~1.4x faster** | **High** (Skips XML Nodes)        |
+| **CSV**  | 0.29s → 0.29s          | **Baseline**     | **90%+** fewer hash-table entries |
 
 > [!TIP]
 > **XLSX & ODS Performance**: Column selection provides dramatic speedups for XLSX and ODS files by skipping XML parsing for unselected cells. CSV benefits from a streamlined mapping path with zero intermediate allocations.
