@@ -385,6 +385,87 @@ class Spread
     }
 
     /**
+     * Strictly parse an ISO-8601 date/datetime (as stored in OOXML t="d"
+     * cells) into a UTC-neutral DateTimeImmutable.
+     *
+     * Only a narrow set of ISO forms is accepted, and the string must be fully
+     * consumed: out-of-range dates and trailing garbage are rejected rather
+     * than normalized. The result keeps the source's civil components but
+     * carries no timezone — an embedded offset is used for validation only.
+     *
+     * @return DateTimeImmutable|null Null when $value is not a valid ISO date.
+     */
+    public static function parseIsoDate(string $value): ?DateTimeImmutable
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        // Narrow full-match shape: date[ T time][.fraction][offset]. The
+        // offset is validated as a form only (Z or ±HH:MM); createFromFormat
+        // below handles the calendar/range validation of the civil part.
+        if (
+            preg_match(
+                '/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?)?(Z|[+-]\d{2}:\d{2})?$/D',
+                $value,
+                $m,
+                PREG_UNMATCHED_AS_NULL,
+            ) !== 1
+        ) {
+            return null;
+        }
+
+        if ($m[4] !== null && $m[4] !== 'Z') {
+            [$offsetHours, $offsetMinutes] = array_map('intval', explode(':', substr($m[4], 1)));
+            if ($offsetHours > 23 || $offsetMinutes > 59) {
+                return null;
+            }
+        }
+
+        $core = $m[1];
+        $format = '!Y-m-d';
+        if ($m[2] !== null) {
+            $core .= 'T' . $m[2];
+            if ($m[3] !== null) {
+                $core .= '.' . str_pad($m[3], 6, '0');
+                $format = '!Y-m-d\TH:i:s.u';
+            } else {
+                $format = '!Y-m-d\TH:i:s';
+            }
+        }
+
+        $date = DateTimeImmutable::createFromFormat($format, $core);
+        $errors = DateTimeImmutable::getLastErrors();
+        if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+
+        return new DateTimeImmutable($date->format('Y-m-d H:i:s.u'), self::utc());
+    }
+
+    /**
+     * Format microseconds since midnight as a canonical time-of-day string
+     * ("HH:MM:SS[.ffffff]"), without allocating a TimeValue.
+     *
+     * The value is expected to be within a single day, matching TimeValue.
+     */
+    public static function formatTimeMicroseconds(int $microseconds): string
+    {
+        $hour = intdiv($microseconds, 3_600_000_000);
+        $microseconds %= 3_600_000_000;
+        $minute = intdiv($microseconds, 60_000_000);
+        $microseconds %= 60_000_000;
+        $second = intdiv($microseconds, 1_000_000);
+        $microsecond = $microseconds % 1_000_000;
+
+        $result = sprintf('%02d:%02d:%02d', $hour, $minute, $second);
+        if ($microsecond > 0) {
+            $result .= '.' . str_pad((string) $microsecond, 6, '0', STR_PAD_LEFT);
+        }
+        return $result;
+    }
+
+    /**
      * Convert an Excel day fraction into a time of day.
      */
     public static function excelTimeToTimeValue(float|string $value): TimeValue
@@ -1122,9 +1203,21 @@ class Spread
      */
     public static function durationToSerial(\Time\Duration $duration): float
     {
-        return self::durationToMicroseconds($duration) / TimeValue::MICROSECONDS_PER_DAY;
+        return self::durationMicrosecondsToSerial(self::durationToMicroseconds($duration));
     }
 
+    public static function durationMicrosecondsToSerial(int $microseconds): float
+    {
+        return $microseconds / TimeValue::MICROSECONDS_PER_DAY;
+    }
+
+    /**
+     * Convert a Time\Duration to total microseconds.
+     *
+     * Baresheet represents temporal values at microsecond precision:
+     * sub-microsecond precision is truncated toward zero (not rounded), so a
+     * duration of 999 nanoseconds maps to 0 microseconds.
+     */
     public static function durationToMicroseconds(\Time\Duration $duration): int
     {
         $microseconds = ($duration->seconds * 1_000_000) + intdiv($duration->nanoseconds, 1_000);

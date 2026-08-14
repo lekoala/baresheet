@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
+use LeKoala\Baresheet\Value\DurationValue;
 use LeKoala\Baresheet\Value\TimeValue;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
@@ -251,12 +252,13 @@ class NativeTypesTest extends TestCase
 
         self::assertInstanceOf(DateTimeImmutable::class, $rows[0][0]);
         self::assertSame('1976-11-22 08:30:00', $rows[0][0]->format('Y-m-d H:i:s'));
-        // An explicit source offset is preserved; UTC is only the fallback.
         self::assertSame('+00:00', $rows[0][0]->format('P'));
 
+        // Offsets are validated but neutralized: civil components are kept,
+        // the timezone is dropped (08:30+02:00 reads back as 08:30 UTC).
         self::assertInstanceOf(DateTimeImmutable::class, $rows[0][1]);
         self::assertSame('1976-11-22 08:30:00', $rows[0][1]->format('Y-m-d H:i:s'));
-        self::assertSame('+02:00', $rows[0][1]->format('P'));
+        self::assertSame('+00:00', $rows[0][1]->format('P'));
 
         unlink($file);
     }
@@ -416,5 +418,22 @@ class NativeTypesTest extends TestCase
         self::assertSame(12.5, $rows[1][2]);
 
         unlink($tempFile);
+    }
+
+    public function testDurationValueRoundTrip(): void
+    {
+        foreach (['xlsx', 'ods'] as $ext) {
+            $tempFile = $this->tempFile($ext);
+            $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
+            $writer->inferNumericStrings = false;
+            $writer->writeFile([[DurationValue::fromTime(36, 30, 15)]], $tempFile);
+
+            $reader = $ext === 'xlsx' ? new XlsxReader() : new OdsReader();
+            $reader->stringifyValues = false;
+            $rows = iterator_to_array($reader->readFile($tempFile));
+            self::assertSame('36:30:15', $rows[0][0], $ext);
+
+            unlink($tempFile);
+        }
     }
 }

@@ -700,7 +700,7 @@ class OdsReader implements ReaderInterface
             if ($isDuration || $microseconds < 0 || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
                 return Spread::formatDurationMicroseconds($microseconds);
             }
-            return (string) TimeValue::fromMicroseconds($microseconds);
+            return Spread::formatTimeMicroseconds($microseconds);
         }
         if ($valueType === 'boolean') {
             return $value === 'true' || $value === '1';

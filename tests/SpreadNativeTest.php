@@ -118,6 +118,46 @@ class SpreadNativeTest extends TestCase
         self::assertSame('2023-10-15 12:29:59.999997', $imprecise->format('Y-m-d H:i:s.u'));
     }
 
+    #[DataProvider('isoDateProvider')]
+    public function testParseIsoDate(string $value, ?string $expected): void
+    {
+        $parsed = Spread::parseIsoDate($value);
+        if ($expected === null) {
+            self::assertNull($parsed, $value);
+            return;
+        }
+        self::assertInstanceOf(DateTimeImmutable::class, $parsed, $value);
+        self::assertSame($expected, $parsed->format('Y-m-d H:i:s.u'), $value);
+        // Spreadsheet dates are civil values: offsets never survive parsing.
+        self::assertSame('+00:00', $parsed->format('P'), $value);
+    }
+
+    public static function isoDateProvider(): array
+    {
+        return [
+            'date only' => ['1976-11-22', '1976-11-22 00:00:00.000000'],
+            'datetime' => ['1976-11-22T08:30:00', '1976-11-22 08:30:00.000000'],
+            'datetime utc' => ['1976-11-22T08:30:00Z', '1976-11-22 08:30:00.000000'],
+            'datetime offset civil kept' => ['1976-11-22T08:30:00+02:00', '1976-11-22 08:30:00.000000'],
+            'datetime fraction' => ['1976-11-22T08:30:00.123456Z', '1976-11-22 08:30:00.123456'],
+            'datetime fraction offset' => ['1976-11-22T08:30:00.123456+02:00', '1976-11-22 08:30:00.123456'],
+            'invalid garbage' => ['not-a-date', null],
+            'invalid month' => ['1976-13-01', null],
+            'invalid day out of range' => ['1976-02-30', null],
+            'invalid trailing data' => ['1976-11-22T08:30:00X', null],
+            'invalid missing seconds' => ['1976-11-22T08:30Z', null],
+        ];
+    }
+
+    public function testFormatTimeMicroseconds(): void
+    {
+        self::assertSame('00:00:00', Spread::formatTimeMicroseconds(0));
+        self::assertSame('08:30:00', Spread::formatTimeMicroseconds((8 * 3_600_000_000) + (30 * 60_000_000)));
+        self::assertSame('14:30:15', Spread::formatTimeMicroseconds(52_215_000_000));
+        self::assertSame('14:30:15.500000', Spread::formatTimeMicroseconds(52_215_500_000));
+        self::assertSame('23:59:59.999999', Spread::formatTimeMicroseconds(86_399_999_999));
+    }
+
     #[DataProvider('civilRoundTripProvider')]
     public function testCivilRoundTrip(string $dateTime): void
     {

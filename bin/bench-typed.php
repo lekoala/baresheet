@@ -11,7 +11,8 @@
  *
  * For each workload and format it measures:
  *   stringify = true  -> legacy CSV-like string output (the pre-evolution contract)
- *   stringify = false -> native typed output (int|float|bool|DateTimeImmutable|TimeValue)
+ *   stringify = false -> native typed output (int|float|bool|DateTimeImmutable,
+ *                        time/duration as canonical strings)
  *
  * A compact write section compares inferNumericStrings=true vs false on a
  * string-heavy dataset (the regex guess is skipped when false).
@@ -24,6 +25,8 @@
 
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
+use LeKoala\Baresheet\Value\DurationValue;
+use LeKoala\Baresheet\Value\TimeValue;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
@@ -63,6 +66,11 @@ function makeRow(string $scenario, int $i): array
                 $i, "name $i", dateValue($i), $i * 1.5, dateValue($i + 1),
                 "email-$i@example.com", dateValue($i + 2), $i % 5, dateValue($i + 3), dateValue($i + 4),
             ];
+        case 'times':
+            return [
+                timeValue($i), durationValue($i), $i, timeValue($i + 1), durationValue($i + 1),
+                "note $i", $i * 1.5, timeValue($i + 2), $i % 2 === 0, durationValue($i + 2),
+            ];
         case 'dates-only':
         default:
             return [
@@ -70,6 +78,20 @@ function makeRow(string $scenario, int $i): array
                 dateValue($i + 5), dateValue($i + 6), dateValue($i + 7), dateValue($i + 8), dateValue($i + 9),
             ];
     }
+}
+
+function timeValue(int $i): TimeValue
+{
+    return new TimeValue(($i * 7) % 24, ($i * 13) % 60, $i % 60);
+}
+
+function durationValue(int $i): DurationValue
+{
+    return DurationValue::fromTime(
+        hours: 36 + ($i % 40),
+        minutes: ($i * 5) % 60,
+        seconds: $i % 60,
+    );
 }
 
 /**
@@ -276,6 +298,7 @@ $scenarios = [
     'dates-light' => 'Dates: 1 temporal / 10 columns',
     'dates-heavy' => 'Dates: 5 temporal / 10 columns',
     'dates-only' => 'Dates: 10 temporal / 10 columns',
+    'times' => 'Times/Durations: 6 temporal / 10 columns',
 ];
 
 foreach (['xlsx', 'ods'] as $format) {

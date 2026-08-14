@@ -7,12 +7,13 @@ namespace LeKoala\Baresheet;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Value\DurationValue;
 use LeKoala\Baresheet\Value\TimeValue;
 
 /**
  * Zero-dependency ODS writer producing raw XML packaged by DirectZipWriter.
  *
- * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|TimeValue|DurationValue|null>
  */
 class OdsWriter implements WriterInterface
 {
@@ -294,6 +295,20 @@ class OdsWriter implements WriterInterface
                 if ($value instanceof \Time\Duration) {
                     $iso = Spread::formatIsoDurationFromMicroseconds(Spread::durationToMicroseconds($value));
                     $display = Spread::stringifyDuration($value);
+                    $buffer .=
+                        '<table:table-cell'
+                        . ' table:style-name="ce-duration"'
+                        . ' office:value-type="time"'
+                        . ' office:time-value="'
+                        . Spread::escapeXmlAttr($iso)
+                        . '">'
+                        . '<text:p>'
+                        . Spread::escapeXml($display)
+                        . '</text:p>'
+                        . '</table:table-cell>';
+                } elseif ($value instanceof DurationValue) {
+                    $iso = Spread::formatIsoDurationFromMicroseconds($value->microseconds);
+                    $display = (string) $value;
                     $buffer .=
                         '<table:table-cell'
                         . ' table:style-name="ce-duration"'

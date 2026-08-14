@@ -80,10 +80,6 @@ final class TimeValue implements \Stringable
 
     public function __toString(): string
     {
-        $result = sprintf('%02d:%02d:%02d', $this->hour, $this->minute, $this->second);
-        if ($this->microsecond > 0) {
-            $result .= '.' . str_pad((string) $this->microsecond, 6, '0', STR_PAD_LEFT);
-        }
-        return $result;
+        return \LeKoala\Baresheet\Spread::formatTimeMicroseconds($this->toMicroseconds());
     }
 }

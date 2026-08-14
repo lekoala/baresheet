@@ -7,12 +7,13 @@ namespace LeKoala\Baresheet;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Value\DurationValue;
 use LeKoala\Baresheet\Value\TimeValue;
 
 /**
  * Zero-dependency XLSX writer producing raw XML packaged by DirectZipWriter.
  *
- * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|TimeValue|DurationValue|null>
  */
 class XlsxWriter implements WriterInterface
 {
@@ -378,6 +379,10 @@ class XlsxWriter implements WriterInterface
 
                 if ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
+                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
+                    $vl = 16;
+                } elseif ($value instanceof DurationValue) {
+                    $excelSerial = Spread::durationMicrosecondsToSerial($value->microseconds);
                     $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {

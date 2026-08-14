@@ -601,6 +601,52 @@ foreach (Transform::chunk($rows, 1000) as $batch) {
 $page = Transform::slice($rows, offset: 100, limit: 20);
 ```
 
+## Value Types
+
+Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natural representation. In native mode (`stringifyValues: false`), the readers return:
+
+| Spreadsheet | PHP                              |
+|-------------|----------------------------------|
+| text        | `string`                         |
+| number      | `int\|float`                     |
+| boolean     | `bool`                           |
+| date/datetime | `DateTimeImmutable`            |
+| time        | canonical string (`HH:MM:SS[.ffffff]`) |
+| duration    | canonical string (`H:MM:SS[.ffffff]`) |
+
+Spreadsheet dates are **timezone-free civil values**: an offset present in the source is used for validation only and is not part of the round-trip contract.
+
+`int\|float` is a convenient PHP representation of a spreadsheet Number; the distinction itself is not guaranteed to survive a round-trip (`12.0` reads back as `12`).
+
+The writers map PHP values to spreadsheet cells:
+
+| PHP                    | Spreadsheet |
+|------------------------|-------------|
+| `string`               | text        |
+| `int\|float`           | number      |
+| `bool`                 | boolean     |
+| `DateTimeInterface`    | date/datetime |
+| `null`                 | blank       |
+| `TimeValue`            | time (explicit marker) |
+| `DurationValue`        | duration (explicit marker) |
+| `Time\Duration`        | duration (when available) |
+
+```php
+use LeKoala\Baresheet\Value\TimeValue;
+use LeKoala\Baresheet\Value\DurationValue;
+
+$writer->writeFile([
+    [
+        'opening_time' => new TimeValue(9, 30),
+        'elapsed' => DurationValue::fromTime(hours: 36, minutes: 30, seconds: 15),
+    ],
+], 'report.xlsx');
+```
+
+`TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP.
+
+Temporal values are represented at **microsecond precision**. A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
+
 ## Streaming Output
 
 For large files, streaming avoids writing a temporary file to disk. **Baresheet streams CSV, XLSX, and ODS `output()` by default.**

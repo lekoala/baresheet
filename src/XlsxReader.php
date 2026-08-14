@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use DateTimeImmutable;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
@@ -573,15 +572,11 @@ class XlsxReader implements ReaderInterface
             return $v;
         }
 
-        // OOXML t="d" cells carry an explicit ISO-8601 date/datetime. An
-        // embedded offset (e.g. "Z") is preserved; UTC is only the fallback
-        // when the string carries no timezone.
+        // OOXML t="d" cells carry an explicit ISO-8601 date/datetime. The
+        // value is validated strictly and neutralized to UTC civil components:
+        // an embedded offset is not part of the round-trip contract.
         if ($t === 'd') {
-            try {
-                return new DateTimeImmutable($v, Spread::utc());
-            } catch (\Exception) {
-                return $v;
-            }
+            return Spread::parseIsoDate($v) ?? $v;
         }
 
         // Cells without an explicit type attribute default to numeric in XLSX.
