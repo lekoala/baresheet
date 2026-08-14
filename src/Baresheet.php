@@ -15,11 +15,12 @@ use LeKoala\Baresheet\Exception\UnsupportedFormatException;
  * concrete implementations.
  *
  * @phpstan-type WritableCell bool|float|int|string|\Stringable|null
- * @phpstan-type WritableRow array<int|string, WritableCell>
+ * @phpstan-type TemporalCell \DateTimeInterface|\LeKoala\Baresheet\Value\TimeValue|\LeKoala\Baresheet\Value\DurationValue|\Time\Duration
+ * @phpstan-type FacadeWritableCell WritableCell|TemporalCell
+ * @phpstan-type WritableRow array<int|string, FacadeWritableCell>
  *
- * The write methods accept the common denominator above; XLSX/ODS writes
- * additionally accept temporal cells (DateTimeInterface, Time\Duration,
- * TimeValue, DurationValue).
+ * The write methods accept the common denominator for all formats, plus the
+ * temporal cells above, which apply to XLSX/ODS writes.
  */
 class Baresheet
 {
@@ -131,6 +132,7 @@ class Baresheet
     /**
      * Get a writer instance for the given extension.
      *
+     * @return CsvWriter|XlsxWriter|OdsWriter
      * @throws UnsupportedFormatException
      */
     public static function getWriter(string $ext): WriterInterface
