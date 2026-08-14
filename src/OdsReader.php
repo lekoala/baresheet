@@ -694,13 +694,13 @@ class OdsReader implements ReaderInterface
             }
             $microseconds = Spread::parseIsoDurationToMicroseconds($value);
             // A duration style marks an elapsed duration regardless of magnitude;
-            // a time-of-day style (or an unknown style) only carries a duration
-            // when it exceeds a single day.
+            // a negative value can never be a time of day. Otherwise a time-style
+            // (or an unknown style) only carries a duration past a single day.
             $isDuration = $timeStyles[$cellStyleName ?? ''] ?? false;
-            if ($isDuration || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
+            if ($isDuration || $microseconds < 0 || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
                 return Spread::durationFromMicroseconds($microseconds);
             }
-            return $microseconds >= 0 ? TimeValue::fromMicroseconds($microseconds) : null;
+            return TimeValue::fromMicroseconds($microseconds);
         }
         if ($valueType === 'boolean') {
             return $value === 'true' || $value === '1';

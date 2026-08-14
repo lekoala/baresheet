@@ -292,4 +292,32 @@ class NativeTypesTest extends TestCase
 
         unlink($file);
     }
+
+    public function testOdsNegativeTimeWithoutDurationStyleIsDuration(): void
+    {
+        // A negative time value cannot be a time of day: it must be a duration,
+        // even when no recognizable duration style is present (external files).
+        $file = $this->odsWithContent(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+                xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                office:version="1.3">
+              <office:body><office:spreadsheet>
+                <table:table table:name="Sheet1">
+                  <table:table-row>
+                    <table:table-cell office:value-type="time" office:time-value="-PT1H"><text:p>-01:00:00</text:p></table:table-cell>
+                  </table:table-row>
+                </table:table>
+              </office:spreadsheet></office:body>
+            </office:document-content>
+            XML);
+
+        $reader = new OdsReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+        self::assertSame('-1:00:00', $rows[0][0]);
+
+        unlink($file);
+    }
 }

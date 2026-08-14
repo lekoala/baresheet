@@ -118,12 +118,6 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     $rows = isset($argv[4]) ? (int) $argv[4] : DEFAULT_ROWS;
 
     $isWrite = str_starts_with($key, 'write-');
-    if ($isWrite) {
-        $data = [];
-        for ($i = 1; $i <= $rows; $i++) {
-            $data[] = makeWriteRow($i);
-        }
-    }
 
     gc_collect_cycles();
     if (function_exists('memory_reset_peak_usage')) {
@@ -132,7 +126,9 @@ if (isset($argv[1]) && $argv[1] === '--memory') {
     $startMem = memory_get_usage();
 
     if ($isWrite) {
-        runWrite($key, $data, $file);
+        // Stream via the generator so the peak is the writer's, not a
+        // pre-built data array (memory_reset_peak_usage is PHP 8.2+ only).
+        runWrite($key, writeRowGenerator($rows), $file);
     } else {
         runRead($key, $file);
     }
@@ -182,7 +178,7 @@ function runRead(string $key, string $file): void
 }
 
 /** Run a write key ('write-xlsx-stringify', 'write-ods-native', ...). */
-function runWrite(string $key, array $data, string $file): void
+function runWrite(string $key, iterable $data, string $file): void
 {
     $writer = str_contains($key, '-ods-') ? new OdsWriter() : new XlsxWriter();
     $writer->inferNumericStrings = str_ends_with($key, '-stringify');
@@ -238,13 +234,18 @@ function readBenchmark(string $format, string $scenario, string $label, string $
     ensureFixture($file, $scenario, $format, $rows);
 
     $results = [];
-    foreach (['stringify' => true, 'native' => false] as $mode => $stringify) {
-        $times = [];
-        for ($i = 0; $i < REPS; $i++) {
-            $times[] = measureTime("read-{$format}-{$mode}", $file, $rows);
+    $times = ['stringify' => [], 'native' => []];
+    for ($i = 0; $i < REPS; $i++) {
+        // Alternate the modes across runs to be robust to OS/CPU/AV drift.
+        $order = ['stringify', 'native'];
+        shuffle($order);
+        foreach ($order as $mode) {
+            $times[$mode][] = measureTime("read-{$format}-{$mode}", $file, $rows);
         }
+    }
+    foreach (['stringify', 'native'] as $mode) {
         $results[$mode] = [
-            'time' => median($times),
+            'time' => median($times[$mode]),
             'memory' => measureMemory("read-{$format}-{$mode}", $file, $rows),
         ];
     }
@@ -294,13 +295,17 @@ echo "|---|---|---|---|" . PHP_EOL;
 
 foreach (['xlsx', 'ods'] as $format) {
     $writeResults = [];
-    foreach (['stringify' => true, 'native' => false] as $mode => $infer) {
-        $times = [];
-        for ($i = 0; $i < REPS; $i++) {
-            $times[] = measureTime("write-{$format}-{$mode}", "{$tempDir}/bench-typed-write-tmp.{$format}", $rows);
+    $times = ['stringify' => [], 'native' => []];
+    for ($i = 0; $i < REPS; $i++) {
+        $order = ['stringify', 'native'];
+        shuffle($order);
+        foreach ($order as $mode) {
+            $times[$mode][] = measureTime("write-{$format}-{$mode}", "{$tempDir}/bench-typed-write-tmp.{$format}", $rows);
         }
+    }
+    foreach (['stringify', 'native'] as $mode) {
         $writeResults[$mode] = [
-            'time' => median($times),
+            'time' => median($times[$mode]),
             'memory' => measureMemory("write-{$format}-{$mode}", "{$tempDir}/bench-typed-write-tmp.{$format}", $rows),
         ];
     }
