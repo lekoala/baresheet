@@ -15,7 +15,7 @@ use LeKoala\Baresheet\Exception\UnsupportedFormatException;
  * concrete implementations.
  *
  * @phpstan-type WritableCell bool|float|int|string|\Stringable|null
- * @phpstan-type TemporalCell \DateTimeInterface|\LeKoala\Baresheet\Value\TimeValue|\LeKoala\Baresheet\Value\DurationValue|\Time\Duration
+ * @phpstan-type TemporalCell \DateTimeInterface|\Time\Duration
  * @phpstan-type FacadeWritableCell WritableCell|TemporalCell
  * @phpstan-type WritableRow array<int|string, FacadeWritableCell>
  *

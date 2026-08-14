@@ -10,10 +10,7 @@ use LeKoala\Baresheet\Exception\WriteException;
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
  *
- * CSV serializes every cell to text, so temporal values are accepted and
- * stringified like any other value.
- *
- * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|\DateTimeInterface|\Time\Duration|null>
+ * @phpstan-import-type WritableRow from WriterInterface
  */
 class CsvWriter implements WriterInterface
 {
