@@ -13,9 +13,13 @@ use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
 /**
- * Core contract of the native-type evolution: readers preserve the semantic
- * value type of the source, writers preserve PHP value types, and a full
- * read -> write -> read round trip preserves both types and values.
+ * Core contract of the native-type evolution.
+ *
+ * Baresheet preserves fundamental spreadsheet value kinds where PHP has a
+ * natural representation. Date and datetime values use `DateTimeImmutable`;
+ * time-of-day and duration values are exposed as canonical strings.
+ * Spreadsheet formatting semantics are not guaranteed to survive a generic
+ * read/write round-trip.
  *
  * These tests run in native mode explicitly (stringifyValues=false,
  * inferNumericStrings=false), independent of the interim BC defaults.
@@ -105,9 +109,8 @@ class NativeTypesTest extends TestCase
         self::assertInstanceOf(DateTimeImmutable::class, $datetime);
         self::assertSame('2026-08-13 14:30:15', $datetime->format('Y-m-d H:i:s'));
 
-        $time = $rows[7][1];
-        self::assertInstanceOf(TimeValue::class, $time);
-        self::assertSame(52_215_000_000, $time->toMicroseconds());
+        // Time-of-day cells come back as canonical strings, not TimeValue objects.
+        self::assertSame('14:30:15', $rows[7][1]);
 
         self::assertTrue($rows[8][1] === null || $rows[8][1] === '');
 
@@ -181,9 +184,7 @@ class NativeTypesTest extends TestCase
         self::assertInstanceOf(DateTimeImmutable::class, $created);
         self::assertSame('2025-01-01 10:00:00', $created->format('Y-m-d H:i:s'));
 
-        $bestTime = $data[0]['BestTime'];
-        self::assertInstanceOf(TimeValue::class, $bestTime);
-        self::assertSame(10 * 3_600_000_000, $bestTime->toMicroseconds());
+        self::assertSame('10:00:00', $data[0]['BestTime']);
     }
 
     public function testNativeReads1904Fixture(): void
@@ -213,6 +214,51 @@ class NativeTypesTest extends TestCase
         $zip->addFromString('content.xml', $contentXml);
         $zip->close();
         return $file;
+    }
+
+    /**
+     * Build a minimal XLSX archive containing the given worksheet XML.
+     * The Baresheet XLSX reader falls back to xl/worksheets/sheet1.xml when
+     * no sheet is selected, so this is enough for a focused cell test.
+     */
+    private function xlsxWithWorksheet(string $sheetXml): string
+    {
+        $file = $this->tempFile('xlsx');
+        $zip = new \ZipArchive();
+        $zip->open($file, \ZipArchive::CREATE);
+        $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
+        $zip->close();
+        return $file;
+    }
+
+    public function testXlsxTypedDateCellDecodesToDateTimeImmutable(): void
+    {
+        $file = $this->xlsxWithWorksheet(<<<'XML'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <sheetData>
+                <row r="1">
+                  <c r="A1" t="d"><v>1976-11-22T08:30:00Z</v></c>
+                  <c r="B1" t="d"><v>1976-11-22T08:30:00+02:00</v></c>
+                </row>
+              </sheetData>
+            </worksheet>
+            XML);
+
+        $reader = new XlsxReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($file));
+
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][0]);
+        self::assertSame('1976-11-22 08:30:00', $rows[0][0]->format('Y-m-d H:i:s'));
+        // An explicit source offset is preserved; UTC is only the fallback.
+        self::assertSame('+00:00', $rows[0][0]->format('P'));
+
+        self::assertInstanceOf(DateTimeImmutable::class, $rows[0][1]);
+        self::assertSame('1976-11-22 08:30:00', $rows[0][1]->format('Y-m-d H:i:s'));
+        self::assertSame('+02:00', $rows[0][1]->format('P'));
+
+        unlink($file);
     }
 
     public function testOdsStringifyPreservesLegacyLexicalForms(): void
@@ -282,15 +328,11 @@ class NativeTypesTest extends TestCase
         $reader->stringifyValues = false;
         $rows = iterator_to_array($reader->readFile($file));
 
-        self::assertInstanceOf(TimeValue::class, $rows[0][0]);
-        self::assertSame(12 * 3_600_000_000, $rows[0][0]->toMicroseconds());
-
-        // A duration style marks an elapsed duration even under 24 hours.
-        $duration = $rows[0][1];
-        self::assertInstanceOf(\Time\Duration::class, $duration);
-        self::assertSame(43_200, $duration->seconds);
-        self::assertSame(0, $duration->nanoseconds);
-        self::assertFalse($duration->negative);
+        // Both a time of day and an elapsed duration under 24 hours surface as
+        // the same canonical string; the ODS style distinction no longer maps
+        // to a distinct PHP type.
+        self::assertSame('12:00:00', $rows[0][0]);
+        self::assertSame('12:00:00', $rows[0][1]);
 
         unlink($file);
     }
@@ -319,9 +361,8 @@ class NativeTypesTest extends TestCase
         $reader->stringifyValues = false;
         $rows = iterator_to_array($reader->readFile($file));
 
-        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
-        self::assertTrue($rows[0][0]->negative);
-        self::assertSame(3_600, $rows[0][0]->seconds);
+        // A negative time is always a duration, surfaced as a canonical string.
+        self::assertSame('-1:00:00', $rows[0][0]);
 
         unlink($file);
     }
@@ -336,10 +377,8 @@ class NativeTypesTest extends TestCase
         $reader = new XlsxReader();
         $reader->stringifyValues = false;
         $rows = iterator_to_array($reader->readFile($tempFile));
-        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
-        self::assertSame(131_415, $rows[0][0]->seconds);
-        self::assertSame(0, $rows[0][0]->nanoseconds);
-        self::assertFalse($rows[0][0]->negative);
+        // Durations come back as canonical strings; Time\Duration is a writer-only marker.
+        self::assertSame('36:30:15', $rows[0][0]);
 
         unlink($tempFile);
     }
@@ -354,10 +393,27 @@ class NativeTypesTest extends TestCase
         $reader = new OdsReader();
         $reader->stringifyValues = false;
         $rows = iterator_to_array($reader->readFile($tempFile));
-        self::assertInstanceOf(\Time\Duration::class, $rows[0][0]);
-        self::assertSame(131_415, $rows[0][0]->seconds);
-        self::assertSame(0, $rows[0][0]->nanoseconds);
-        self::assertFalse($rows[0][0]->negative);
+        self::assertSame('36:30:15', $rows[0][0]);
+
+        unlink($tempFile);
+    }
+
+    public function testNumberIntFloatDistinctionIsNotRoundTripMetadata(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $writer->inferNumericStrings = false;
+        $writer->writeFile([['int' => 12, 'float' => 12.0, 'decimal' => 12.5]], $tempFile);
+
+        $reader = new XlsxReader();
+        $reader->stringifyValues = false;
+        $rows = iterator_to_array($reader->readFile($tempFile));
+
+        // The spreadsheet has one Number type; int vs float is not round-trip metadata.
+        self::assertSame(['int', 'float', 'decimal'], $rows[0]);
+        self::assertSame(12, $rows[1][0]);
+        self::assertSame(12, $rows[1][1]);
+        self::assertSame(12.5, $rows[1][2]);
 
         unlink($tempFile);
     }

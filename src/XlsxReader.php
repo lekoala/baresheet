@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
+use DateTimeImmutable;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
@@ -572,6 +573,17 @@ class XlsxReader implements ReaderInterface
             return $v;
         }
 
+        // OOXML t="d" cells carry an explicit ISO-8601 date/datetime. An
+        // embedded offset (e.g. "Z") is preserved; UTC is only the fallback
+        // when the string carries no timezone.
+        if ($t === 'd') {
+            try {
+                return new DateTimeImmutable($v, Spread::utc());
+            } catch (\Exception) {
+                return $v;
+            }
+        }
+
         // Cells without an explicit type attribute default to numeric in XLSX.
         if (!is_numeric($v)) {
             return $v;
@@ -580,8 +592,8 @@ class XlsxReader implements ReaderInterface
         $floatValue = (float) $v;
         return match ($classification) {
             'date', 'datetime' => Spread::excelDateToImmutable($v, $is1904),
-            'time' => Spread::excelTimeToTimeValue($floatValue),
-            'duration' => Spread::durationFromSerial($floatValue),
+            'time' => (string) Spread::excelTimeToTimeValue($floatValue),
+            'duration' => Spread::durationSerialToString($floatValue),
             default => Spread::parseNumericValue($v),
         };
     }

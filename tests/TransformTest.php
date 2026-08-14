@@ -587,4 +587,53 @@ class TransformTest extends TestCase
         $result = iterator_to_array(Transform::cast($data, ['created' => 'date']));
         self::assertNull($result[0]['created']);
     }
+
+    public function testCastDatePassesNativeDateTimeImmutableThrough(): void
+    {
+        $date = new DateTimeImmutable('2024-01-15 10:30:00', new \DateTimeZone('UTC'));
+
+        $result = iterator_to_array(Transform::cast([['created' => $date]], ['created' => 'date']));
+
+        self::assertSame($date, $result[0]['created']);
+    }
+
+    public function testCastDateConvertsNativeMutableDateTime(): void
+    {
+        $date = new \DateTime('2024-01-15 10:30:00', new \DateTimeZone('UTC'));
+
+        $result = iterator_to_array(Transform::cast([['created' => $date]], ['created' => 'date']));
+
+        self::assertInstanceOf(DateTimeImmutable::class, $result[0]['created']);
+        self::assertNotSame($date, $result[0]['created']);
+        self::assertSame('2024-01-15 10:30:00', $result[0]['created']->format('Y-m-d H:i:s'));
+    }
+
+    public function testCastDateNullablePassesNativeDateTimeThrough(): void
+    {
+        $date = new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC'));
+
+        $result = iterator_to_array(Transform::cast([['created' => $date]], ['created' => '?date']));
+
+        self::assertSame($date, $result[0]['created']);
+    }
+
+    public function testCastStrictDatePassesNativeDateTimeImmutableThrough(): void
+    {
+        $date = new DateTimeImmutable('2024-01-15', new \DateTimeZone('UTC'));
+
+        $result = iterator_to_array(Transform::castStrict([['created' => $date]], ['created' => 'date']));
+
+        self::assertSame($date, $result[0]['created']);
+    }
+
+    public function testCastStrictDateConvertsNativeMutableDateTime(): void
+    {
+        $date = new \DateTime('2024-01-15 10:30:00', new \DateTimeZone('UTC'));
+
+        $result = iterator_to_array(Transform::castStrict([['created' => $date]], ['created' => 'date']));
+
+        self::assertInstanceOf(DateTimeImmutable::class, $result[0]['created']);
+        self::assertNotSame($date, $result[0]['created']);
+        self::assertSame('2024-01-15 10:30:00', $result[0]['created']->format('Y-m-d H:i:s'));
+    }
 }

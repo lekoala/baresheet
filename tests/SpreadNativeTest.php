@@ -38,6 +38,17 @@ class SpreadNativeTest extends TestCase
         ];
     }
 
+    public function testNumberCollapseIsNotRoundTripMetadata(): void
+    {
+        // The spreadsheet has one Number type; the PHP int|float distinction is
+        // a chosen representation, not round-trip metadata. These are the exact
+        // string forms the writers emit via the (string) cast.
+        self::assertSame(12, Spread::parseNumericValue((string) 12.0));
+        self::assertSame(12.5, Spread::parseNumericValue((string) 12.5));
+        self::assertSame(1000, Spread::parseNumericValue((string) 1e3));
+        self::assertSame(0, Spread::parseNumericValue((string) -0.0));
+    }
+
     #[DataProvider('classifyProvider')]
     public function testClassifyNumberFormat(string $format, string $expected): void
     {

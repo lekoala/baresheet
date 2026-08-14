@@ -698,9 +698,9 @@ class OdsReader implements ReaderInterface
             // (or an unknown style) only carries a duration past a single day.
             $isDuration = $timeStyles[$cellStyleName ?? ''] ?? false;
             if ($isDuration || $microseconds < 0 || $microseconds >= TimeValue::MICROSECONDS_PER_DAY) {
-                return Spread::durationFromMicroseconds($microseconds);
+                return Spread::formatDurationMicroseconds($microseconds);
             }
-            return TimeValue::fromMicroseconds($microseconds);
+            return (string) TimeValue::fromMicroseconds($microseconds);
         }
         if ($valueType === 'boolean') {
             return $value === 'true' || $value === '1';

@@ -1145,6 +1145,17 @@ class Spread
     }
 
     /**
+     * Convert an Excel serial (days) to the canonical duration string.
+     *
+     * Always microseconds-based, independent of the PHP Time API availability,
+     * so readers never depend on Time\Duration.
+     */
+    public static function durationSerialToString(float $serial): string
+    {
+        return self::formatDurationMicroseconds((int) round($serial * TimeValue::MICROSECONDS_PER_DAY));
+    }
+
+    /**
      * @return object|string See {@see durationFromSerial()}.
      */
     public static function durationFromMicroseconds(int $microseconds): object|string

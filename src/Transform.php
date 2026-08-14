@@ -145,7 +145,9 @@ class Transform
      * $types maps column names (assoc mode) or indices (non-assoc) to type strings:
      * 'int', 'float', 'bool', 'string', 'date'.
      *
-     * For 'date', values are parsed as ISO 8601 strings and returned as DateTimeInterface.
+     * For 'date', values are parsed as ISO 8601 strings and returned as
+     * DateTimeInterface. A native DateTimeInterface value passes through
+     * unchanged (a mutable DateTime is converted to DateTimeImmutable).
      *
      * @param iterable<array<mixed>> $data
      * @param array<int|string, string> $types
@@ -290,6 +292,12 @@ class Transform
             };
         }
 
+        if ($baseType === 'date' && $value instanceof \DateTimeInterface) {
+            return $value instanceof DateTimeImmutable
+                ? $value
+                : DateTimeImmutable::createFromInterface($value);
+        }
+
         $str = is_scalar($value) || $value instanceof \Stringable
             ? (string) $value
             : '';
@@ -321,6 +329,12 @@ class Transform
                 row: $rowNum,
                 column: (string) $col,
             );
+        }
+
+        if ($baseType === 'date' && $value instanceof \DateTimeInterface) {
+            return $value instanceof DateTimeImmutable
+                ? $value
+                : DateTimeImmutable::createFromInterface($value);
         }
 
         $str = is_scalar($value) || $value instanceof \Stringable

@@ -6,7 +6,7 @@ Fast, zero-dependency CSV, XLSX, and ODS reader/writer for PHP.
 
 ## Requirements
 
-- PHP 8.1.2+
+- PHP 8.1.2+ (64-bit)
 - ext-mbstring (Required for all formats)
 
 ### Format Specific (Required for XLSX/ODS)
