@@ -173,8 +173,10 @@ class XlsxWriter implements WriterInterface
     }
 
     /**
-     * Package the full XLSX (static parts + worksheet + optional shared strings)
-     * into a seekable stream via DirectZipWriter.
+     * Package the full XLSX into the target stream via DirectZipWriter.
+     *
+     * DirectZipWriter selects its seek/patch or data-descriptor strategy from
+     * the target stream's seekability.
      *
      * @param iterable<WritableRow> $data
      * @param resource $stream

@@ -16,7 +16,9 @@ use LeKoala\Baresheet\Exception\WriteException;
  * final CRC and sizes without requiring ftell() or fseek().
  *
  * Capabilities:
- *  - classic ZIP and ZIP64 (entry- and archive-level, only when required)
+ *  - classic ZIP and ZIP64; seekable outputs enable ZIP64 only when final
+ *    sizes or offsets require it, while non-seekable entries advertise
+ *    ZIP64 proactively because their sizes are not known in advance
  *  - DEFLATE and STORE compression
  *  - UTF-8 filenames (EFS flag)
  *  - seekable and non-seekable output
@@ -172,7 +174,9 @@ final class DirectZipWriter
      * Add an entry produced incrementally by a callback.
      *
      * The producer receives a single write function and pushes any number of
-     * chunks through it. ZIP64 is decided automatically from the final sizes.
+     * chunks through it. Seekable outputs select classic ZIP or ZIP64 from
+     * the final sizes. Non-seekable outputs use a ZIP64-capable local header
+     * and data descriptor because those sizes are not known in advance.
      *
      * @param callable(callable(string):void):void $producer
      */
