@@ -345,9 +345,9 @@ foreach ($writeResults as $label => $stats) {
 
 echo PHP_EOL;
 
-// --- Read type parity: what PHP values each reader returns on the same file ---
+// --- Read value semantics: what PHP values each reader returns on the same file ---
 
-echo "# Read Type Parity (Baresheet native vs xlswriter)\n\n";
+echo "# Read Value Semantics (Baresheet native vs xlswriter)\n\n";
 echo "> Same XLSX written by Baresheet (native markers), read back by both readers.\n\n";
 
 $parityFile = "$tempDir/bench-types.xlsx";

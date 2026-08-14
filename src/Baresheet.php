@@ -13,6 +13,13 @@ use LeKoala\Baresheet\Exception\UnsupportedFormatException;
  * Detects file type by file extension or content inspection and delegates
  * to the appropriate reader/writer. No adapter-routing machinery — just
  * concrete implementations.
+ *
+ * @phpstan-type WritableCell bool|float|int|string|\Stringable|null
+ * @phpstan-type WritableRow array<int|string, WritableCell>
+ *
+ * The write methods accept the common denominator above; XLSX/ODS writes
+ * additionally accept temporal cells (DateTimeInterface, Time\Duration,
+ * TimeValue, DurationValue).
  */
 class Baresheet
 {
@@ -53,7 +60,7 @@ class Baresheet
     /**
      * Write data to a file, format determined by extension.
      *
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function write(iterable $data, string $filename, ?Options $options = null): bool
@@ -68,7 +75,7 @@ class Baresheet
     /**
      * Write data to a stream. Extension is required.
      *
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @param string $ext  'csv', 'xlsx', or 'ods'
      * @return resource The opened stream containing the data. It is the caller's responsibility to close it.
      */
@@ -82,7 +89,7 @@ class Baresheet
     /**
      * Write data to a string. Extension is required.
      *
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @param string $ext  'csv', 'xlsx', or 'ods'
      */
     public static function writeString(iterable $data, string $ext, ?Options $options = null): string
@@ -95,7 +102,7 @@ class Baresheet
     /**
      * Stream data as a download, format determined by extension.
      *
-     * @param iterable<array<float|int|string|\Stringable|null>> $data
+     * @param iterable<WritableRow> $data
      * @throws UnsupportedFormatException If the format can't be determined or isn't supported.
      */
     public static function output(iterable $data, string $filename, ?Options $options = null): void

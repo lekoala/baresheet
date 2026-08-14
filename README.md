@@ -2,7 +2,7 @@
 
 Fast, lightweight CSV, XLSX, and ODS reader/writer for PHP with no runtime Composer dependencies.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
 
 ## Requirements
 
@@ -100,7 +100,7 @@ $writer->writeFile($data, 'report.xlsx');
 
 ### Options
 
-Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration.
+Readers and writers are configured objects: you set their options once, then read/write as many times as you like with that same configuration. Use named arguments when constructing `Options` — the parameter list is large and its order is not part of the API contract.
 
 ```php
 $opts = new Options(
@@ -120,9 +120,10 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `assoc`               | bool                                       | `false`     | Read (All)                |
 | `strict`              | bool                                       | `false`     | Read (All), Write (CSV)   |
 | `stream`              | bool                                       | `true`      | Output (Any)              |
-| `limit`               | ?int                                       | `null`      | Read (All)                |
-| `offset`              | int                                        | `0`         | Read (All)                |
 | `skipEmptyLines`      | bool                                       | `true`      | Read (All)                |
+| `offset`              | int                                        | `0`         | Read (All)                |
+| `limit`               | ?int                                       | `null`      | Read (All)                |
+| `tempPath`            | ?string                                    | `null`      | Any (Temp files location) |
 | `headers`             | string[]\|array<int, string[]>             | `[]`        | Read (All), Write (All)   |
 | `headerRows`          | int                                        | `1`         | Read (All), Write (All)   |
 | `headerOffset`        | int\|string\|null                          | `null`      | Read (All)                |
@@ -138,6 +139,8 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `eol`                 | string                                     | `\r\n`      | Write (CSV)               |
 | `inputEncoding`       | ?string                                    | `null`      | Read (CSV)                |
 | `outputEncoding`      | ?string                                    | `null`      | Read/Write (CSV)          |
+| `skipInputBOM`        | bool                                       | `true`      | Read (CSV)                |
+| `transcodeBomInput`   | bool                                       | `true`      | Read (CSV)                |
 | `bom`                 | bool\|string\|Bom                          | `true`      | Write (CSV)               |
 | `escapeFormulas`      | bool/callable                              | `false`     | Write (CSV)               |
 | `meta`                | array/Meta                                 | `null`      | Write (XLSX, ODS)         |
@@ -146,7 +149,6 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `sheetProtection`     | bool\|string                               | `false`     | Write (XLSX)              |
 | `sheet`               | string/int                                 | `null`      | Read/Write (XLSX, ODS)    |
 | `boldHeaders`         | bool                                       | `false`     | Write (XLSX, ODS)         |
-| `tempPath`            | ?string                                    | `null`      | Any (Temp files location) |
 | `sharedStrings`       | bool                                       | `false`     | Write (XLSX)              |
 | `autoWidth`           | bool                                       | `false`     | Write (XLSX)              |
 | `maxWorksheetSize`    | ?int                                       | `500000000` | Read (XLSX, ODS)          |

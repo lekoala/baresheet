@@ -1,6 +1,6 @@
 {
     "name": "lekoala/baresheet",
-    "description": "Fast, zero-dependency CSV, XLSX and ODS reader/writer for PHP",
+    "description": "Fast, lightweight CSV, XLSX and ODS reader/writer for PHP with no runtime Composer dependencies",
     "keywords": [
         "php",
         "spreadsheet",

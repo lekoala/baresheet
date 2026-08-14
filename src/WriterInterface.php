@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 /**
- * @phpstan-type WritableCell float|int|string|\Stringable|null
+ * Common denominator for all writers. XLSX/ODS additionally accept temporal
+ * cells (DateTimeInterface, Time\Duration, TimeValue, DurationValue).
+ *
+ * @phpstan-type WritableCell bool|float|int|string|\Stringable|null
  * @phpstan-type WritableRow array<int|string, WritableCell>
  */
 interface WriterInterface

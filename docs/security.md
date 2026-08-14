@@ -34,7 +34,7 @@ $writer->escapeFormulas = function (string $cell, int $colIndex): string {
 $writer->writeFile($data, 'export.csv');
 ```
 
-**Important:** Heuristic detection of "malicious" formulas is fundamentally unreliable. Attackers can use `CHAR()` functions to build strings character-by-character, and new attack vectors emerge constantly. The library takes a conservative approach: blanket escaping by default when enabled, or user-controlled selective escaping via callback. For maximum security with user-generated content, prefer **XLSX** format, which has explicit cell type metadata and is immune to formula injection.
+**Important:** Heuristic detection of "malicious" formulas is fundamentally unreliable. Attackers can use `CHAR()` functions to build strings character-by-character, and new attack vectors emerge constantly. The library takes a conservative approach: blanket escaping by default when enabled, or user-controlled selective escaping via callback. For untrusted textual data, **XLSX** is preferable here because Baresheet writes PHP strings as explicit text cells rather than formulas.
 
 ## XLSX Sheet Protection
 

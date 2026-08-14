@@ -10,7 +10,7 @@ namespace LeKoala\Baresheet;
 class Options
 {
     public function __construct(
-        // ─── Common ──────────────────────────────
+        // ─── General ──────────────────────────────
         /**
          * @var bool If true, readers return associative arrays using the first row as keys.
          */
@@ -23,16 +23,36 @@ class Options
          * @var bool If true, writers stream the output directly to stdout instead of buffering.
          */
         public bool $stream = true,
-        /**
-         * @var string[] Predefined headers to use for reading or writing.
-         */
-        public array $headers = [],
         /** @var bool If true, empty lines are skipped during reading. */
         public bool $skipEmptyLines = true,
         /** @var int Number of rows to skip at the beginning. */
         public int $offset = 0,
         /** @var ?int Maximum number of rows to read. */
         public ?int $limit = null,
+        /** @var ?string Directory path for temporary files during extraction/creation. */
+        public ?string $tempPath = null,
+        // ─── Headers / schema ─────────────────────
+        /**
+         * @var string[] Predefined headers to use for reading or writing.
+         */
+        public array $headers = [],
+        /** @var int Number of consecutive rows that define the header (1 = flat, >1 = hierarchical). */
+        public int $headerRows = 1,
+        /**
+         * @var int|string|null Number of logical records to skip before the header block starts.
+         *                    null  = BC behaviour (no header offset).
+         *                    int   = records to skip before header (e.g. 2 = skip 2 rows, header starts on 3rd).
+         *                    'auto' = automatically detect header position (requires requiredColumns).
+         *                    This applies to CSV/XLSX/ODS readers.
+         */
+        public int|string|null $headerOffset = null,
+        /**
+         * @var null|callable(string): string Callback applied to source headers before schema validation,
+         *                                      requiredColumns, columns and aliases. Receives a single header
+         *                                      cell string and must return the normalized string. Applied to
+         *                                      non-empty header cells only.
+         */
+        public $headerNormalizer = null,
         /** @var string[] Required column names that must exist in the header row. */
         public array $requiredColumns = [],
         /** @var string[] Columns to extract (selects and reorders). Empty = all columns. */
@@ -43,24 +63,7 @@ class Options
          *                              Nested:  ['Contact' => ['E-mail' => 'email']]
          */
         public array $aliases = [],
-        /** @var int Number of consecutive rows that define the header (1 = flat, >1 = hierarchical). */
-        public int $headerRows = 1,
-        /**
-         * @var null|callable(string): string Callback applied to source headers before schema validation,
-         *                                      requiredColumns, columns and aliases. Receives a single header
-         *                                      cell string and must return the normalized string. Applied to
-         *                                      non-empty header cells only.
-         */
-        public $headerNormalizer = null,
-        /**
-         * @var int|string|null Number of logical records to skip before the header block starts.
-         *                    null  = BC behaviour (no header offset).
-         *                    int   = records to skip before header (e.g. 2 = skip 2 rows, header starts on 3rd).
-         *                    'auto' = automatically detect header position (requires requiredColumns).
-         *                    This applies to CSV/XLSX/ODS readers.
-         */
-        public int|string|null $headerOffset = null,
-        // ─── Value semantics ─────────────────────
+        // ─── Value semantics ──────────────────────
         /**
          * @var bool If true, XLSX/ODS readers return legacy CSV-like strings.
          *           If false, readers expose natural PHP value kinds: numbers and
@@ -79,7 +82,7 @@ class Options
          *           for the 1.0 release, together with Options::$stringifyValues.
          */
         public bool $inferNumericStrings = true,
-        // ─── CSV ─────────────────────────────────
+        // ─── CSV ──────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = 'auto',
         /** @var string The enclosure character for CSV fields. */
@@ -103,7 +106,7 @@ class Options
          *                    If a callable, it receives (string $cell, int $colIndex) and should return the processed cell.
          */
         public $escapeFormulas = false,
-        // ─── XLSX & ODS ──────────────────────────
+        // ─── XLSX & ODS ───────────────────────────
         /**
          * @var Meta|array<string, mixed>|null Optional metadata for the generated document.
          */
@@ -125,8 +128,6 @@ class Options
         public string|int|null $sheet = null,
         /** @var bool If true, formats the first row's cells as bold text. */
         public bool $boldHeaders = false,
-        /** @var ?string Directory path for temporary files during extraction/creation. */
-        public ?string $tempPath = null,
         /** @var bool If true, enables shared strings for XLSX files (faster writing when false). */
         public bool $sharedStrings = false,
         /** @var bool If true, enables auto column width for XLSX files (faster writing when false). */
