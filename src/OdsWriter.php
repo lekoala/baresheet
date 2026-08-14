@@ -7,11 +7,12 @@ namespace LeKoala\Baresheet;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Value\TimeValue;
 
 /**
  * Zero-dependency ODS writer producing raw XML packaged by DirectZipWriter.
  *
- * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|null>
  */
 class OdsWriter implements WriterInterface
 {
@@ -30,6 +31,14 @@ class OdsWriter implements WriterInterface
      * @var string[]
      */
     public array $headers = [];
+    /**
+     * @var bool If true, canonically numeric strings are written as numeric cells
+     *           (legacy behavior). If false, a PHP string always means spreadsheet text.
+     *
+     *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
+     *           for the 1.0 release together with Options::$inferNumericStrings.
+     */
+    public bool $inferNumericStrings = true;
 
     public function __construct(?Options $options = null)
     {
@@ -266,7 +275,35 @@ class OdsWriter implements WriterInterface
             $rowCellStyle = $headerRowsRemaining > 0 && $boldHeadersOpt ? ' table:style-name="bold"' : '';
 
             foreach ($row as $value) {
-                if ($value instanceof DateTimeInterface) {
+                if ($value instanceof \Time\Duration) {
+                    $iso = Spread::formatIsoDurationFromMicroseconds(Spread::durationToMicroseconds($value));
+                    $display = Spread::stringifyDuration($value);
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
+                        . ' office:value-type="time"'
+                        . ' office:time-value="'
+                        . Spread::escapeXmlAttr($iso)
+                        . '">'
+                        . '<text:p>'
+                        . Spread::escapeXml($display)
+                        . '</text:p>'
+                        . '</table:table-cell>';
+                } elseif ($value instanceof TimeValue) {
+                    $iso = Spread::formatIsoDurationFromMicroseconds($value->toMicroseconds());
+                    $display = (string) $value;
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
+                        . ' office:value-type="time"'
+                        . ' office:time-value="'
+                        . Spread::escapeXmlAttr($iso)
+                        . '">'
+                        . '<text:p>'
+                        . Spread::escapeXml($display)
+                        . '</text:p>'
+                        . '</table:table-cell>';
+                } elseif ($value instanceof DateTimeInterface) {
                     $isoDate = $value->format('Y-m-d\TH:i:s');
                     $display = $value->format('Y-m-d H:i:s');
                     $buffer .=
@@ -295,8 +332,22 @@ class OdsWriter implements WriterInterface
                         . '</table:table-cell>';
                 } elseif ($value === null || $value === '') {
                     $buffer .= '<table:table-cell' . $rowCellStyle . '/>';
+                } elseif (is_int($value) || is_float($value)) {
+                    $strValue = (string) $value;
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
+                        . ' office:value-type="float"'
+                        . ' office:value="'
+                        . $strValue
+                        . '">'
+                        . '<text:p>'
+                        . $strValue
+                        . '</text:p>'
+                        . '</table:table-cell>';
                 } elseif (
-                    Spread::isNumericCellValue($value)
+                    $this->inferNumericStrings
+                    && Spread::isNumericCellValue($value)
                     && (is_scalar($value)
                     || $value instanceof \Stringable)
                 ) {

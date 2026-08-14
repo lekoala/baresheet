@@ -46,6 +46,14 @@ class XlsxReader implements ReaderInterface
     public $headerNormalizer = null;
     /** @var ?int Maximum allowed size for the streamed worksheet, in bytes (null = unlimited). */
     public ?int $maxWorksheetSize = 500_000_000;
+    /**
+     * @var bool If true, values are stringified (CSV-like, lossy). If false,
+     *           the semantic source type is preserved (int|float|bool|DateTimeImmutable|...).
+     *
+     *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
+     *           for the 1.0 release together with Options::$stringifyValues.
+     */
+    public bool $stringifyValues = true;
 
     public function __construct(?Options $options = null)
     {
@@ -222,7 +230,7 @@ class XlsxReader implements ReaderInterface
      * @param string[] $sharedStrings
      * @param array<int, ?string> $cellFormats
      * @param array<int, ?string> $colFormats
-     * @param array<string, bool> $isDateCache
+     * @param array<string, string> $isDateCache
      * @return Generator<int, Row>
      */
     private function parseWorksheet(
@@ -370,39 +378,41 @@ class XlsxReader implements ReaderInterface
                         }
 
                         $excelFormat = null;
-                        $isDateFormat = false;
+                        $classification = null;
                         if ($s !== '') {
                             $excelFormat = $cellFormats[(int) $s] ?? null;
                             if ($excelFormat) {
                                 if (!isset($isDateCache[$excelFormat])) {
-                                    $isDateCache[$excelFormat] = self::isDateTimeFormatCode($excelFormat);
+                                    $isDateCache[$excelFormat] = Spread::classifyNumberFormat($excelFormat);
                                 }
-                                $isDateFormat = $isDateCache[$excelFormat];
+                                $classification = $isDateCache[$excelFormat];
                             }
-                            $format = $isDateFormat ? 'date' : null;
                         }
 
                         if ($t === 'n' && is_numeric($v)) {
                             if ($excelFormat === null) {
-                                $format = $colFormats[$col] ?? null;
-                            } else {
-                                $format = $isDateFormat ? 'date' : 'number';
+                                $classification = $colFormats[$col] ?? null;
                             }
                         }
 
-                        if ($format !== null && !isset($colFormats[$col])) {
-                            $colFormats[$col] = $format;
+                        if ($classification !== null && !isset($colFormats[$col])) {
+                            $colFormats[$col] = $classification;
                         }
 
-                        if ($format === 'date') {
-                            $v = Spread::excelDateToString($v, null, $is1904);
+                        if ($this->stringifyValues) {
+                            if ($classification !== null && $classification !== 'number') {
+                                $v = Spread::excelDateToString($v, null, $is1904);
+                            }
+                            $value = $v;
+                        } else {
+                            $value = $this->decodeTypedCell($t, $v, $classification, $is1904);
                         }
 
-                        if ($v !== '') {
+                        if ($value !== '' && $value !== null) {
                             $isEmpty = false;
                         }
 
-                        $rowData[] = $v;
+                        $rowData[] = $value;
                         $col++;
                     }
                     $moved = $reader->read();
@@ -432,7 +442,10 @@ class XlsxReader implements ReaderInterface
 
             // Auto-detection: slide window until requiredColumns match
             if ($autoScanning) {
-                $autoWindow[] = $rowData;
+                $autoWindow[] = array_map(
+                    static fn(mixed $cell): string => $cell === null ? '' : Spread::stringifyValue($cell),
+                    $rowData,
+                );
                 if (count($autoWindow) > $this->headerRows) {
                     array_shift($autoWindow);
                 }
@@ -477,7 +490,7 @@ class XlsxReader implements ReaderInterface
                 if ($schema === null) {
                     $headerNames = [];
                     foreach ($rowData as $v) {
-                        $headerNames[] = $v !== null ? (string) $v : '';
+                        $headerNames[] = $v === null ? '' : Spread::stringifyValue($v);
                     }
                     $headerRowsBuffer[] = $headerNames;
 
@@ -543,6 +556,34 @@ class XlsxReader implements ReaderInterface
                 'Could not auto-detect header position. Ensure required columns exist.',
             );
         }
+    }
+
+    /**
+     * Decode a raw cell into its semantic PHP value (native, non-stringified mode).
+     *
+     * @param ?string $classification 'number'|'date'|'datetime'|'time'|'duration'|null
+     */
+    private function decodeTypedCell(string $t, string $v, ?string $classification, bool $is1904): mixed
+    {
+        if ($t === 'b') {
+            return $v === '1' || strtolower($v) === 'true';
+        }
+        if ($t === 's' || $t === 'str' || $t === 'inlineStr' || $t === 'e') {
+            return $v;
+        }
+
+        // Cells without an explicit type attribute default to numeric in XLSX.
+        if (!is_numeric($v)) {
+            return $v;
+        }
+
+        $floatValue = (float) $v;
+        return match ($classification) {
+            'date', 'datetime' => Spread::excelDateToImmutable($v, $is1904),
+            'time' => Spread::excelTimeToTimeValue($floatValue),
+            'duration' => Spread::durationFromSerial($floatValue),
+            default => Spread::parseNumericValue($v),
+        };
     }
 
     /**
@@ -713,42 +754,6 @@ class XlsxReader implements ReaderInterface
 
     public static function isDateTimeFormatCode(string $excelFormatCode): bool
     {
-        $lowerCode = strtolower($excelFormatCode);
-        if ($lowerCode === 'general') {
-            return false;
-        }
-
-        // Remove locale/bucket identifiers [$-409] or duration brackets [h]
-        $cleanCode = str_replace(['[', ']', '.000', '\\'], '', $lowerCode);
-
-        // Standard markers
-        if (
-            str_contains($cleanCode, 'yy')
-            || str_contains($cleanCode, 'dd')
-            || str_contains($cleanCode, 'mm')
-            || str_contains($cleanCode, 'hh')
-            || str_contains($cleanCode, 'ss')
-        ) {
-            return true;
-        }
-
-        // Single letter markers with separators
-        if (
-            str_contains($cleanCode, 'd/m')
-            || str_contains($cleanCode, 'm/d')
-            || str_contains($cleanCode, 'h:m')
-            || str_contains($cleanCode, 'm:s')
-            || str_contains($cleanCode, 'am/pm')
-            || str_contains($cleanCode, 'a/p')
-        ) {
-            return true;
-        }
-
-        // Special codes
-        if (str_contains($cleanCode, 'e/m/d') || $cleanCode === 'ww') {
-            return true;
-        }
-
-        return false;
+        return Spread::isDateTimeFormatCode($excelFormatCode);
     }
 }

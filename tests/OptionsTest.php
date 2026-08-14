@@ -203,6 +203,8 @@ class OptionsTest extends TestCase
             public int|string|null $headerOffset = null;
             public $headerNormalizer = null;
             public ?int $maxWorksheetSize = 500_000_000;
+            public bool $stringifyValues = true;
+            public bool $inferNumericStrings = true;
         };
 
         $opts->applyTo($target);

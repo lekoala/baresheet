@@ -9,6 +9,7 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
+use LeKoala\Baresheet\Value\TimeValue;
 use ZipArchive;
 
 /**
@@ -49,6 +50,14 @@ class OdsReader implements ReaderInterface
     public $headerNormalizer = null;
     /** @var ?int Maximum allowed size for the streamed content.xml, in bytes (null = unlimited). */
     public ?int $maxWorksheetSize = 500_000_000;
+    /**
+     * @var bool If true, values are stringified (CSV-like, lossy). If false,
+     *           the semantic source type is preserved (int|float|bool|DateTimeImmutable|...).
+     *
+     *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
+     *           for the 1.0 release together with Options::$stringifyValues.
+     */
+    public bool $stringifyValues = true;
 
     public function __construct(?Options $options = null)
     {
@@ -333,19 +342,48 @@ class OdsReader implements ReaderInterface
                             }
                         }
 
-                        if ($value === null) {
+                        $typed = null;
+                        if (
+                            $valueType === 'float'
+                            || $valueType === 'currency'
+                            || $valueType === 'percentage'
+                        ) {
+                            if ($value !== null) {
+                                $typed = Spread::parseNumericValue($value);
+                            }
+                        } elseif ($valueType === 'date') {
+                            if ($value !== null && $value !== '') {
+                                $typed = new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
+                            }
+                        } elseif ($valueType === 'time') {
+                            if ($value !== null && $value !== '') {
+                                $microseconds = Spread::parseIsoDurationToMicroseconds($value);
+                                $typed =
+                                    $microseconds >= 0 && $microseconds < TimeValue::MICROSECONDS_PER_DAY
+                                        ? TimeValue::fromMicroseconds($microseconds)
+                                        : Spread::durationFromMicroseconds($microseconds);
+                            }
+                        } elseif ($valueType === 'boolean') {
+                            $typed = $value === 'true' || $value === '1';
+                        }
+
+                        if ($typed === null) {
                             if ($valueType === 'string' || $valueType === '') {
-                                $value = $textP !== '' ? $textP : null;
+                                $typed = $textP !== '' ? $textP : null;
                             }
                         }
 
-                        if ($value === null && $colRepeat > 100) {
+                        if ($this->stringifyValues && $typed !== null && !is_string($typed)) {
+                            $typed = Spread::stringifyValue($typed);
+                        }
+
+                        if ($typed === null && $colRepeat > 100) {
                             break;
                         }
 
                         for ($ci = 0; $ci < $colRepeat; $ci++) {
-                            $rowTemplate[] = $value;
-                            if ($value !== null && $value !== '') {
+                            $rowTemplate[] = $typed;
+                            if ($typed !== null && $typed !== '') {
                                 $isEmpty = false;
                             }
                         }
@@ -385,7 +423,10 @@ class OdsReader implements ReaderInterface
 
                 // Auto-detection: slide window until requiredColumns match
                 if ($autoScanning) {
-                    $autoWindow[] = $rowData;
+                    $autoWindow[] = array_map(
+                        static fn(mixed $cell): string => $cell === null ? '' : Spread::stringifyValue($cell),
+                        $rowData,
+                    );
                     if (count($autoWindow) > $this->headerRows) {
                         array_shift($autoWindow);
                     }
@@ -425,7 +466,7 @@ class OdsReader implements ReaderInterface
                     if ($schema === null) {
                         $headerNames = [];
                         foreach ($rowData as $v) {
-                            $headerNames[] = $v !== null ? (string) $v : '';
+                            $headerNames[] = $v === null ? '' : Spread::stringifyValue($v);
                         }
                         $headerRowsBuffer[] = $headerNames;
 

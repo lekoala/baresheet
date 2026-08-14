@@ -981,9 +981,11 @@ class XlsxTest extends TestCase
         $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
         $zip->close();
 
-        // numFmts: only the date format, no redundant GENERAL
-        self::assertStringContainsString('<numFmts count="1">', $styles);
+        // numFmts: date/time/duration formats only, no redundant GENERAL
+        self::assertStringContainsString('<numFmts count="3">', $styles);
         self::assertStringContainsString('numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss"', $styles);
+        self::assertStringContainsString('numFmtId="165" formatCode="hh:mm:ss"', $styles);
+        self::assertStringContainsString('numFmtId="166" formatCode="[h]:mm:ss"', $styles);
         self::assertStringNotContainsString('formatCode="GENERAL"', $styles);
 
         // cellXfs: first xf is minimal (no applyAlignment/applyProtection/alignment/protection noise)

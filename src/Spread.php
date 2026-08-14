@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet;
 
 use DateTime;
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
 use Generator;
+use InvalidArgumentException;
 use LeKoala\Baresheet\Exception\BaresheetException;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\WriteException;
+use LeKoala\Baresheet\Value\TimeValue;
 use LogicException;
 use ZipArchive;
 
@@ -295,55 +300,208 @@ class Spread
 
     /**
      * Convert a DateTime to an Excel serial date number.
+     *
+     * The conversion reasons purely on the DateTime's own civil calendar
+     * components (as displayed in its timezone), never on absolute time:
+     * spreadsheet dates carry no timezone semantics, so no timezone
+     * conversion is ever performed. The default PHP timezone is never read.
+     *
+     * The Excel quirks are preserved: the 1900/1904 date systems, the Lotus
+     * 1-2-3 fake 1900-02-29 and the pre-Gregorian (Julian) day drift.
      */
-    public static function dateToExcel(\DateTimeInterface $dt, bool $is1904 = false): float
+    public static function dateToExcel(DateTimeInterface $dt, bool $is1904 = false): float
     {
-        /** @var array<string, \DateTime> */
-        static $base1904 = [];
-        /** @var array<string, \DateTime> */
-        static $base1899 = [];
-        /** @var array<string, int> */
-        static $driftThresholds = [];
+        $year = (int) $dt->format('Y');
+        $month = (int) $dt->format('n');
+        $day = (int) $dt->format('j');
+        $civilDays = self::civilToDays($year, $month, $day);
 
-        $tz = date_default_timezone_get();
+        if ($is1904) {
+            $days = $civilDays - self::civilToDays(1904, 1, 1);
+        } else {
+            $days = $civilDays - self::civilToDays(1899, 12, 30);
 
-        if (!isset($base1904[$tz])) {
-            $base1904[$tz] = new DateTime('1904-01-01');
-            $base1899[$tz] = new DateTime('1899-12-30');
-            $driftThresholds[$tz] = (int) strtotime('1582-10-15');
-        }
-
-        $base = $is1904 ? $base1904[$tz] : $base1899[$tz];
-
-        // Ensure we are diffing against a DateTime object
-        if (!$dt instanceof DateTime) {
-            $dt = DateTime::createFromInterface($dt);
-        }
-
-        $diff = $base->diff($dt);
-        $days = (int) $diff->format('%r%a');
-
-        if (!$is1904) {
-            // Adjust for Lotus 1-2-3 leap year bug
+            // Lotus 1-2-3 leap bug: 1900-01-01..1900-02-28 are shifted down by one
+            // because Excel wrongly treats 1900 as a leap year (day 60).
             $ymd = $dt->format('Y-m-d');
             if ($ymd >= '1900-01-01' && $ymd <= '1900-02-28') {
                 $days -= 1;
             }
         }
 
-        $timeFraction = (($dt->format('H') * 3600) + ($dt->format('i') * 60) + $dt->format('s')) / 86_400;
-        $serial = $days + $timeFraction;
-
         // Inverse Julian-to-Gregorian correction for historical dates
-        if ($dt->getTimestamp() < $driftThresholds[$tz]) {
-            $year = (int) $dt->format('Y');
-            $drift = floor($year / 100) - floor($year / 400) - 2;
+        if ($civilDays < self::civilToDays(1582, 10, 15)) {
+            $drift = (int) (floor($year / 100) - floor($year / 400) - 2);
             if ($drift > 0) {
-                $serial += $drift;
+                $days += $drift;
             }
         }
 
-        return $serial;
+        $hour = (int) $dt->format('G');
+        $minute = (int) $dt->format('i');
+        $second = (int) $dt->format('s');
+        $microsecond = (int) $dt->format('u');
+        $timeFraction = (($hour * 3600) + ($minute * 60) + $second + ($microsecond / 1_000_000)) / 86_400;
+
+        return $days + $timeFraction;
+    }
+
+    /**
+     * Convert an Excel serial to a UTC DateTimeImmutable carrying the civil
+     * spreadsheet components. Deterministic at microsecond precision and
+     * independent of the default PHP timezone.
+     */
+    public static function excelDateToImmutable(float|string $value, bool $is1904 = false): DateTimeImmutable
+    {
+        $c = self::excelSerialToComponents($value, $is1904);
+
+        return new DateTimeImmutable(sprintf(
+            '%04d-%02d-%02d %02d:%02d:%02d.%06d',
+            $c['year'],
+            $c['month'],
+            $c['day'],
+            $c['hour'],
+            $c['minute'],
+            $c['second'],
+            $c['microsecond'],
+        ), new DateTimeZone('UTC'));
+    }
+
+    /**
+     * Convert an Excel day fraction into a time of day.
+     */
+    public static function excelTimeToTimeValue(float|string $value): TimeValue
+    {
+        $fraction = is_string($value) ? (float) $value : $value;
+        $fraction -= floor($fraction);
+        $clock = self::clockFromSecondsFloat($fraction * 86_400);
+        return new TimeValue($clock['hour'], $clock['minute'], $clock['second'], $clock['microsecond']);
+    }
+
+    /**
+     * Convert a time of day into an Excel day fraction.
+     */
+    public static function timeToExcel(TimeValue $time): float
+    {
+        return $time->toMicroseconds() / TimeValue::MICROSECONDS_PER_DAY;
+    }
+
+    /**
+     * Days since 1970-01-01 in the proleptic Gregorian calendar, using pure
+     * integer arithmetic. No timezone, no extension, no Unix timestamp.
+     *
+     * Algorithm from Howard Hinnant's chrono civil calendar; intdiv()
+     * truncates toward zero exactly like C++ integer division.
+     */
+    private static function civilToDays(int $year, int $month, int $day): int
+    {
+        $year -= $month <= 2 ? 1 : 0;
+        $era = intdiv($year, 400);
+        $yoe = $year - ($era * 400);
+        $doy = intdiv((153 * ($month + ($month > 2 ? -3 : 9))) + 2, 5) + $day - 1;
+        $doe = ($yoe * 365) + intdiv($yoe, 4) - intdiv($yoe, 100) + $doy;
+        return ($era * 146_097) + $doe - 719_468;
+    }
+
+    /**
+     * Inverse of {@see self::civilToDays()}.
+     *
+     * @return array{0: int, 1: int, 2: int} [year, month, day]
+     */
+    private static function daysToCivil(int $days): array
+    {
+        $z = $days + 719_468;
+        $era = intdiv($z, 146_097);
+        $doe = $z - ($era * 146_097);
+        $yoe = intdiv($doe - intdiv($doe, 1_460) + intdiv($doe, 36_524) - intdiv($doe, 146_096), 365);
+        $year = $yoe + ($era * 400);
+        $doy = $doe - ((365 * $yoe) + intdiv($yoe, 4) - intdiv($yoe, 100));
+        $monthIndex = intdiv((5 * $doy) + 2, 153);
+        $day = $doy - intdiv((153 * $monthIndex) + 2, 5) + 1;
+        $month = $monthIndex + ($monthIndex < 10 ? 3 : -9);
+        return [$year + ($month <= 2 ? 1 : 0), $month, $day];
+    }
+
+    /**
+     * @return array{year:int, month:int, day:int, hour:int, minute:int, second:int, microsecond:int}
+     */
+    private static function excelSerialToComponents(float|string $value, bool $is1904): array
+    {
+        $floatValue = is_string($value) ? (float) $value : $value;
+        $days = (int) floor($floatValue);
+        $fraction = $floatValue - $days;
+
+        if ($is1904) {
+            $epoch = self::civilToDays(1904, 1, 1);
+        } else {
+            // Serial 0 = 1899-12-30. Serials 1-59 are anchored to 1899-12-31
+            // because Excel skips the non-existent 1900-02-29 (Lotus bug);
+            // serials 60+ fall back onto 1899-12-30, so day 60 collapses to
+            // 1900-02-28 exactly like Excel displays it.
+            $epoch = self::civilToDays(1899, 12, $days > 0 && $days < 60 ? 31 : 30);
+        }
+        $totalDays = $epoch + $days;
+
+        // Pre-Gregorian correction: serials are treated as Julian dates before
+        // the 1582-10-15 Gregorian transition, mirroring excelDateToString().
+        if ($totalDays < self::civilToDays(1582, 10, 15)) {
+            $year = self::daysToCivil($totalDays)[0];
+            $drift = (int) (floor($year / 100) - floor($year / 400) - 2);
+            if ($drift > 0) {
+                $totalDays -= $drift;
+            }
+        }
+
+        [$year, $month, $day] = self::daysToCivil($totalDays);
+
+        $secondsFloat = $fraction * 86_400;
+        if (round($secondsFloat) >= 86_400) {
+            $totalDays++;
+            [$year, $month, $day] = self::daysToCivil($totalDays);
+        }
+        $clock = self::clockFromSecondsFloat($secondsFloat);
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'day' => $day,
+            'hour' => $clock['hour'],
+            'minute' => $clock['minute'],
+            'second' => $clock['second'],
+            'microsecond' => $clock['microsecond'],
+        ];
+    }
+
+    /**
+     * Convert a day fraction (seconds since midnight) into a clock time.
+     *
+     * The conversion works in two steps — whole seconds first, then the
+     * microsecond remainder — because a direct fraction * 86_400_000_000
+     * amplifies the double error up to a full second. Values of exactly
+     * 86400 seconds wrap back to 00:00:00.
+     *
+     * @return array{hour:int, minute:int, second:int, microsecond:int}
+     */
+    private static function clockFromSecondsFloat(float $secondsFloat): array
+    {
+        $seconds = (int) round($secondsFloat);
+        if ($seconds >= 86_400) {
+            $seconds -= 86_400;
+        }
+        $microsecond = (int) round(($secondsFloat - $seconds) * 1_000_000);
+        if ($microsecond >= 1_000_000) {
+            $seconds++;
+            $microsecond -= 1_000_000;
+        } elseif ($microsecond < 0) {
+            $seconds--;
+            $microsecond += 1_000_000;
+        }
+
+        $hour = intdiv($seconds, 3_600);
+        $seconds %= 3_600;
+        $minute = intdiv($seconds, 60);
+        $second = $seconds % 60;
+        return ['hour' => $hour, 'minute' => $minute, 'second' => $second, 'microsecond' => $microsecond];
     }
 
     /**
@@ -774,6 +932,285 @@ class Spread
         $significantDigits = ltrim($digits, '0');
 
         return strlen($significantDigits) <= 15;
+    }
+
+    /**
+     * Deterministically parse a spreadsheet numeric cell into int|float.
+     *
+     * Excel only knows "number", not integer vs decimal, so this is the chosen
+     * PHP representation, not a recovered semantic: an integer lexical value
+     * (no sign, no leading zeros, no exponent) inside the PHP_INT range maps to
+     * int; everything else maps to float.
+     */
+    public static function parseNumericValue(string $value): int|float
+    {
+        if (preg_match('/^-?(?:0|[1-9][0-9]*)$/D', $value) === 1) {
+            $maxMagnitude = (string) PHP_INT_MAX;
+            $negative = str_starts_with($value, '-');
+            $magnitude = $negative ? substr($value, 1) : $value;
+            $magnitudeLength = strlen($magnitude);
+            if ($magnitudeLength < strlen($maxMagnitude)) {
+                return (int) $value;
+            }
+            if ($magnitudeLength === strlen($maxMagnitude)) {
+                if (!$negative && $magnitude <= $maxMagnitude) {
+                    return (int) $value;
+                }
+                if ($negative && $magnitude <= substr((string) PHP_INT_MIN, 1)) {
+                    return (int) $value;
+                }
+            }
+        }
+        return (float) $value;
+    }
+
+    /**
+     * Classify an Excel number format code into a semantic temporal type.
+     *
+     * This is an extension of what Baresheet already recognizes, not a full
+     * Excel format parser. It deliberately checks for the literal elapsed
+     * markers ([h], [mm], [s]) before stripping buckets, so colours/conditions/
+     * locales ([Red], [>=100], [$-409]) never trigger a duration classification.
+     *
+     * @return 'number'|'date'|'datetime'|'time'|'duration'
+     */
+    public static function classifyNumberFormat(string $excelFormatCode): string
+    {
+        $lowerCode = strtolower($excelFormatCode);
+        if ($lowerCode === 'general') {
+            return 'number';
+        }
+
+        // Elapsed (duration) markers — only these brackets denote a duration.
+        if (preg_match('/\[(?:h+|m+|s+)\]/', $lowerCode) === 1) {
+            return 'duration';
+        }
+
+        // Strip colour/condition/locale buckets and quoted literals ("year",
+        // "hour"), and drop escaped characters (\h displays a literal "h") so
+        // they can't trigger false positives.
+        $clean = (string) preg_replace('/\[[^\]]*\]/', '', $lowerCode);
+        $clean = (string) preg_replace('/"[^"]*"/', '', $clean);
+        $clean = (string) preg_replace('/\\\\./', '', $clean);
+
+        // Week-of-year format code.
+        if ($clean === 'ww') {
+            return 'date';
+        }
+
+        // Conservative marker detection, mirroring the legacy behavior: a
+        // letter is only a real marker as a double or inside a separator
+        // pattern, so isolated literal letters never classify as temporal.
+        $hasDate = (bool) preg_match('/yy|dd|mmm|d\/m|m\/d/', $clean);
+        $hasTime = (bool) preg_match('/hh|ss|h:m|m:s|am\/pm|a\/p/', $clean);
+
+        if ($hasDate) {
+            return $hasTime ? 'datetime' : 'date';
+        }
+        return $hasTime ? 'time' : 'number';
+    }
+
+    /**
+     * Whether a number format code renders as a date/time/duration cell.
+     */
+    public static function isDateTimeFormatCode(string $excelFormatCode): bool
+    {
+        return self::classifyNumberFormat($excelFormatCode) !== 'number';
+    }
+
+    /**
+     * Canonical, deliberately lossy string representation of a native value.
+     *
+     * Used by the stringifyValues compatibility mode to reproduce the CSV-like
+     * strings Baresheet historically returned. Not a formatting engine: it only
+     * needs to be deterministic and stable.
+     */
+    public static function stringifyValue(mixed $value): string
+    {
+        if ($value instanceof TimeValue) {
+            return (string) $value;
+        }
+        if ($value instanceof \Time\Duration) {
+            return self::stringifyDuration($value);
+        }
+        if ($value instanceof DateTimeInterface) {
+            $time =
+                (int) $value->format('H')
+                + (int) $value->format('i')
+                + (int) $value->format('s')
+                + (int) $value->format('u');
+            if ($time === 0) {
+                return $value->format('Y-m-d');
+            }
+            return $value->format('Y-m-d H:i:s');
+        }
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        if ($value === null) {
+            return '';
+        }
+        if (is_string($value)) {
+            return $value;
+        }
+        if (is_scalar($value) || $value instanceof \Stringable) {
+            return (string) $value;
+        }
+        return '';
+    }
+
+    /**
+     * Canonical duration string: total hours may exceed 24, negative allowed.
+     */
+    public static function stringifyDuration(\Time\Duration $duration): string
+    {
+        return self::formatDurationMicroseconds(self::durationToMicroseconds($duration));
+    }
+
+    /**
+     * @return string Canonical duration string (see {@see stringifyDuration()}).
+     */
+    public static function formatDurationMicroseconds(int $microseconds): string
+    {
+        $sign = $microseconds < 0 ? '-' : '';
+        $microseconds = abs($microseconds);
+        $totalSeconds = intdiv($microseconds, 1_000_000);
+        $micro = $microseconds % 1_000_000;
+        $hours = intdiv($totalSeconds, 3_600);
+        $minutes = intdiv($totalSeconds % 3_600, 60);
+        $seconds = $totalSeconds % 60;
+        $result = sprintf('%s%d:%02d:%02d', $sign, $hours, $minutes, $seconds);
+        if ($micro > 0) {
+            $result .= '.' . rtrim(str_pad((string) $micro, 6, '0', STR_PAD_LEFT), '0');
+        }
+        return $result;
+    }
+
+    /**
+     * Convert a duration to an Excel serial (days).
+     */
+    public static function durationToSerial(\Time\Duration $duration): float
+    {
+        return self::durationToMicroseconds($duration) / TimeValue::MICROSECONDS_PER_DAY;
+    }
+
+    public static function durationToMicroseconds(\Time\Duration $duration): int
+    {
+        $microseconds = ($duration->seconds * 1_000_000) + intdiv($duration->nanoseconds, 1_000);
+        return $duration->negative ? -$microseconds : $microseconds;
+    }
+
+    /**
+     * Convert an Excel serial (days) to a duration.
+     *
+     * Returns a \Time\Duration when the PHP 8.6 Time API is available (native
+     * on 8.6+, Symfony polyfill below), otherwise the canonical duration string.
+     * This keeps the public value type stable across PHP versions without ever
+     * exposing a Baresheet-specific duration class.
+     */
+    public static function durationFromSerial(float $serial): object|string
+    {
+        return self::durationFromMicroseconds((int) round($serial * TimeValue::MICROSECONDS_PER_DAY));
+    }
+
+    /**
+     * @return object|string See {@see durationFromSerial()}.
+     */
+    public static function durationFromMicroseconds(int $microseconds): object|string
+    {
+        if (class_exists('Time\\Duration')) {
+            $duration = \Time\Duration::fromMicroseconds(abs($microseconds));
+            return $microseconds < 0 ? $duration->negate() : $duration;
+        }
+        return self::formatDurationMicroseconds($microseconds);
+    }
+
+    /**
+     * ISO-8601 duration for ODS time cells, e.g. "PT14H30M15S" or "-PT36H30M15.5S".
+     */
+    public static function formatIsoDurationFromMicroseconds(int $microseconds): string
+    {
+        $negative = $microseconds < 0;
+        $microseconds = abs($microseconds);
+        $hours = intdiv($microseconds, 3_600_000_000);
+        $microseconds %= 3_600_000_000;
+        $minutes = intdiv($microseconds, 60_000_000);
+        $microseconds %= 60_000_000;
+        $seconds = intdiv($microseconds, 1_000_000);
+        $microseconds %= 1_000_000;
+        $secondsString = (string) $seconds;
+        if ($microseconds > 0) {
+            $secondsString .= '.' . rtrim(str_pad((string) $microseconds, 6, '0', STR_PAD_LEFT), '0');
+        }
+        return ($negative ? '-' : '') . "PT{$hours}H{$minutes}M{$secondsString}S";
+    }
+
+    /**
+     * Parse an ISO-8601 duration (as stored in ODS office:time-value) into
+     * total microseconds. Supports day/hour/minute/second components and a
+     * leading minus. Month/year components are rejected as ambiguous for
+     * spreadsheet purposes.
+     *
+     * @throws InvalidArgumentException On malformed or unsupported input.
+     */
+    public static function parseIsoDurationToMicroseconds(string $value): int
+    {
+        $trimmed = trim($value);
+        $negative = false;
+        if (str_starts_with($trimmed, '-')) {
+            $negative = true;
+            $trimmed = substr($trimmed, 1);
+        }
+        if ($trimmed === '' || $trimmed[0] !== 'P') {
+            throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
+        }
+        $rest = substr($trimmed, 1);
+        $datePart = $rest;
+        $timePart = '';
+        $separator = strpos($rest, 'T');
+        if ($separator !== false) {
+            $datePart = substr($rest, 0, $separator);
+            $timePart = substr($rest, $separator + 1);
+        }
+        if ($datePart === '' && $timePart === '') {
+            throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
+        }
+
+        $total = 0;
+        if ($datePart !== '') {
+            $matched = preg_match_all('/(\d+(?:\.\d+)?)([YMWD])/', $datePart, $m, PREG_SET_ORDER);
+            if ($matched === false || $matched === 0) {
+                throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
+            }
+            foreach ($m as $component) {
+                $unit = $component[2];
+                if ($unit !== 'D' && $unit !== 'W') {
+                    throw new InvalidArgumentException("Unsupported ISO 8601 duration component '{$unit}': {$value}");
+                }
+                $amount = (float) $component[1];
+                $total += (int) round($amount * ($unit === 'D' ? 86_400_000_000 : 604_800_000_000));
+            }
+        }
+        if ($timePart !== '') {
+            $matched = preg_match_all('/(\d+(?:\.\d+)?)([HMS])/', $timePart, $m, PREG_SET_ORDER);
+            if ($matched === false || $matched === 0) {
+                throw new InvalidArgumentException("Invalid ISO 8601 duration: {$value}");
+            }
+            foreach ($m as $component) {
+                $amount = (float) $component[1];
+                $unitMicros = match ($component[2]) {
+                    'H' => 3_600_000_000,
+                    'M' => 60_000_000,
+                    'S' => 1_000_000,
+                };
+                $total += (int) round($amount * $unitMicros);
+            }
+        }
+
+        if ($negative) {
+            $total = -$total;
+        }
+        return $total;
     }
 
     /**

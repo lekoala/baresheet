@@ -7,11 +7,12 @@ namespace LeKoala\Baresheet;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Value\TimeValue;
 
 /**
  * Zero-dependency XLSX writer producing raw XML packaged by DirectZipWriter.
  *
- * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|null>
+ * @phpstan-type WritableRow array<int|string, bool|float|int|string|\Stringable|DateTimeInterface|\Time\Duration|null>
  */
 class XlsxWriter implements WriterInterface
 {
@@ -36,6 +37,14 @@ class XlsxWriter implements WriterInterface
      * @var string[]
      */
     public array $headers = [];
+    /**
+     * @var bool If true, canonically numeric strings are written as numeric cells
+     *           (legacy behavior). If false, a PHP string always means spreadsheet text.
+     *
+     *           INTERIM DEFAULT: true to preserve BC behavior. Flip to false
+     *           for the 1.0 release together with Options::$inferNumericStrings.
+     */
+    public bool $inferNumericStrings = true;
 
     public function __construct(?Options $options = null)
     {
@@ -367,7 +376,15 @@ class XlsxWriter implements WriterInterface
                 }
                 $cn = $colCache[$i] . $r;
 
-                if ($value instanceof DateTimeInterface) {
+                if ($value instanceof \Time\Duration) {
+                    $excelSerial = Spread::durationToSerial($value);
+                    $buffer .= '<c r="' . $cn . '" t="n" s="4"><v>' . $excelSerial . '</v></c>';
+                    $vl = 16;
+                } elseif ($value instanceof TimeValue) {
+                    $excelSerial = Spread::timeToExcel($value);
+                    $buffer .= '<c r="' . $cn . '" t="n" s="3"><v>' . $excelSerial . '</v></c>';
+                    $vl = 8;
+                } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
                     $buffer .= '<c r="' . $cn . '" t="n" s="1"><v>' . $excelDate . '</v></c>';
                     $vl = 16;
@@ -382,50 +399,41 @@ class XlsxWriter implements WriterInterface
                 ) {
                     $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
+                } elseif (is_int($value) || is_float($value)) {
+                    $strValue = (string) $value;
+                    $vl = strlen($strValue);
+                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                } elseif ($this->inferNumericStrings && Spread::isNumericCellValue($value)) {
+                    $strValue = (string) $value;
+                    $vl = strlen($strValue);
+                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                 } else {
-                    $isNumeric = false;
-                    if (Spread::isNumericCellValue($value)) {
-                        $isNumeric = true;
-                        $strValue = (string) $value;
-                    } else {
-                        $strValue = (string) $value;
-                    }
+                    $strValue = (string) $value;
 
-                    if ($isNumeric) {
-                        $vl = strlen($strValue);
-                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
-                    } else {
-                        // ⚡ Bolt: Fast-path optimization
-                        // mb_strlen is significantly slower than strlen in tight loops.
-                        // Use strlen (byte-length) as a fast threshold check for shared strings.
-                        // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
-                        $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
+                    // ⚡ Bolt: Fast-path optimization
+                    // mb_strlen is significantly slower than strlen in tight loops.
+                    // Use strlen (byte-length) as a fast threshold check for shared strings.
+                    // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
+                    $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
 
-                        $escaped = Spread::escapeXml($strValue);
+                    $escaped = Spread::escapeXml($strValue);
 
-                        // For shared strings logic, use strlen for byte-length threshold checking
-                        $strByteLen = $autoWidth ? strlen($strValue) : $vl;
+                    // For shared strings logic, use strlen for byte-length threshold checking
+                    $strByteLen = $autoWidth ? strlen($strValue) : $vl;
 
-                        if ($sharedStringsOpt && $strByteLen <= 160) {
-                            $skey = '~' . $escaped;
-                            if (isset($sharedStringKeys[$skey])) {
-                                $ssIdx = $sharedStringKeys[$skey];
-                            } else {
-                                $sharedStrings[] = $escaped;
-                                $ssIdx = count($sharedStrings) - 1;
-                                $sharedStringKeys[$skey] = $ssIdx;
-                            }
-                            $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                    if ($sharedStringsOpt && $strByteLen <= 160) {
+                        $skey = '~' . $escaped;
+                        if (isset($sharedStringKeys[$skey])) {
+                            $ssIdx = $sharedStringKeys[$skey];
                         } else {
-                            $buffer .=
-                                '<c r="'
-                                . $cn
-                                . '" t="inlineStr"'
-                                . $cellStyle
-                                . '><is><t>'
-                                . $escaped
-                                . '</t></is></c>';
+                            $sharedStrings[] = $escaped;
+                            $ssIdx = count($sharedStrings) - 1;
+                            $sharedStringKeys[$skey] = $ssIdx;
                         }
+                        $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+                    } else {
+                        $buffer .=
+                            '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
                     }
                 }
                 $buffer .= "\r\n";
@@ -680,8 +688,10 @@ class XlsxWriter implements WriterInterface
         return <<<'XML'
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-            <numFmts count="1">
+            <numFmts count="3">
                 <numFmt numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
+                <numFmt numFmtId="165" formatCode="hh:mm:ss" />
+                <numFmt numFmtId="166" formatCode="[h]:mm:ss" />
             </numFmts>
             <fonts count="2">
                 <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
@@ -697,10 +707,12 @@ class XlsxWriter implements WriterInterface
             <cellStyleXfs count="1">
                 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
             </cellStyleXfs>
-            <cellXfs count="3">
+            <cellXfs count="5">
                 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
                 <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />
                 <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />
+                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0" />
+                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="166" xfId="0" />
             </cellXfs>
             <cellStyles count="1">
                 <cellStyle name="Normal" xfId="0" builtinId="0"/>

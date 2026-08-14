@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use DateTimeImmutable;
 use DateTimeInterface;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidRowException;
@@ -213,7 +214,7 @@ class TransformTest extends TestCase
         ];
 
         $result = iterator_to_array(Transform::cast($data, ['created' => 'date']));
-        self::assertInstanceOf(DateTimeInterface::class, $result[0]['created']);
+        self::assertInstanceOf(DateTimeImmutable::class, $result[0]['created']);
         self::assertEquals('2024-01-15', $result[0]['created']->format('Y-m-d'));
     }
 

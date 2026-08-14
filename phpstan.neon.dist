@@ -3,5 +3,7 @@ parameters:
     paths:
         - src
     reportUnmatchedIgnoredErrors: true
+    scanFiles:
+        - phpstan/stubs/Time/Duration.php
 includes:
     - vendor/phpstan/phpstan/conf/bleedingEdge.neon

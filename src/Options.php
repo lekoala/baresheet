@@ -60,6 +60,23 @@ class Options
          *                    This applies to CSV/XLSX/ODS readers.
          */
         public int|string|null $headerOffset = null,
+        // ─── Value semantics ─────────────────────
+        /**
+         * @var bool If true, XLSX/ODS readers stringify values (CSV-like, lossy).
+         *           If false, readers preserve the semantic value type available in the source.
+         *
+         *           INTERIM DEFAULT: currently true to preserve BC behavior. Flip to false
+         *           for the 1.0 release, together with Options::$inferNumericStrings.
+         */
+        public bool $stringifyValues = true,
+        /**
+         * @var bool If true, writers infer numeric cells from canonically numeric strings
+         *           (legacy behavior). If false, a PHP string always means spreadsheet text.
+         *
+         *           INTERIM DEFAULT: currently true to preserve BC behavior. Flip to false
+         *           for the 1.0 release, together with Options::$stringifyValues.
+         */
+        public bool $inferNumericStrings = true,
         // ─── CSV ─────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = 'auto',

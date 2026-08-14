@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet;
 
-use DateTime;
-use DateTimeInterface;
+use DateTimeImmutable;
 use Generator;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 
@@ -377,10 +376,10 @@ class Transform
         );
     }
 
-    private static function castDateStrict(string $value, int $rowNum, int|string $col): \DateTimeInterface
+    private static function castDateStrict(string $value, int $rowNum, int|string $col): DateTimeImmutable
     {
         try {
-            return new DateTime($value);
+            return new DateTimeImmutable($value);
         } catch (\Exception $e) {
             throw new InvalidRowException(
                 "Row {$rowNum}: Column '{$col}' value '{$value}' is not a valid date",
@@ -417,14 +416,14 @@ class Transform
 
     /**
      * Cache for parsed dates to avoid object allocation overhead.
-     * @var array<string, ?DateTimeInterface>
+     * @var array<string, ?DateTimeImmutable>
      */
     private static array $dateCache = [];
 
     /**
      * Parse a string as a date.
      */
-    private static function castDate(string $value): ?DateTimeInterface
+    private static function castDate(string $value): ?DateTimeImmutable
     {
         if (isset(self::$dateCache[$value])) {
             return clone self::$dateCache[$value];
@@ -440,7 +439,7 @@ class Transform
         }
 
         try {
-            $date = new DateTime($value);
+            $date = new DateTimeImmutable($value);
             self::$dateCache[$value] = clone $date;
             return $date;
         } catch (\Exception) {
