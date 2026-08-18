@@ -430,6 +430,62 @@ class SpreadTest extends TestCase
         self::assertSame(['a' => 0], $map);
     }
 
+    public function testApplyColumnSelectionEmptyMap(): void
+    {
+        $row = ['a', 'b', 'c'];
+        $result = Spread::applyColumnSelection($row, [], ['name'], false);
+        self::assertSame($row, $result);
+    }
+
+    public function testApplyColumnSelectionAssoc(): void
+    {
+        $row = ['id' => 1, 'name' => 'John', 'age' => 30];
+        $columnMap = ['name' => 1, 'age' => 2];
+        $columns = ['name', 'age'];
+
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
+
+        // Result should be keyed by column name, maintaining the requested order in $columns
+        self::assertSame(['name' => 'John', 'age' => 30], $result);
+    }
+
+    public function testApplyColumnSelectionAssocMissingKey(): void
+    {
+        $row = ['id' => 1, 'name' => 'John']; // missing age
+        $columnMap = ['name' => 1, 'age' => 2];
+        $columns = ['name', 'age', 'city']; // missing city in columnMap doesn't matter for assoc mode, it just looks up $row
+
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
+
+        self::assertSame(['name' => 'John', 'age' => null, 'city' => null], $result);
+    }
+
+    public function testApplyColumnSelectionIndexed(): void
+    {
+        $row = [1, 'John', 30];
+        $columnMap = ['name' => 1, 'age' => 2];
+        $columns = ['name', 'age'];
+
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, false);
+
+        // Result should be numerically indexed based on the requested $columns order
+        self::assertSame(['John', 30], $result);
+    }
+
+    public function testApplyColumnSelectionIndexedMissingValues(): void
+    {
+        $row = [1, 'John']; // missing index 2 (age)
+        $columnMap = ['name' => 1, 'age' => 2, 'city' => 3];
+        $columns = ['name', 'age', 'city', 'country']; // country not in columnMap
+
+        $result = Spread::applyColumnSelection($row, $columnMap, $columns, false);
+
+        // missing index 2 -> null
+        // city index 3 -> null
+        // country -> index not in map -> null
+        self::assertSame(['John', null, null, null], $result);
+    }
+
     public function testGetOutputStream(): void
     {
         $tempFile = $this->tempFile('txt');
