@@ -228,6 +228,20 @@ class SpreadTest extends TestCase
         self::assertEquals('XFD', Spread::columnLetter(16_384));
     }
 
+    public function testCellAddress(): void
+    {
+        // Relative addresses
+        self::assertEquals('A1', Spread::cellAddress(0, 0));
+        self::assertEquals('B2', Spread::cellAddress(1, 1));
+        self::assertEquals('Z99', Spread::cellAddress(98, 25));
+        self::assertEquals('AA100', Spread::cellAddress(99, 26));
+
+        // Absolute addresses
+        self::assertEquals('$A$1', Spread::cellAddress(0, 0, true));
+        self::assertEquals('$Z$99', Spread::cellAddress(98, 25, true));
+        self::assertEquals('$AA$100', Spread::cellAddress(99, 26, true));
+    }
+
     public function testColumnIndex(): void
     {
         self::assertEquals(1, Spread::columnIndex('A'));
