@@ -518,6 +518,16 @@ class SpreadTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testUtc(): void
+    {
+        $tz1 = Spread::utc();
+        self::assertInstanceOf(\DateTimeZone::class, $tz1);
+        self::assertSame('UTC', $tz1->getName());
+
+        $tz2 = Spread::utc();
+        self::assertSame($tz1, $tz2, 'utc() should return the same cached instance');
+    }
+
     public function testZipGetData(): void
     {
         $tempZip = $this->tempFile('zip');
