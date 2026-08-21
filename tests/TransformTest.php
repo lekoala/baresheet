@@ -80,6 +80,71 @@ class TransformTest extends TestCase
         self::assertEquals([0, '', false, 123], $result[0]);
     }
 
+    public function testNullAsEmptyData(): void
+    {
+        $result = iterator_to_array(Transform::nullAs([], 'N/A'));
+        self::assertEquals([], $result);
+    }
+
+    public function testNullAsEmptyRow(): void
+    {
+        $data = [
+            [],
+            ['name' => null],
+        ];
+
+        $result = iterator_to_array(Transform::nullAs($data, 'N/A'));
+        self::assertEquals([], $result[0]);
+        self::assertEquals(['name' => 'N/A'], $result[1]);
+    }
+
+    public function testNullAsEmptyStringReplacement(): void
+    {
+        $data = [
+            ['name' => 'john', 'email' => null],
+        ];
+
+        $result = iterator_to_array(Transform::nullAs($data, ''));
+        self::assertEquals(['name' => 'john', 'email' => ''], $result[0]);
+    }
+
+    public function testNullAsWithGenerator(): void
+    {
+        $data = (static function () {
+            yield ['id' => 1, 'note' => null];
+            yield ['id' => 2, 'note' => 'test'];
+        })();
+
+        $result = iterator_to_array(Transform::nullAs($data, 'none'));
+        self::assertEquals(['id' => 1, 'note' => 'none'], $result[0]);
+        self::assertEquals(['id' => 2, 'note' => 'test'], $result[1]);
+    }
+
+    public function testNullAsLazyEvaluation(): void
+    {
+        $calls = 0;
+        $data = (static function () use (&$calls) {
+            for ($i = 0; $i < 3; $i++) {
+                $calls++;
+                yield ['value' => null];
+            }
+        })();
+
+        $gen = Transform::nullAs($data, 'lazy');
+
+        // Before iteration, no calls should be made
+        self::assertEquals(0, $calls);
+
+        // Iterate one time
+        $first = $gen->current();
+        self::assertEquals(['value' => 'lazy'], $first);
+        self::assertEquals(1, $calls);
+
+        // Continue iterating
+        $gen->next();
+        self::assertEquals(2, $calls);
+    }
+
     public function testBoolAs(): void
     {
         $data = [
