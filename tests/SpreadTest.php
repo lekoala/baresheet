@@ -584,6 +584,30 @@ class SpreadTest extends TestCase
         self::assertSame($tz1, $tz2, 'utc() should return the same cached instance');
     }
 
+    public function testFormatDurationComponents(): void
+    {
+        // Positive, no microseconds
+        self::assertSame('1:02:03', Spread::formatDurationComponents(false, 1, 2, 3));
+
+        // Negative, no microseconds
+        self::assertSame('-1:02:03', Spread::formatDurationComponents(true, 1, 2, 3));
+
+        // Positive, with microseconds
+        self::assertSame('1:02:03.000004', Spread::formatDurationComponents(false, 1, 2, 3, 4));
+        self::assertSame('1:02:03.123456', Spread::formatDurationComponents(false, 1, 2, 3, 123456));
+
+        // Negative, with microseconds
+        self::assertSame('-1:02:03.000004', Spread::formatDurationComponents(true, 1, 2, 3, 4));
+
+        // Zero duration edge case (always positive, even if negative flag is true)
+        self::assertSame('0:00:00', Spread::formatDurationComponents(true, 0, 0, 0));
+        self::assertSame('0:00:00', Spread::formatDurationComponents(false, 0, 0, 0));
+
+        // Zero duration with microseconds should still be negative if requested
+        self::assertSame('-0:00:00.000001', Spread::formatDurationComponents(true, 0, 0, 0, 1));
+        self::assertSame('0:00:00.000001', Spread::formatDurationComponents(false, 0, 0, 0, 1));
+    }
+
     public function testZipGetData(): void
     {
         $tempZip = $this->tempFile('zip');
