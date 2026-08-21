@@ -196,6 +196,43 @@ class TransformTest extends TestCase
         self::assertEquals([0, 1], $keys);
     }
 
+    public function testMapRows(): void
+    {
+        $data = [
+            ['id' => 1, 'price' => 10, 'qty' => 2],
+            ['id' => 2, 'price' => 20, 'qty' => 3],
+        ];
+
+        $result = iterator_to_array(Transform::mapRows($data, static function (array $row) {
+            $row['total'] = $row['price'] * $row['qty'];
+            return $row;
+        }));
+
+        self::assertEquals(
+            [
+                ['id' => 1, 'price' => 10, 'qty' => 2, 'total' => 20],
+                ['id' => 2, 'price' => 20, 'qty' => 3, 'total' => 60],
+            ],
+            $result,
+        );
+    }
+
+    public function testMapRowsReceivesRowIndex(): void
+    {
+        $data = [
+            ['a', 'b'],
+            ['c', 'd'],
+        ];
+
+        $indices = [];
+        iterator_to_array(Transform::mapRows($data, static function (array $row, int $index) use (&$indices) {
+            $indices[] = $index;
+            return $row;
+        }));
+
+        self::assertEquals([0, 1], $indices);
+    }
+
     public function testFilter(): void
     {
         $data = [
