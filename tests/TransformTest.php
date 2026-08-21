@@ -143,10 +143,13 @@ class TransformTest extends TestCase
             return $row;
         }));
 
-        self::assertEquals([
-            ['id' => 1, 'price' => 10, 'qty' => 2, 'total' => 20],
-            ['id' => 2, 'price' => 20, 'qty' => 3, 'total' => 60],
-        ], $result);
+        self::assertEquals(
+            [
+                ['id' => 1, 'price' => 10, 'qty' => 2, 'total' => 20],
+                ['id' => 2, 'price' => 20, 'qty' => 3, 'total' => 60],
+            ],
+            $result,
+        );
     }
 
     public function testMapRowsReceivesRowIndex(): void
