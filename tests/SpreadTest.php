@@ -176,6 +176,22 @@ class SpreadTest extends TestCase
         self::assertEquals(45_292.25, Spread::dateToExcel($dtQuarter));
     }
 
+    public function testDurationComponentsToSerial(): void
+    {
+        // 0 duration
+        self::assertEquals(0.0, Spread::durationComponentsToSerial(false, 0, 0, 0));
+        // 12 hours is half a day
+        self::assertEquals(0.5, Spread::durationComponentsToSerial(false, 12, 0, 0));
+        // Negative duration
+        self::assertEquals(-0.5, Spread::durationComponentsToSerial(true, 12, 0, 0));
+        // 24 hours is a full day
+        self::assertEquals(1.0, Spread::durationComponentsToSerial(false, 24, 0, 0));
+        // 1 hour, 1 minute, 1 second
+        self::assertEquals(3_661 / 86_400, Spread::durationComponentsToSerial(false, 1, 1, 1));
+        // Microseconds (0.5 seconds = 500,000 microseconds)
+        self::assertEquals(0.5 / 86_400, Spread::durationComponentsToSerial(false, 0, 0, 0, 500_000));
+    }
+
     public function testExcelDateToStringCache(): void
     {
         $date1 = Spread::excelDateToString(45_214.5);
