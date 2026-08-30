@@ -187,9 +187,9 @@ class SpreadTest extends TestCase
         // 24 hours is a full day
         self::assertEquals(1.0, Spread::durationComponentsToSerial(false, 24, 0, 0));
         // 1 hour, 1 minute, 1 second
-        self::assertEquals(3661 / 86400, Spread::durationComponentsToSerial(false, 1, 1, 1));
+        self::assertEquals(3661 / 86_400, Spread::durationComponentsToSerial(false, 1, 1, 1));
         // Microseconds (0.5 seconds = 500,000 microseconds)
-        self::assertEquals(0.5 / 86400, Spread::durationComponentsToSerial(false, 0, 0, 0, 500_000));
+        self::assertEquals(0.5 / 86_400, Spread::durationComponentsToSerial(false, 0, 0, 0, 500_000));
     }
 
     public function testExcelDateToStringCache(): void
@@ -610,7 +610,7 @@ class SpreadTest extends TestCase
 
         // Positive, with microseconds
         self::assertSame('1:02:03.000004', Spread::formatDurationComponents(false, 1, 2, 3, 4));
-        self::assertSame('1:02:03.123456', Spread::formatDurationComponents(false, 1, 2, 3, 123456));
+        self::assertSame('1:02:03.123456', Spread::formatDurationComponents(false, 1, 2, 3, 123_456));
 
         // Negative, with microseconds
         self::assertSame('-1:02:03.000004', Spread::formatDurationComponents(true, 1, 2, 3, 4));

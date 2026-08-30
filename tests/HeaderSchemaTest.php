@@ -145,16 +145,16 @@ class HeaderSchemaTest extends TestCase
         $schema = HeaderSchema::fromDefinition([
             'User' => [
                 'FirstName',
-                'LastName'
+                'LastName',
             ],
             'Contact' => [
-                'Email'
-            ]
+                'Email',
+            ],
         ]);
 
         $result = $schema->flattenRow([
             'User' => ['FirstName' => 'John', 'LastName' => 'Doe'],
-            'Contact' => ['Email' => 'john@example.com']
+            'Contact' => ['Email' => 'john@example.com'],
         ]);
 
         self::assertSame(['John', 'Doe', 'john@example.com'], $result);
@@ -165,16 +165,16 @@ class HeaderSchemaTest extends TestCase
         $schema = HeaderSchema::fromDefinition([
             'User' => [
                 'FirstName',
-                'LastName'
+                'LastName',
             ],
             'Contact' => [
-                'Email'
-            ]
+                'Email',
+            ],
         ]);
 
         $result = $schema->flattenRow([
             'User' => ['FirstName' => 'John'],
-            'Other' => ['Value' => 'Ignore']
+            'Other' => ['Value' => 'Ignore'],
         ]);
 
         self::assertSame(['John', null, null], $result);
