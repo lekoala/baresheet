@@ -69,4 +69,26 @@ class TimeValueTest extends TestCase
         self::assertEquals(new TimeValue(1, 2, 3, 42_123), $time);
         self::assertSame(3_723_042_123, $time->toMicroseconds());
     }
+
+    #[DataProvider('toMicrosecondsProvider')]
+    public function testToMicroseconds(int $expected, int $hour, int $minute, int $second, int $microsecond): void
+    {
+        $time = new TimeValue($hour, $minute, $second, $microsecond);
+        self::assertSame($expected, $time->toMicroseconds());
+    }
+
+    public static function toMicrosecondsProvider(): array
+    {
+        return [
+            'midnight' => [0, 0, 0, 0, 0],
+            'end of day' => [86_399_999_999, 23, 59, 59, 999_999],
+            'arbitrary time' => [3_723_042_123, 1, 2, 3, 42_123],
+            'one hour' => [3_600_000_000, 1, 0, 0, 0],
+            'one minute' => [60_000_000, 0, 1, 0, 0],
+            'one second' => [1_000_000, 0, 0, 1, 0],
+            'one microsecond' => [1, 0, 0, 0, 1],
+            'six hours' => [21_600_000_000, 6, 0, 0, 0],
+            'twelve hours' => [43_200_000_000, 12, 0, 0, 0],
+        ];
+    }
 }
