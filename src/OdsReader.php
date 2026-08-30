@@ -373,6 +373,7 @@ class OdsReader implements ReaderInterface
         $headerOffsetCount = 0;
         $autoScanning = $this->headerOffset === 'auto';
         $autoWindow = [];
+        $selectionIndicesMap = null;
 
         while ($moved && $reader->depth > $tableDepth) {
             if ($reader->nodeType !== \XMLReader::ELEMENT) {
@@ -417,9 +418,11 @@ class OdsReader implements ReaderInterface
                         // Optimization: Skip parsing unselected cells
                         $selectedInRange = false;
                         if ($selectionSchema !== null) {
-                            $indices = $selectionSchema->indices();
+                            if ($selectionIndicesMap === null) {
+                                $selectionIndicesMap = array_flip($selectionSchema->indices());
+                            }
                             for ($i = 0; $i < $colRepeat; $i++) {
-                                if (in_array($colIndex + $i, $indices, true)) {
+                                if (isset($selectionIndicesMap[$colIndex + $i])) {
                                     $selectedInRange = true;
                                     break;
                                 }
@@ -552,6 +555,7 @@ class OdsReader implements ReaderInterface
                                     $selectionSchema = $selectionSchema->rename($this->aliases);
                                 }
                             }
+                            $selectionIndicesMap = null;
                         } catch (InvalidDocumentException|MissingColumnException) {
                             // Not matched — keep scanning
                         }
@@ -597,6 +601,7 @@ class OdsReader implements ReaderInterface
                             }
                             $schema = $schema->rename($this->aliases);
                         }
+                        $selectionIndicesMap = null;
                         continue;
                     }
                     $rowData = array_slice(
