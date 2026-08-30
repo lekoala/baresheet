@@ -152,6 +152,23 @@ class HeaderSchemaTest extends TestCase
         self::assertSame($schema->columnCount(), $selected->columnCount());
     }
 
+    // ─── Indices ───────────────────────────────────────────────
+
+    public function testIndicesReturnsArrayKeysWhenPhysIndicesIsNull(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['First Name', 'Last Name', 'Email']);
+
+        self::assertSame([0, 1, 2], $schema->indices());
+    }
+
+    public function testIndicesReturnsPhysIndicesWhenNotNull(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['First Name', 'Last Name', 'Email']);
+        $selected = $schema->select(['Email', 'First Name']);
+
+        self::assertSame([2, 0], $selected->indices());
+    }
+
     // ─── mapRow (flat) ────────────────────────────────────────
 
     public function testMapRowFlat(): void
