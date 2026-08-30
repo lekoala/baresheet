@@ -201,6 +201,30 @@ class HeaderSchemaTest extends TestCase
         self::assertSame(['name' => 'John', 'email' => 'john@example.com'], $result);
     }
 
+    // ─── columnCount ──────────────────────────────────────────
+
+    public function testColumnCount(): void
+    {
+        $schemaEmpty = HeaderSchema::fromFlatHeaders([]);
+        self::assertSame(0, $schemaEmpty->columnCount());
+
+        $schemaOne = HeaderSchema::fromFlatHeaders(['Single']);
+        self::assertSame(1, $schemaOne->columnCount());
+
+        $schemaMultiple = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+        self::assertSame(3, $schemaMultiple->columnCount());
+
+        $schemaHierarchical = HeaderSchema::fromDefinition([
+            'Person' => [
+                'Contact' => [
+                    'Email',
+                    'Phone',
+                ],
+            ],
+        ]);
+        self::assertSame(2, $schemaHierarchical->columnCount());
+    }
+
     // ─── paths (flat) ─────────────────────────────────────────
 
     public function testPathsFlat(): void
