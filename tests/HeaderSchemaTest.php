@@ -117,6 +117,97 @@ class HeaderSchemaTest extends TestCase
         self::assertTrue(true);
     }
 
+    // ─── flattenRow ───────────────────────────────────────────
+
+    public function testFlattenRowWithFlatSequentialRowPadded(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+        $result = $schema->flattenRow(['a', 'b']);
+        self::assertSame(['a', 'b', null], $result);
+    }
+
+    public function testFlattenRowWithFlatSequentialRowSliced(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+        $result = $schema->flattenRow(['a', 'b', 'c', 'd']);
+        self::assertSame(['a', 'b', 'c'], $result);
+    }
+
+    public function testFlattenRowWithFlatSequentialRowExact(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+        $result = $schema->flattenRow(['a', 'b', 'c']);
+        self::assertSame(['a', 'b', 'c'], $result);
+    }
+
+    public function testFlattenRowWithNestedAssociativeArray(): void
+    {
+        $schema = HeaderSchema::fromDefinition([
+            'User' => [
+                'FirstName',
+                'LastName'
+            ],
+            'Contact' => [
+                'Email'
+            ]
+        ]);
+
+        $result = $schema->flattenRow([
+            'User' => ['FirstName' => 'John', 'LastName' => 'Doe'],
+            'Contact' => ['Email' => 'john@example.com']
+        ]);
+
+        self::assertSame(['John', 'Doe', 'john@example.com'], $result);
+    }
+
+    public function testFlattenRowWithNestedAssociativeArrayMissingPath(): void
+    {
+        $schema = HeaderSchema::fromDefinition([
+            'User' => [
+                'FirstName',
+                'LastName'
+            ],
+            'Contact' => [
+                'Email'
+            ]
+        ]);
+
+        $result = $schema->flattenRow([
+            'User' => ['FirstName' => 'John'],
+            'Other' => ['Value' => 'Ignore']
+        ]);
+
+        self::assertSame(['John', null, null], $result);
+    }
+
+    public function testFlattenRowWithExplicitIndicesAlreadyFlat(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+
+        // Use reflection to explicitly set physIndices
+        $reflection = new \ReflectionClass($schema);
+        $prop = $reflection->getProperty('physIndices');
+        $prop->setAccessible(true);
+        $prop->setValue($schema, [2, 0, 1]); // A maps to index 2, B to 0, C to 1
+
+        $result = $schema->flattenRow(['val_b', 'val_c', 'val_a']);
+        self::assertEquals([0 => 'val_b', 1 => 'val_c', 2 => 'val_a'], $result);
+    }
+
+    public function testFlattenRowWithExplicitIndicesUnsetReturnsNulls(): void
+    {
+        $schema = HeaderSchema::fromFlatHeaders(['A', 'B', 'C']);
+
+        // Use reflection to explicitly set physIndices
+        $reflection = new \ReflectionClass($schema);
+        $prop = $reflection->getProperty('physIndices');
+        $prop->setAccessible(true);
+        $prop->setValue($schema, [2, 0, 1]);
+
+        $result = $schema->flattenRow([]);
+        self::assertSame([0 => null, 1 => null, 2 => null], $result);
+    }
+
     // ─── select ──────────────────────────────────────────────
 
     public function testSelectColumns(): void
