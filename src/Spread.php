@@ -668,36 +668,16 @@ class Spread
                     'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
                 );
 
-                $title = $xml->xpath('//dc:title');
-                $subject = $xml->xpath('//dc:subject');
-                $creator = $xml->xpath('//dc:creator');
-                $keywords = $xml->xpath('//cp:keywords');
-                $description = $xml->xpath('//dc:description');
-                $category = $xml->xpath('//cp:category');
-                $language = $xml->xpath('//dc:language');
-
-                if ($title) {
-                    $arr['meta']['title'] = (string) $title[0];
-                }
-                if ($subject) {
-                    $arr['meta']['subject'] = (string) $subject[0];
-                }
-                if ($creator) {
-                    $arr['meta']['creator'] = (string) $creator[0];
-                }
-                if ($keywords) {
-                    $keywordStrings = array_map(static fn($k) => (string) $k, $keywords);
-                    $arr['meta']['keywords'] = implode(', ', $keywordStrings);
-                }
-                if ($description) {
-                    $arr['meta']['description'] = (string) $description[0];
-                }
-                if ($category) {
-                    $arr['meta']['category'] = (string) $category[0];
-                }
-                if ($language) {
-                    $arr['meta']['language'] = (string) $language[0];
-                }
+                $xpathMap = [
+                    'title' => '//dc:title',
+                    'subject' => '//dc:subject',
+                    'creator' => '//dc:creator',
+                    'keywords' => '//cp:keywords',
+                    'description' => '//dc:description',
+                    'category' => '//cp:category',
+                    'language' => '//dc:language',
+                ];
+                $arr['meta'] = self::extractMeta($xml, $xpathMap);
             }
 
             $arr['sheets'] = self::getXlsxSheetNames($zip);
@@ -715,32 +695,15 @@ class Spread
                 $xml->registerXPathNamespace('dc', 'http://purl.org/dc/elements/1.1/');
                 $xml->registerXPathNamespace('meta', 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0');
 
-                $title = $xml->xpath('//dc:title');
-                $subject = $xml->xpath('//dc:subject');
-                $creator = $xml->xpath('//dc:creator');
-                $keywords = $xml->xpath('//meta:keyword');
-                $description = $xml->xpath('//dc:description');
-                $language = $xml->xpath('//dc:language');
-
-                if ($title) {
-                    $arr['meta']['title'] = (string) $title[0];
-                }
-                if ($subject) {
-                    $arr['meta']['subject'] = (string) $subject[0];
-                }
-                if ($creator) {
-                    $arr['meta']['creator'] = (string) $creator[0];
-                }
-                if ($keywords) {
-                    $keywordStrings = array_map(static fn($k) => (string) $k, $keywords);
-                    $arr['meta']['keywords'] = implode(', ', $keywordStrings);
-                }
-                if ($description) {
-                    $arr['meta']['description'] = (string) $description[0];
-                }
-                if ($language) {
-                    $arr['meta']['language'] = (string) $language[0];
-                }
+                $xpathMap = [
+                    'title' => '//dc:title',
+                    'subject' => '//dc:subject',
+                    'creator' => '//dc:creator',
+                    'keywords' => '//meta:keyword',
+                    'description' => '//dc:description',
+                    'language' => '//dc:language',
+                ];
+                $arr['meta'] = self::extractMeta($xml, $xpathMap);
             }
 
             $arr['sheets'] = self::getOdsSheetNames($zip);
@@ -750,6 +713,30 @@ class Spread
 
         /** @var array{format:lowercase-string, meta: array{creator?: string, title?: string, subject?: string, keywords?: string, description?: string, category?: string, language?: string}, sheets:array<string>} $arr */
         return $arr;
+    }
+
+    /**
+     * Extract metadata from an XML document based on a mapping of keys to XPaths.
+     *
+     * @param \SimpleXMLElement $xml
+     * @param array<string, string> $xpathMap Map of metadata key to XPath expression
+     * @return array<string, string>
+     */
+    private static function extractMeta(\SimpleXMLElement $xml, array $xpathMap): array
+    {
+        $meta = [];
+        foreach ($xpathMap as $key => $xpath) {
+            $result = $xml->xpath($xpath);
+            if ($result) {
+                if ($key === 'keywords') {
+                    $keywordStrings = array_map(static fn($k) => (string) $k, $result);
+                    $meta[$key] = implode(', ', $keywordStrings);
+                } else {
+                    $meta[$key] = (string) $result[0];
+                }
+            }
+        }
+        return $meta;
     }
 
     /**
