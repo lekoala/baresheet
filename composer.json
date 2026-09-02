@@ -37,7 +37,7 @@
         "shuchkin/simplexlsx": "^1.1",
         "shuchkin/simplexlsxgen": "^1.5",
         "squizlabs/php_codesniffer": "^4.0.1",
-        "symfony/polyfill-time": "1.x-dev"
+        "symfony/polyfill-time": "^1.42"
     },
     "suggest": {
         "ext-iconv": "Required for encoding conversion",
