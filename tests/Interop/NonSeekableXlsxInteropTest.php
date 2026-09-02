@@ -8,7 +8,7 @@ use LeKoala\Baresheet\XlsxWriter;
 use Shuchkin\SimpleXLSX;
 
 /**
- * Reader interoperability for XLSX bytes emitted to a non-seekable output.
+ * Reader interoperability for XLSX bytes emitted through the output API.
  */
 class NonSeekableXlsxInteropTest extends InteropTestCase
 {
@@ -19,9 +19,9 @@ class NonSeekableXlsxInteropTest extends InteropTestCase
         ['B-2', 'Bob'],
     ];
 
-    public function testZipArchiveReadsNonSeekableOutput(): void
+    public function testZipArchiveReadsOutput(): void
     {
-        $file = $this->writeNonSeekableOutput();
+        $file = $this->writeOutput();
         $zip = new \ZipArchive();
 
         self::assertTrue($zip->open($file, \ZipArchive::CHECKCONS));
@@ -31,31 +31,31 @@ class NonSeekableXlsxInteropTest extends InteropTestCase
         unlink($file);
     }
 
-    public function testBaresheetReadsNonSeekableOutput(): void
+    public function testBaresheetReadsOutput(): void
     {
-        $file = $this->writeNonSeekableOutput();
+        $file = $this->writeOutput();
 
         self::assertSame(self::ROWS, $this->readBaresheet($file));
 
         unlink($file);
     }
 
-    public function testOpenSpoutReadsNonSeekableOutput(): void
+    public function testOpenSpoutReadsOutput(): void
     {
-        $file = $this->writeNonSeekableOutput();
+        $file = $this->writeOutput();
 
         self::assertSame(self::ROWS, $this->readOpenSpout('xlsx', $file));
 
         unlink($file);
     }
 
-    public function testXlswriterReadsNonSeekableOutputWhenAvailable(): void
+    public function testXlswriterReadsOutputWhenAvailable(): void
     {
         if (!extension_loaded('xlswriter') || !class_exists(\Vtiful\Kernel\Excel::class)) {
             self::markTestSkipped('The xlswriter extension is not available.');
         }
 
-        $file = $this->writeNonSeekableOutput();
+        $file = $this->writeOutput();
         $excel = new \Vtiful\Kernel\Excel(['path' => dirname($file)]);
         $excel->openFile(basename($file))->openSheet();
 
@@ -70,20 +70,18 @@ class NonSeekableXlsxInteropTest extends InteropTestCase
         unlink($file);
     }
 
-    public function testSimpleXlsxNonSeekableOutputLimitationIsDocumented(): void
+    public function testSimpleXlsxReadsOutput(): void
     {
-        $file = $this->writeNonSeekableOutput();
+        $file = $this->writeOutput();
         $xlsx = SimpleXLSX::parse($file);
 
-        self::assertFalse(
-            $xlsx,
-            'SimpleXLSX unexpectedly accepted ZIP64 data descriptors; update the interoperability matrix.',
-        );
+        self::assertNotFalse($xlsx);
+        self::assertSame(self::ROWS, $xlsx->rows());
 
         unlink($file);
     }
 
-    private function writeNonSeekableOutput(): string
+    private function writeOutput(): string
     {
         $writer = new XlsxWriter();
 
@@ -97,8 +95,7 @@ class NonSeekableXlsxInteropTest extends InteropTestCase
         }
 
         self::assertIsString($bytes);
-        self::assertSame(45, unpack('v', substr($bytes, 4, 2))[1]);
-        self::assertSame(0x0808, unpack('v', substr($bytes, 6, 2))[1]);
+        self::assertSame(20, unpack('v', substr($bytes, 4, 2))[1]);
 
         $file = $this->tempFile('xlsx');
         self::assertNotFalse(file_put_contents($file, $bytes));
