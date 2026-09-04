@@ -612,6 +612,7 @@ class HeaderSchemaTest extends TestCase
         self::assertSame(['Cat B', 'Type'], $paths[2]);
         self::assertSame(['Cat B', 'Value'], $paths[3]);
     }
+
     // ─── normalizePaths ───────────────────────────────────────
 
     public function testNormalizePathsFlat(): void
@@ -632,8 +633,8 @@ class HeaderSchemaTest extends TestCase
             'User' => ['First Name', 'Last Name'],
             'Contact' => [
                 'Email',
-                'Phone' => ['Mobile', 'Work']
-            ]
+                'Phone' => ['Mobile', 'Work'],
+            ],
         ];
         $expected = [
             ['User', 'First Name'],
@@ -658,8 +659,8 @@ class HeaderSchemaTest extends TestCase
             'One' => [
                 'Two',
                 3 => 'Three',
-                'Four' => ['Five']
-            ]
+                'Four' => ['Five'],
+            ],
         ];
         $expected = [
             ['Zero'],
