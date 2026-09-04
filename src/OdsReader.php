@@ -642,7 +642,6 @@ class OdsReader implements ReaderInterface
         }
     }
 
-
     /**
      * Historical reader behavior for stringifyValues mode: return the raw ODF
      * lexical value, falling back to the display text for string cells.
