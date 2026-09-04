@@ -438,6 +438,38 @@ class SpreadNativeTest extends TestCase
         self::assertSame($expected, Spread::formatIsoDurationComponents(...$components));
     }
 
+    #[DataProvider('isoDurationObjectProvider')]
+    public function testFormatIsoDuration(\Time\Duration $duration, string $expected): void
+    {
+        self::assertSame($expected, Spread::formatIsoDuration($duration));
+    }
+
+    public static function isoDurationObjectProvider(): array
+    {
+        return [
+            'h m s' => [
+                \Time\Duration::fromMicroseconds(((14 * 3600) + (30 * 60) + 15) * 1_000_000), // 14:30:15
+                'PT14H30M15S',
+            ],
+            'over a day' => [
+                \Time\Duration::fromMicroseconds(((36 * 3600) + (30 * 60) + 15) * 1_000_000), // 36:30:15
+                'PT36H30M15S',
+            ],
+            'fraction' => [
+                \Time\Duration::fromMicroseconds(500_000), // 0.5s
+                'PT0H0M0.500000S',
+            ],
+            'negative' => [
+                \Time\Duration::fromMicroseconds(3_600_000_000)->negate(), // -1 hour
+                '-PT1H0M0S',
+            ],
+            'zero' => [
+                \Time\Duration::fromMicroseconds(0),
+                'PT0H0M0S',
+            ],
+        ];
+    }
+
     public static function isoFormatProvider(): array
     {
         return [
