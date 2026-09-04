@@ -448,11 +448,11 @@ class SpreadNativeTest extends TestCase
     {
         return [
             'h m s' => [
-                \Time\Duration::fromMicroseconds((14 * 3600 + 30 * 60 + 15) * 1_000_000), // 14:30:15
+                \Time\Duration::fromMicroseconds(((14 * 3600) + (30 * 60) + 15) * 1_000_000), // 14:30:15
                 'PT14H30M15S',
             ],
             'over a day' => [
-                \Time\Duration::fromMicroseconds((36 * 3600 + 30 * 60 + 15) * 1_000_000), // 36:30:15
+                \Time\Duration::fromMicroseconds(((36 * 3600) + (30 * 60) + 15) * 1_000_000), // 36:30:15
                 'PT36H30M15S',
             ],
             'fraction' => [
