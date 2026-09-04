@@ -612,4 +612,62 @@ class HeaderSchemaTest extends TestCase
         self::assertSame(['Cat B', 'Type'], $paths[2]);
         self::assertSame(['Cat B', 'Value'], $paths[3]);
     }
+    // ─── normalizePaths ───────────────────────────────────────
+
+    public function testNormalizePathsFlat(): void
+    {
+        $def = ['First Name', 'Last Name', 'Email'];
+        $expected = [
+            ['First Name'],
+            ['Last Name'],
+            ['Email'],
+        ];
+
+        self::assertSame($expected, HeaderSchema::normalizePaths($def));
+    }
+
+    public function testNormalizePathsHierarchical(): void
+    {
+        $def = [
+            'User' => ['First Name', 'Last Name'],
+            'Contact' => [
+                'Email',
+                'Phone' => ['Mobile', 'Work']
+            ]
+        ];
+        $expected = [
+            ['User', 'First Name'],
+            ['User', 'Last Name'],
+            ['Contact', 'Email'],
+            ['Contact', 'Phone', 'Mobile'],
+            ['Contact', 'Phone', 'Work'],
+        ];
+
+        self::assertSame($expected, HeaderSchema::normalizePaths($def));
+    }
+
+    public function testNormalizePathsEmpty(): void
+    {
+        self::assertSame([], HeaderSchema::normalizePaths([]));
+    }
+
+    public function testNormalizePathsMixedKeys(): void
+    {
+        $def = [
+            0 => 'Zero',
+            'One' => [
+                'Two',
+                3 => 'Three',
+                'Four' => ['Five']
+            ]
+        ];
+        $expected = [
+            ['Zero'],
+            ['One', 'Two'],
+            ['One', 'Three'],
+            ['One', 'Four', 'Five'],
+        ];
+
+        self::assertSame($expected, HeaderSchema::normalizePaths($def));
+    }
 }
