@@ -313,6 +313,32 @@ class SpreadNativeTest extends TestCase
         ];
     }
 
+    public function testDurationToSerial(): void
+    {
+        $zero = \Time\Duration::fromMicroseconds(0);
+        self::assertEquals(0.0, Spread::durationToSerial($zero));
+
+        // 12 hours is half a day
+        $halfDay = \Time\Duration::fromMicroseconds(43_200_000_000);
+        self::assertEquals(0.5, Spread::durationToSerial($halfDay));
+
+        // 24 hours is a full day
+        $fullDay = \Time\Duration::fromMicroseconds(86_400_000_000);
+        self::assertEquals(1.0, Spread::durationToSerial($fullDay));
+
+        // Negative duration
+        $negativeHalf = $halfDay->negate();
+        self::assertEquals(-0.5, Spread::durationToSerial($negativeHalf));
+
+        // Complex duration (1 hour, 1 minute, 1 second)
+        $complex = \Time\Duration::fromMicroseconds(3_661_000_000);
+        self::assertEquals(3661 / 86_400, Spread::durationToSerial($complex));
+
+        // With sub-seconds
+        $micro = \Time\Duration::fromMicroseconds(500_000);
+        self::assertEquals(0.5 / 86_400, Spread::durationToSerial($micro));
+    }
+
     public function testStringifyDuration(): void
     {
         $positive = \Time\Duration::fromMicroseconds(129_600_000_000);
