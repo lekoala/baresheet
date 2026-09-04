@@ -112,33 +112,9 @@ class OdsReader implements ReaderInterface
 
         // Open content.xml as a zip:// stream directly — avoids writing a temp file first,
         // saving a full disk write+read cycle (~40ms on typical hardware).
-        yield from $this->parseContent('zip://' . $filename . '#content.xml', $stylesXml);
-    }
-
-    /**
-     * @return Generator<int, Row>
-     */
-    public function readString(string $contents): Generator
-    {
-        $filename = Spread::getTempFilename();
-        try {
-            file_put_contents($filename, $contents);
-            yield from $this->readFile($filename);
-        } finally {
-            if (is_file($filename)) {
-                unlink($filename);
-            }
-        }
-    }
-
-    /**
-     * @return Generator<int, Row>
-     */
-    private function parseContent(string $xmlFile, ?string $stylesXml): Generator
-    {
         $reader = new \XMLReader();
-        if (!$reader->open($xmlFile, null, LIBXML_NONET)) {
-            throw new InvalidDocumentException("Failed to open {$xmlFile}");
+        if (!$reader->open('zip://' . $filename . '#content.xml', null, LIBXML_NONET)) {
+            throw new InvalidDocumentException("Failed to open zip://{$filename}#content.xml");
         }
 
         try {
@@ -649,6 +625,23 @@ class OdsReader implements ReaderInterface
             );
         }
     }
+
+    /**
+     * @return Generator<int, Row>
+     */
+    public function readString(string $contents): Generator
+    {
+        $filename = Spread::getTempFilename();
+        try {
+            file_put_contents($filename, $contents);
+            yield from $this->readFile($filename);
+        } finally {
+            if (is_file($filename)) {
+                unlink($filename);
+            }
+        }
+    }
+
 
     /**
      * Historical reader behavior for stringifyValues mode: return the raw ODF
