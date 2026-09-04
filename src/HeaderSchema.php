@@ -403,8 +403,9 @@ final class HeaderSchema
         $requiredPaths = self::normalizePaths($requiredColumns);
 
         $offset = 0;
+        $windowCount = count($window);
 
-        while (count($window) >= $headerRows && $offset < $maxScan) {
+        while ($windowCount >= $headerRows && $offset < $maxScan) {
             $candidate = array_slice($window, 0, $headerRows);
 
             try {
