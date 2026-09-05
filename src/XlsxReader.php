@@ -355,11 +355,31 @@ class XlsxReader implements ReaderInterface
                                         $isDepth = $reader->depth;
                                         $v = '';
                                         while ($reader->read() && $reader->depth > $isDepth) {
-                                            if (
-                                                $reader->nodeType === \XMLReader::ELEMENT
-                                                && $reader->name === 't'
-                                            ) {
+                                            if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                                                continue;
+                                            }
+                                            // Direct <t> child of <is>: simple inline string.
+                                            if ($reader->name === 't' && $reader->depth === ($isDepth + 1)) {
                                                 $v .= $reader->readString();
+                                                continue;
+                                            }
+                                            // Rich-text <r><t> runs. <rPh> phonetic runs and
+                                            // <phoneticPr> live one level deeper and are skipped,
+                                            // mirroring the shared-strings reader.
+                                            if (
+                                                $reader->name === 'r'
+                                                && $reader->depth === ($isDepth + 1)
+                                                && !$reader->isEmptyElement
+                                            ) {
+                                                $rDepth = $reader->depth;
+                                                while ($reader->read() && $reader->depth > $rDepth) {
+                                                    if (
+                                                        $reader->nodeType === \XMLReader::ELEMENT
+                                                        && $reader->name === 't'
+                                                    ) {
+                                                        $v .= $reader->readString();
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -657,12 +677,10 @@ class XlsxReader implements ReaderInterface
      */
     private function resolveSheetPath(ZipArchive $zip): string
     {
-        if ($this->sheet === null) {
-            return 'xl/worksheets/sheet1.xml';
-        }
-
         $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
         if (!$wbData) {
+            // Minimal archives (a worksheet part and no workbook) keep the legacy
+            // single-sheet default: there is no declared sheet to get wrong.
             return 'xl/worksheets/sheet1.xml';
         }
 
@@ -677,34 +695,79 @@ class XlsxReader implements ReaderInterface
             $idx++;
         }
 
-        $target = null;
-        foreach ($sheets as $s) {
-            if (is_int($this->sheet) && $s['index'] === $this->sheet) {
-                $target = $s['rId'];
-                break;
+        if ($this->sheet === null) {
+            // No selection: read the first sheet declared by the workbook,
+            // whatever part it points to.
+            $firstSheet = $sheets[0] ?? null;
+            if ($firstSheet === null) {
+                throw new InvalidDocumentException('Workbook declares no sheets');
             }
-            if (is_string($this->sheet) && $s['name'] === $this->sheet) {
-                $target = $s['rId'];
-                break;
-            }
-        }
-
-        if (!$target) {
-            throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
-        }
-
-        // Resolve rId to target path from workbook relationships
-        $relsData = Spread::zipGetData($zip, 'xl/_rels/workbook.xml.rels');
-        if ($relsData) {
-            $relsXml = Spread::safeXml($relsData);
-            foreach ($relsXml->Relationship as $rel) {
-                if ((string) $rel['Id'] === $target) {
-                    return 'xl/' . (string) $rel['Target'];
+            $target = $firstSheet['rId'];
+        } else {
+            $target = null;
+            foreach ($sheets as $s) {
+                if (is_int($this->sheet) && $s['index'] === $this->sheet) {
+                    $target = $s['rId'];
+                    break;
+                }
+                if (is_string($this->sheet) && $s['name'] === $this->sheet) {
+                    $target = $s['rId'];
+                    break;
                 }
             }
+
+            if ($target === null) {
+                throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
+            }
         }
 
-        return 'xl/worksheets/sheet1.xml';
+        if ($target === '') {
+            throw new InvalidDocumentException('Workbook sheet does not declare a relationship id');
+        }
+
+        // Resolve rId to target path from workbook relationships.
+        $relsData = Spread::zipGetData($zip, 'xl/_rels/workbook.xml.rels');
+        if ($relsData === null || $relsData === '') {
+            throw new InvalidDocumentException("Missing workbook relationships (sheet '{$target}')");
+        }
+
+        $relsXml = Spread::safeXml($relsData);
+        foreach ($relsXml->Relationship as $rel) {
+            if ((string) $rel['Id'] === $target) {
+                $relTarget = (string) $rel['Target'];
+                if ($relTarget === '') {
+                    throw new InvalidDocumentException("Relationship '{$target}' has no target");
+                }
+                // A target starting with '/' is package-absolute and must not be
+                // prefixed again; any other target is relative to xl/.
+                $path = $relTarget[0] === '/'
+                    ? $relTarget
+                    : 'xl/' . $relTarget;
+                return self::normalizePartPath($path);
+            }
+        }
+
+        throw new InvalidDocumentException("Relationship '{$target}' not found in workbook relationships");
+    }
+
+    /**
+     * Normalize an OPC part path: strip a leading '/', collapse duplicate
+     * slashes and resolve '.' / '..' segments.
+     */
+    private static function normalizePartPath(string $path): string
+    {
+        $stack = [];
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..') {
+                array_pop($stack);
+                continue;
+            }
+            $stack[] = $segment;
+        }
+        return implode('/', $stack);
     }
 
     // -- Format helpers --

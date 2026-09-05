@@ -468,13 +468,52 @@ class OdsWriter implements WriterInterface
             return;
         }
 
-        $first = true;
+        $firstSeen = false;
+        $columnKeys = null;
         foreach ($data as $row) {
-            if ($first && array_is_list($row) === false) {
-                yield array_keys($row);
+            $isList = array_is_list($row);
+            if (!$firstSeen) {
+                $firstSeen = true;
+                if (!$isList) {
+                    // The first associative row defines the columns: its keys become
+                    // the header and every following associative row is aligned on them.
+                    $columnKeys = array_keys($row);
+                    yield $columnKeys;
+                }
             }
-            $first = false;
-            yield array_values($row);
+
+            if ($isList || $columnKeys === null) {
+                // Positional rows are written as-is. Once the first row is a list no
+                // header is invented mid-stream, so later associative rows keep their
+                // array order too (matching positional semantics).
+                yield array_values($row);
+                continue;
+            }
+
+            if (array_keys($row) === $columnKeys) {
+                yield array_values($row);
+                continue;
+            }
+
+            $rowByKey = [];
+            foreach ($row as $key => $value) {
+                $rowByKey[$key] = $value;
+            }
+            // Unknown keys would be silently dropped by alignment, so they are
+            // rejected instead of losing data.
+            foreach ($rowByKey as $key => $_rowValue) {
+                if (!in_array($key, $columnKeys, true)) {
+                    $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
+                    throw new WriteException(
+                        "Row contains column key '{$key}' absent from the header (sheet '{$sheetName}')",
+                    );
+                }
+            }
+            $aligned = [];
+            foreach ($columnKeys as $key) {
+                $aligned[] = array_key_exists($key, $rowByKey) ? $rowByKey[$key] : null;
+            }
+            yield $aligned;
         }
     }
 

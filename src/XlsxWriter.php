@@ -19,6 +19,12 @@ class XlsxWriter implements WriterInterface
 {
     public const MIMETYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     private const BUFFER_SIZE = 1000;
+    // Excel grid and cell limits: 1,048,576 rows, 16,384 columns (XFD), 32,767
+    // characters per cell. The reader rejects cell references beyond XFD, so the
+    // writer must refuse dimensions its own reader cannot round-trip.
+    private const MAX_ROWS = 1_048_576;
+    private const MAX_COLUMNS = 16_384;
+    private const MAX_CELL_LENGTH = 32_767;
 
     /**
      * @var Meta|array<string, mixed>|null Optional metadata for the generated document.
@@ -324,14 +330,52 @@ class XlsxWriter implements WriterInterface
             return;
         }
 
-        $first = true;
+        $firstSeen = false;
+        $columnKeys = null;
         foreach ($data as $row) {
-            if ($first && array_is_list($row) === false) {
-                yield array_keys($row);
+            $isList = array_is_list($row);
+            if (!$firstSeen) {
+                $firstSeen = true;
+                if (!$isList) {
+                    // The first associative row defines the columns: its keys become
+                    // the header and every following associative row is aligned on them.
+                    $columnKeys = array_keys($row);
+                    yield $columnKeys;
+                }
             }
-            $first = false;
-            // Avoid a copy for rows that are already a list.
-            yield array_is_list($row) ? $row : array_values($row);
+
+            if ($isList || $columnKeys === null) {
+                // Positional rows are written as-is. Once the first row is a list no
+                // header is invented mid-stream, so later associative rows keep their
+                // array order too (matching positional semantics).
+                yield array_values($row);
+                continue;
+            }
+
+            if (array_keys($row) === $columnKeys) {
+                yield array_values($row);
+                continue;
+            }
+
+            $rowByKey = [];
+            foreach ($row as $key => $value) {
+                $rowByKey[$key] = $value;
+            }
+            // Unknown keys would be silently dropped by alignment, so they are
+            // rejected instead of losing data.
+            foreach ($rowByKey as $key => $_rowValue) {
+                if (!in_array($key, $columnKeys, true)) {
+                    $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
+                    throw new WriteException(
+                        "Row contains column key '{$key}' absent from the header (sheet '{$sheetName}')",
+                    );
+                }
+            }
+            $aligned = [];
+            foreach ($columnKeys as $key) {
+                $aligned[] = array_key_exists($key, $rowByKey) ? $rowByKey[$key] : null;
+            }
+            yield $aligned;
         }
     }
 
@@ -389,10 +433,18 @@ class XlsxWriter implements WriterInterface
 
         foreach ($wrappedData as $dataRow) {
             $r++;
+            if ($r > self::MAX_ROWS) {
+                throw new WriteException("Row {$r} exceeds the maximum of " . self::MAX_ROWS . ' rows');
+            }
             $i = 0;
             $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
             $buffer .= "<row r=\"{$r}\">";
             foreach ($dataRow as $value) {
+                if ($i >= self::MAX_COLUMNS) {
+                    throw new WriteException(
+                        "Row {$r} exceeds the maximum of " . self::MAX_COLUMNS . ' columns',
+                    );
+                }
                 if (!isset($colCache[$i])) {
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
@@ -456,6 +508,17 @@ class XlsxWriter implements WriterInterface
                     $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                 } else {
                     $strValue = (string) $value;
+
+                    // Excel caps a cell at 32,767 characters; refuse longer text
+                    // before escaping (byte length is a safe fast-path filter since
+                    // a string's byte count is always >= its character count).
+                    if (strlen($strValue) > self::MAX_CELL_LENGTH) {
+                        if (mb_strlen($strValue) > self::MAX_CELL_LENGTH) {
+                            throw new WriteException(
+                                "Cell {$cn} exceeds the maximum of " . self::MAX_CELL_LENGTH . ' characters',
+                            );
+                        }
+                    }
 
                     // ⚡ Bolt: Fast-path optimization
                     // mb_strlen is significantly slower than strlen in tight loops.

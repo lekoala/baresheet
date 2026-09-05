@@ -620,4 +620,94 @@ class RobustnessTest extends TestCase
         self::assertFileDoesNotExist($destination);
         rmdir($tempDir);
     }
+
+    // -- 10. XLSX writer must refuse dimensions its own reader cannot round-trip --
+
+    public function testXlsxWriterRejectsTooManyColumns(): void
+    {
+        $writer = new XlsxWriter();
+        try {
+            $writer->writeString([array_fill(0, 16_385, 'x')]);
+            self::fail('Expected WriteException for too many columns');
+        } catch (WriteException $e) {
+            self::assertStringContainsString('exceeds the maximum of 16384 columns', $e->getMessage());
+        }
+    }
+
+    public function testXlsxWriterAcceptsMaxColumns(): void
+    {
+        $writer = new XlsxWriter();
+        $bytes = $writer->writeString([array_fill(0, 16_384, 'x')]);
+        self::assertNotSame('', $bytes);
+    }
+
+    public function testXlsxWriterRejectsTooLongCell(): void
+    {
+        $writer = new XlsxWriter();
+        try {
+            $writer->writeString([[str_repeat('x', 32_768)]]);
+            self::fail('Expected WriteException for an over-long cell');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("Cell A1", $e->getMessage());
+            self::assertStringContainsString('exceeds the maximum of 32767 characters', $e->getMessage());
+        }
+    }
+
+    public function testXlsxWriterAcceptsMaxCellLength(): void
+    {
+        $writer = new XlsxWriter();
+        $bytes = $writer->writeString([[str_repeat('x', 32_767)]]);
+        self::assertNotSame('', $bytes);
+    }
+
+    public function testXlsxWriterRejectsTooManyRows(): void
+    {
+        $writer = new XlsxWriter();
+        $rows = (static function () {
+            for ($i = 0; $i <= 1_048_576; $i++) {
+                yield [null];
+            }
+        })();
+        try {
+            $writer->writeString($rows);
+            self::fail('Expected WriteException for too many rows');
+        } catch (WriteException $e) {
+            self::assertStringContainsString('exceeds the maximum of 1048576 rows', $e->getMessage());
+        }
+    }
+
+    // -- 11. Inline strings must skip phonetic runs and keep rich-text runs --
+
+    public function testXlsxInlineStringSkipsPhoneticRuns(): void
+    {
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="inlineStr"><is><t>original</t><rPh sb="0" eb="6"><t>PHONETIC</t></rPh>'
+            . '<phoneticPr fontId="1"/></is></c></row>'
+            . '</sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile($file));
+        unlink($file);
+
+        self::assertSame([['original']], $data);
+    }
+
+    public function testXlsxInlineStringRichTextRuns(): void
+    {
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="inlineStr"><is><r><t>Hello</t></r><r><t xml:space="preserve"> World</t></r></is></c></row>'
+            . '</sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $reader = new XlsxReader();
+        $data = iterator_to_array($reader->readFile($file));
+        unlink($file);
+
+        self::assertSame([['Hello World']], $data);
+    }
 }
