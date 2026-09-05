@@ -229,7 +229,9 @@ $writer->writeFile([
 
 ### CSV specifics
 
-CSV cells are always written as text. To make export output deterministic across PHP configurations, the CSV writer serializes scalars explicitly: `bool` as `1`/`0`, floats with 17 significant digits (independent of the `precision` ini setting and of `LC_NUMERIC`), and `null` as an empty cell. Note that `false` is written as `0`, so it stays distinct from `null`'s empty cell. Non-finite floats (`INF`/`NAN`) are rejected with a `WriteException`, like the XLSX/ODS writers.
+CSV has no native value types. Baresheet therefore uses conventional textual representations: booleans as `1`/`0` and `null` as an empty cell. Type distinctions that CSV cannot represent, such as `false` vs numeric `0` or `null` vs an empty string, are intentionally not preserved.
+
+To make export output deterministic across PHP configurations, the CSV writer serializes scalars explicitly: `bool` as `1`/`0`, finite floats with up to 17 significant digits (enough to round-trip a PHP float exactly, independent of the `precision` ini setting and of `LC_NUMERIC`), and `null` as an empty cell. This keeps `false` (`0`) distinct from `null` (empty). Non-finite floats (`INF`/`NAN`) are rejected with a `WriteException`, consistently with the XLSX/ODS writers.
 
 With `escapeFormulas`, formula protection applies to strings and `Stringable` objects; numeric cells are never mistaken for formulas, so a negative float keeps its leading `-`.
 
