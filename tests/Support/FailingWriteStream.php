@@ -80,6 +80,7 @@ final class FailingWriteStream
 
     public function stream_close(): void
     {
+        // empty
     }
 
     /** Refuse any further write: spend the budget up to the current size. */

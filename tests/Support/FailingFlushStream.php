@@ -80,5 +80,6 @@ final class FailingFlushStream
 
     public function stream_close(): void
     {
+        // empty
     }
 }
