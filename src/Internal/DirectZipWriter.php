@@ -12,14 +12,15 @@ use LeKoala\Baresheet\Exception\WriteException;
  * Minimal streaming ZIP writer used to package XLSX output.
  *
  * Streamed entries on seekable outputs patch final metadata into a reserved
- * local header. On non-seekable outputs, ZIP64 headers and signed data
- * descriptors carry the final CRC and sizes without requiring ftell() or
- * fseek(). Known STORE strings write complete classic headers up front.
+ * local header. On non-seekable outputs, a classic trailing data descriptor
+ * carries the final CRC and sizes without requiring ftell() or fseek(). Known
+ * STORE strings write complete classic headers up front.
  *
  * Capabilities:
  *  - classic ZIP and ZIP64; seekable outputs enable ZIP64 only when final
- *    sizes or offsets require it, while non-seekable entries advertise
- *    ZIP64 proactively because their sizes are not known in advance
+ *    sizes or offsets require it. Non-seekable output stays classic and
+ *    refuses to pass 4 GiB, because promoting mid-stream would mean a ZIP64
+ *    descriptor, and Excel opens no archive carrying ZIP64 in any form
  *  - DEFLATE and STORE compression
  *  - UTF-8 filenames (EFS flag)
  *  - seekable and non-seekable output
@@ -317,12 +318,13 @@ final class DirectZipWriter
             $localCompressedSize = 0;
             $localUncompressedSize = 0;
         } else {
-            // Unknown-length output cannot be patched. Advertise ZIP64 up
-            // front and append a signed ZIP64 data descriptor after the data.
-            $version = self::VERSION_ZIP64;
-            $localExtra = self::packStreamingZip64Extra();
-            $localCompressedSize = self::UINT32_MAX;
-            $localUncompressedSize = self::UINT32_MAX;
+            // Unknown-length output cannot be patched, so the sizes follow the
+            // data in a classic descriptor instead. Spreadsheet clients read
+            // that form; what they refuse is ZIP64, so nothing here promotes.
+            $version = self::VERSION_CLASSIC;
+            $localExtra = '';
+            $localCompressedSize = 0;
+            $localUncompressedSize = 0;
         }
 
         $localHeader = pack(
@@ -438,8 +440,9 @@ final class DirectZipWriter
             }
             $this->seek($endOffset);
         } else {
-            $this->writeZip64DataDescriptor($crc, $compressedSize, $uncompressedSize);
-            $version = self::VERSION_ZIP64;
+            $this->assertFitsClassicZip($name, $compressedSize, $uncompressedSize);
+            $this->writeDataDescriptor($crc, $compressedSize, $uncompressedSize);
+            $version = self::VERSION_CLASSIC;
         }
 
         $this->entries[] = [
@@ -501,21 +504,37 @@ final class DirectZipWriter
         return pack('vvvv', 0xA220, 0x0010, 0xA028, 0x000C) . str_repeat("\0", 12);
     }
 
-    /** ZIP64 local extra with unknown sizes for non-seekable output. */
-    private static function packStreamingZip64Extra(): string
-    {
-        return pack('vv', self::ZIP64_EXTRA_FIELD_TAG, 16) . pack('PP', 0, 0);
-    }
-
-    private function writeZip64DataDescriptor(int $crc, int $compressedSize, int $uncompressedSize): void
+    /** Classic 32-bit data descriptor, written after a streamed entry's data. */
+    private function writeDataDescriptor(int $crc, int $compressedSize, int $uncompressedSize): void
     {
         $this->writeAll(pack(
-            'VVPP',
+            'VVVV',
             self::DATA_DESCRIPTOR_SIGNATURE,
             $crc,
             $compressedSize,
             $uncompressedSize,
         ));
+    }
+
+    /**
+     * Refuse to promote a streamed archive to ZIP64.
+     *
+     * A seekable target can go back and rewrite a header, so it upgrades to
+     * ZIP64 the moment the real sizes need it. A non-seekable one cannot: it
+     * has already committed to a classic 32-bit header, and its only way out
+     * would be a ZIP64 descriptor, which is exactly what spreadsheet clients
+     * reject. Failing loudly beats emitting an archive they cannot open.
+     */
+    private function assertFitsClassicZip(string $name, int $compressedSize, int $uncompressedSize): void
+    {
+        if ($compressedSize <= self::UINT32_MAX && $uncompressedSize <= self::UINT32_MAX) {
+            return;
+        }
+
+        throw new WriteException(
+            "ZIP entry '{$name}' exceeds 4 GiB, which a streamed archive cannot express without ZIP64. "
+            . 'Write to a seekable target if the output needs ZIP64.',
+        );
     }
 
     /**
@@ -541,6 +560,15 @@ final class DirectZipWriter
             $ucsOverflow = $entry['uncompressedSize'] > self::UINT32_MAX;
             $csOverflow = $entry['compressedSize'] > self::UINT32_MAX;
             $offsetOverflow = $entry['offset'] > self::UINT32_MAX;
+
+            // Entry sizes were checked as they were written; an offset only
+            // overflows once the archive as a whole passes 4 GiB.
+            if ($offsetOverflow && !$this->seekable) {
+                throw new WriteException(
+                    "ZIP entry '{$entry['name']}' starts past 4 GiB, which a streamed archive cannot express "
+                    . 'without ZIP64. Write to a seekable target if the output needs ZIP64.',
+                );
+            }
 
             $cdExtra = '';
             $cdExtraLength = 0;
@@ -607,6 +635,13 @@ final class DirectZipWriter
             $entryCount > self::UINT16_MAX
             || $centralDirectoryOffset > self::UINT32_MAX
             || $centralDirectorySize > self::UINT32_MAX;
+
+        if ($zip64EocdNeeded && !$this->seekable) {
+            throw new WriteException(
+                'Streamed archive would need a ZIP64 end-of-central-directory record. '
+                . 'Write to a seekable target if the output needs ZIP64.',
+            );
+        }
 
         if ($zip64EocdNeeded) {
             $zip64EocdOffset = $this->position();

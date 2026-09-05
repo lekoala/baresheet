@@ -175,7 +175,15 @@ class DirectZipWriterTest extends TestCase
         @unlink($file);
     }
 
-    public function testNonSeekableOutputUsesZip64Descriptor(): void
+    /**
+     * A streamed entry announces its sizes afterwards, but stays classic.
+     *
+     * Excel opens an archive whose local header defers crc and sizes to a
+     * trailing descriptor; what it refuses is ZIP64, in every form. So the
+     * non-seekable path sets general purpose bit 3 and nothing else: version
+     * 2.0, no ZIP64 extra field, and a 32-bit descriptor after the data.
+     */
+    public function testNonSeekableOutputUsesClassicDataDescriptor(): void
     {
         ob_start();
         $stream = fopen('php://output', 'wb');
@@ -188,16 +196,21 @@ class DirectZipWriterTest extends TestCase
         $bytes = ob_get_clean();
 
         self::assertIsString($bytes);
-        self::assertSame(45, unpack('v', substr($bytes, 4, 2))[1]);
-        self::assertSame(0x0808, unpack('v', substr($bytes, 6, 2))[1]);
-        self::assertSame(0xFFFF_FFFF, unpack('V', substr($bytes, 18, 4))[1]);
-        self::assertSame(0xFFFF_FFFF, unpack('V', substr($bytes, 22, 4))[1]);
-        self::assertSame(0x0001, unpack('v', substr($bytes, 30 + strlen('hello.txt'), 2))[1]);
-        self::assertNotFalse(strpos($bytes, pack('V', 0x0807_4b50)));
+        self::assertSame(20, unpack('v', substr($bytes, 4, 2))[1], 'classic version needed to extract');
+        self::assertSame(0x0808, unpack('v', substr($bytes, 6, 2))[1], 'UTF-8 names plus data descriptor');
+        self::assertSame(0, unpack('V', substr($bytes, 18, 4))[1], 'compressed size deferred, not a sentinel');
+        self::assertSame(0, unpack('V', substr($bytes, 22, 4))[1], 'uncompressed size deferred, not a sentinel');
+        self::assertSame(0, unpack('v', substr($bytes, 28, 2))[1], 'no local extra field');
+
+        // The descriptor is 16 bytes: signature, crc, then two 32-bit sizes.
+        $descriptorOffset = strpos($bytes, pack('V', 0x0807_4b50));
+        self::assertIsInt($descriptorOffset);
+        self::assertSame(6, unpack('V', substr($bytes, $descriptorOffset + 12, 4))[1], 'uncompressed size');
 
         $centralOffset = strpos($bytes, pack('V', 0x0201_4b50));
         self::assertIsInt($centralOffset);
-        self::assertSame(45, unpack('v', substr($bytes, $centralOffset + 6, 2))[1]);
+        self::assertSame(20, unpack('v', substr($bytes, $centralOffset + 6, 2))[1]);
+        self::assertSame(0, unpack('v', substr($bytes, $centralOffset + 30, 2))[1], 'no central extra field');
         self::assertNotSame(0xFFFF_FFFF, unpack('V', substr($bytes, $centralOffset + 20, 4))[1]);
         self::assertNotSame(0xFFFF_FFFF, unpack('V', substr($bytes, $centralOffset + 24, 4))[1]);
 

@@ -141,15 +141,15 @@ namespace LeKoala\Baresheet\Tests {
                 $headers,
                 'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ));
-            $this->assertTrue(
+            $this->assertFalse(
                 $this->hasHeaderPrefix($headers, 'Content-Length:'),
-                'XLSX output should have Content-Length after building the archive',
+                'Streamed output cannot know its length; set $stream = false to buffer and send it',
             );
 
             $this->assertSame(
                 20,
                 unpack('v', substr($output, 4, 2))[1],
-                'An ordinary workbook produced by output() must use classic ZIP 2.0',
+                'A streamed workbook must stay on classic ZIP 2.0, never ZIP64',
             );
 
             $temp = tempnam(sys_get_temp_dir(), 'xlsx_stream_test_');
@@ -199,15 +199,15 @@ namespace LeKoala\Baresheet\Tests {
                 $headers,
                 'Content-Type: application/vnd.oasis.opendocument.spreadsheet',
             ));
-            $this->assertTrue(
+            $this->assertFalse(
                 $this->hasHeaderPrefix($headers, 'Content-Length:'),
-                'ODS output should have Content-Length after building the archive',
+                'Streamed output cannot know its length; set $stream = false to buffer and send it',
             );
 
             $this->assertSame(
                 20,
                 unpack('v', substr($output, 4, 2))[1],
-                'An ordinary spreadsheet produced by output() must use classic ZIP 2.0',
+                'A streamed spreadsheet must stay on classic ZIP 2.0, never ZIP64',
             );
         }
 

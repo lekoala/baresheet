@@ -32,7 +32,7 @@ Baresheet::output($data, 'report.xlsx', new Options(stream: false));
 
 With generator input and default options, worksheet XML (XLSX) and `content.xml` (ODS) are compressed in a single pass and incremental PHP-managed memory remains approximately flat as row count grows. Pre-built arrays remain owned by the caller and are intentionally excluded from this streaming guarantee.
 
-- **XLSX**: the ~1.3 MB PHP peak reflects this single-pass path. Enabling `sharedStrings` keeps the de-duplication table in memory. By default, Baresheet uses the fastest mode (shared strings and auto column width disabled); enabling either trades speed for file size or presentation. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
+- **XLSX**: the ~1.3 MB PHP peak reflects this single-pass path. Enabling `sharedStrings` keeps the de-duplication table in memory. By default, Baresheet uses the fastest mode (shared strings and auto column width disabled); enabling either trades speed for file size or presentation. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs stay on classic ZIP and refuse to pass 4 GiB.
 - **ODS**: `content.xml` follows the same generator-based direct compression path. The ~1.5 MB PHP peak reflects its 1,000-row XML buffer; native zlib allocations are not included.
 
 ## Seekable and Non-Seekable Outputs
@@ -41,17 +41,17 @@ Both XLSX and ODS use Baresheet's built-in ZIP writer (`DirectZipWriter`) for se
 
 For ODS, the required first `mimetype` entry is written from known metadata as STORE, without an extra field or data descriptor, while subsequent entries use the normal streaming strategy.
 
-Non-seekable XLSX output uses standard ZIP64-capable local headers and data descriptors. The interoperability suite exercises the captured `php://output` bytes directly:
+Non-seekable XLSX output uses classic local headers with a trailing 32-bit data descriptor: the entry sizes are not known when its header is written, so they follow the data instead. The interoperability suite exercises the captured `php://output` bytes directly:
 
-| Reader     | Non-seekable XLSX output                                                       |
-|------------|--------------------------------------------------------------------------------|
-| ZipArchive | Supported                                                                      |
-| Baresheet  | Supported                                                                      |
-| OpenSpout  | Supported                                                                      |
-| xlswriter  | Supported when the extension is installed                                      |
-| SimpleXLSX | Not supported; its ZIP parser does not currently accept this descriptor layout |
+| Reader     | Non-seekable XLSX output                  |
+|------------|-------------------------------------------|
+| ZipArchive | Supported                                 |
+| Baresheet  | Supported                                 |
+| OpenSpout  | Supported                                 |
+| SimpleXLSX | Supported                                 |
+| xlswriter  | Supported when the extension is installed |
 
-The SimpleXLSX limitation is specific to this non-seekable ZIP layout. Seekable XLSX files written by Baresheet use patched local headers and remain compatible with SimpleXLSX.
+> **ZIP64 and the 4 GiB ceiling.** Excel opens no archive carrying ZIP64, in any form, so spreadsheets meant for it cap at 4 GiB. Past that, streaming throws a `WriteException` (the response has already begun, so the download arrives truncated) while buffering emits a ZIP64 archive that most PHP readers accept and Excel does not. Split the export instead.
 
 ## PSR-7 / Response Objects (Symfony, Laravel)
 

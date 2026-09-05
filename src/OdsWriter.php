@@ -94,39 +94,36 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * Build ODS on a seekable temporary stream before copying it to php://output.
+     * Stream ODS straight to php://output, without building it first.
      *
-     * A seekable stream lets DirectZipWriter enable ZIP64 only when the final
-     * archive metadata actually requires it. Proactive ZIP64 headers on a
-     * non-seekable HTTP stream are rejected by some spreadsheet clients.
+     * Bytes reach the client as they are produced, so the download starts at
+     * once instead of after the whole archive is built, and no temporary file
+     * is written. Peak memory is the same either way — the buffered path spills
+     * to disk rather than holding the archive. What streaming costs is the
+     * Content-Length, unknown until the archive is finished; set $stream to
+     * false to buffer and send it.
+     *
+     * DirectZipWriter keeps a non-seekable target on classic ZIP, announcing
+     * each entry's sizes in a trailing data descriptor. Excel accepts that; it
+     * is ZIP64 it refuses, and a streamed archive now fails rather than
+     * promoting to it past 4 GiB.
      *
      * @param iterable<WritableRow> $data
      */
     public function outputStream(iterable $data, string $filename): void
     {
         $filename = Spread::ensureExtension($filename, 'ods');
-        $archive = $this->writeStream($data);
+        Spread::outputHeaders(self::MIMETYPE, $filename);
+
+        $output = fopen('php://output', 'wb');
+        if ($output === false) {
+            throw new WriteException('Failed to open php://output');
+        }
 
         try {
-            $stats = fstat($archive);
-            $size = $stats !== false ? $stats['size'] : null;
-
-            Spread::outputHeaders(self::MIMETYPE, $filename, $size);
-
-            $output = fopen('php://output', 'wb');
-            if ($output === false) {
-                throw new WriteException('Failed to open php://output');
-            }
-
-            try {
-                if (stream_copy_to_stream($archive, $output) === false) {
-                    throw new WriteException('Failed to stream ODS output');
-                }
-            } finally {
-                fclose($output);
-            }
+            $this->buildDirectZip($data, $output);
         } finally {
-            fclose($archive);
+            fclose($output);
         }
     }
 

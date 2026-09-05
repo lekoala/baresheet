@@ -95,7 +95,10 @@ class NonSeekableXlsxInteropTest extends InteropTestCase
         }
 
         self::assertIsString($bytes);
-        self::assertSame(20, unpack('v', substr($bytes, 4, 2))[1]);
+        self::assertSame(20, unpack('v', substr($bytes, 4, 2))[1], 'classic ZIP 2.0, never ZIP64');
+        // Without this the readers below could be exercising a buffered archive
+        // with patched headers, and prove nothing about the streamed layout.
+        self::assertSame(8, unpack('v', substr($bytes, 6, 2))[1] & 8, 'entries carry a data descriptor');
 
         $file = $this->tempFile('xlsx');
         self::assertNotFalse(file_put_contents($file, $bytes));

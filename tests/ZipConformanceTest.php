@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
-use LeKoala\Baresheet\Internal\DirectZipWriter;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Tests\Support\ZipConformance;
 use LeKoala\Baresheet\XlsxWriter;
@@ -46,16 +45,12 @@ class ZipConformanceTest extends TestCase
     /**
      * Both HTTP output paths belong here, for both formats.
      *
-     * ODS streamed straight to php://output until this test was written, which
-     * gave every entry a proactive ZIP64 header. Excel 365 refuses such an .ods
-     * exactly as it refuses such an .xlsx, so ODS now buffers to a seekable
-     * stream the way XLSX has since 0.7.1. The ODF import filter is no more
-     * tolerant of ZIP64 than the OPC layer is.
-     *
-     * Buffering is how that was fixed, not why it had to be: ZIP64 was the
-     * fatal part on its own, and a non-seekable output could stay classic
-     * instead, since Excel accepts a trailing data descriptor. Either writer
-     * may go back to streaming as long as it emits no ZIP64.
+     * These cover the two ways a workbook reaches a client, which produce
+     * different containers for the same rows: output() with $stream = false
+     * buffers and can therefore patch each header in place, while the streaming
+     * path defers crc and sizes to a trailing data descriptor because it can
+     * never seek back. Excel accepts both. What it refuses, in every form, is
+     * ZIP64 — so neither path may promote to it, and that is what this asserts.
      */
     #[DataProvider('emitters')]
     public function testEmittedArchiveStaysInTheClassicZipSubset(string $format, string $method): void
@@ -105,24 +100,15 @@ class ZipConformanceTest extends TestCase
     /**
      * The defect that shipped, kept reproducible.
      *
-     * DirectZipWriter still has a non-seekable branch that advertises ZIP64 up
-     * front. No public writer entry point reaches it since the writers build on
-     * a seekable temporary stream first, but the branch remains capable of
-     * producing the archive Excel refused. This proves the checker sees it, so
-     * the guarantee does not rest on that routing alone.
+     * No writer emits ZIP64 for an ordinary workbook any more, so the archive
+     * Excel refused has to be built by hand here. That is the better test: it
+     * measures the checker against the shape of the bug rather than against a
+     * branch that may be rewritten, and it keeps working once nothing in the
+     * library can produce that shape at all.
      */
-    public function testCheckerRejectsTheProactiveZip64OfANonSeekableStream(): void
+    public function testCheckerRejectsAZip64Archive(): void
     {
-        $bytes = $this->capture(static function (): void {
-            $stream = fopen('php://output', 'wb');
-            self::assertIsResource($stream);
-
-            $writer = new DirectZipWriter($stream);
-            self::assertFalse($writer->isSeekable(), 'php://output under an output buffer must be non-seekable');
-            $writer->addString('xl/worksheets/sheet1.xml', str_repeat('<row r="1"/>', 200));
-            $writer->finish();
-            fclose($stream);
-        });
+        $bytes = self::zip64Archive('xl/worksheets/sheet1.xml', str_repeat('<row r="1"/>', 200));
 
         // ZipArchive reads this archive without complaint; Excel does not.
         $archive = new \ZipArchive();
@@ -136,6 +122,73 @@ class ZipConformanceTest extends TestCase
 
         self::assertStringContainsString('ZIP64 extra field', $violations);
         self::assertStringContainsString('version 45 to extract', $violations);
+        self::assertStringContainsString('ZIP64 end-of-central-directory', $violations);
+    }
+
+    /**
+     * A one-entry archive using ZIP64 everywhere it can: sentinels and 0x0001
+     * extra fields in both headers, plus ZIP64 end records the classic one
+     * points at. Stored, so the payload needs no compression.
+     */
+    private static function zip64Archive(string $name, string $contents): string
+    {
+        $crc = crc32($contents);
+        $size = strlen($contents);
+        $sentinel = 0xFFFF_FFFF;
+
+        $localExtra = pack('vv', 0x0001, 16) . pack('PP', $size, $size);
+        $local =
+            pack(
+                'VvvvvvVVVvv',
+                0x0403_4b50,
+                45,
+                0x0800,
+                0,
+                0,
+                0,
+                $crc,
+                $sentinel,
+                $sentinel,
+                strlen($name),
+                strlen($localExtra),
+            )
+            . $name
+            . $localExtra
+            . $contents;
+
+        $centralExtra = pack('vv', 0x0001, 24) . pack('PPP', $size, $size, 0);
+        $central =
+            pack(
+                'VvvvvvvVVVvvvvvVV',
+                0x0201_4b50,
+                45,
+                45,
+                0x0800,
+                0,
+                0,
+                0,
+                $crc,
+                $sentinel,
+                $sentinel,
+                strlen($name),
+                strlen($centralExtra),
+                0,
+                0,
+                0,
+                0,
+                $sentinel,
+            )
+            . $name
+            . $centralExtra;
+
+        $cdOffset = strlen($local);
+        $cdSize = strlen($central);
+
+        $end = pack('VPvvVVPPPP', 0x0606_4b50, 44, 45, 45, 0, 0, 1, 1, $cdSize, $cdOffset);
+        $end .= pack('VVPV', 0x0706_4b50, 0, $cdOffset + $cdSize, 1);
+        $end .= pack('VvvvvVVv', 0x0605_4b50, 0, 0, 1, 1, $cdSize, $sentinel, 0);
+
+        return $local . $central . $end;
     }
 
     public function testCheckerRejectsBytesAppendedAfterTheEndRecord(): void
