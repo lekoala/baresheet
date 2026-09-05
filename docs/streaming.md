@@ -32,8 +32,8 @@ Baresheet::output($data, 'report.xlsx', new Options(stream: false));
 
 With generator input and default options, worksheet XML (XLSX) and `content.xml` (ODS) are compressed in a single pass and incremental PHP-managed memory remains approximately flat as row count grows. Pre-built arrays remain owned by the caller and are intentionally excluded from this streaming guarantee.
 
-- **XLSX**: the ~1.09 MB PHP peak reflects this single-pass path. Enabling `sharedStrings` keeps the de-duplication table in memory. By default, Baresheet uses the fastest mode (shared strings and auto column width disabled); enabling either trades speed for file size or presentation. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
-- **ODS**: `content.xml` follows the same generator-based direct compression path. The ~1.39 MB PHP peak reflects its 1,000-row XML buffer; native zlib allocations are not included.
+- **XLSX**: the ~1.3 MB PHP peak reflects this single-pass path. Enabling `sharedStrings` keeps the de-duplication table in memory. By default, Baresheet uses the fastest mode (shared strings and auto column width disabled); enabling either trades speed for file size or presentation. Seekable outputs use ZIP64 only when required by final sizes or offsets. Non-seekable outputs use ZIP64-capable local headers proactively because entry sizes are not known in advance (64-bit PHP is required for archives beyond 4 GiB).
+- **ODS**: `content.xml` follows the same generator-based direct compression path. The ~1.5 MB PHP peak reflects its 1,000-row XML buffer; native zlib allocations are not included.
 
 ## Seekable and Non-Seekable Outputs
 

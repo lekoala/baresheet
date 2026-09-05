@@ -11,9 +11,15 @@ use Shuchkin\SimpleXLSX;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-$largeCsv = dirname(__DIR__) . '/tests/data/large.csv';
-$largeXlsx = dirname(__DIR__) . '/tests/data/large.xlsx';
-$largeOds = dirname(__DIR__) . '/tests/data/large.ods';
+// gitignored benchmark target: generated on demand at 50,000 rows so the
+// README claims stay reproducible without committing multi-megabyte fixtures.
+$benchDataDir = dirname(__DIR__) . '/.temp/bench';
+if (!is_dir($benchDataDir)) {
+    mkdir($benchDataDir, 0777, true);
+}
+$largeCsv = $benchDataDir . '/large.csv';
+$largeXlsx = $benchDataDir . '/large.xlsx';
+$largeOds = $benchDataDir . '/large.ods';
 
 // Ensure testing files exist, or generate them if they don't
 function ensureFileExists($file, $format)
