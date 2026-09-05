@@ -229,7 +229,7 @@ $writer->writeFile([
 
 ### CSV specifics
 
-CSV cells are always written as text. To make export output deterministic across PHP configurations, the CSV writer serializes scalars explicitly: `bool` as `1`/`0`, floats with 17 significant digits (independent of the `precision` ini setting and of `LC_NUMERIC`), and `null` as an empty cell. Note the behavior change: `false` is now written as `0`, whereas it previously produced an empty cell indistinguishable from `null`. Non-finite floats (`INF`/`NAN`) are rejected with a `WriteException`, like the XLSX/ODS writers.
+CSV cells are always written as text. To make export output deterministic across PHP configurations, the CSV writer serializes scalars explicitly: `bool` as `1`/`0`, floats with 17 significant digits (independent of the `precision` ini setting and of `LC_NUMERIC`), and `null` as an empty cell. Note that `false` is written as `0`, so it stays distinct from `null`'s empty cell. Non-finite floats (`INF`/`NAN`) are rejected with a `WriteException`, like the XLSX/ODS writers.
 
 With `escapeFormulas`, formula protection applies to strings and `Stringable` objects; numeric cells are never mistaken for formulas, so a negative float keeps its leading `-`.
 
