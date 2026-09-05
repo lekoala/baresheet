@@ -51,6 +51,11 @@ class ZipConformanceTest extends TestCase
      * exactly as it refuses such an .xlsx, so ODS now buffers to a seekable
      * stream the way XLSX has since 0.7.1. The ODF import filter is no more
      * tolerant of ZIP64 than the OPC layer is.
+     *
+     * Buffering is how that was fixed, not why it had to be: ZIP64 was the
+     * fatal part on its own, and a non-seekable output could stay classic
+     * instead, since Excel accepts a trailing data descriptor. Either writer
+     * may go back to streaming as long as it emits no ZIP64.
      */
     #[DataProvider('emitters')]
     public function testEmittedArchiveStaysInTheClassicZipSubset(string $format, string $method): void
@@ -131,7 +136,6 @@ class ZipConformanceTest extends TestCase
 
         self::assertStringContainsString('ZIP64 extra field', $violations);
         self::assertStringContainsString('version 45 to extract', $violations);
-        self::assertStringContainsString('data descriptor', $violations);
     }
 
     public function testCheckerRejectsBytesAppendedAfterTheEndRecord(): void

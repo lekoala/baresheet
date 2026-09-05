@@ -17,6 +17,13 @@ namespace LeKoala\Baresheet\Tests\Support;
  * and Excel rejects the result even though ZipArchive and most PHP readers
  * accept it.
  *
+ * Which half of that was fatal was settled empirically in Excel 365, by opening
+ * four archives with identical XML whose containers differed on one axis each:
+ * a classic control, the version byte alone raised to 45, genuine ZIP64
+ * structures, and a classic trailing data descriptor. Only the ZIP64 archive
+ * failed. So the rules below ban ZIP64 outright, ignore the version byte on its
+ * own, and say nothing about how an entry announces its sizes.
+ *
  * Works on raw bytes only, so it stays valid as the writers change.
  *
  * @internal
@@ -28,6 +35,9 @@ final class ZipConformance
     private const EOCD_SIGNATURE = "PK\x05\x06";
     private const ZIP64_EOCD_SIGNATURE = "PK\x06\x06";
     private const ZIP64_LOCATOR_SIGNATURE = "PK\x06\x07";
+    private const ZIP64_EOCD_RECORD = 0x0606_4b50;
+    private const ZIP64_LOCATOR_RECORD = 0x0706_4b50;
+    private const ZIP64_EOCD_SIZE = 56;
     private const ZIP64_EXTRA_TAG = 0x0001;
 
     /** Highest "version needed to extract" in the classic subset: 2.0, i.e. deflate. ZIP64 is 4.5. */
@@ -137,8 +147,52 @@ final class ZipConformance
             return null;
         }
         $fields['offset'] = $offset;
+        $fields['cdEnd'] = $offset;
+        self::followZip64EndRecords($bytes, $fields);
 
         return $fields;
+    }
+
+    /**
+     * Resolve the real directory location when the classic record holds sentinels.
+     *
+     * A ZIP64 archive is still walkable: the classic end record points nowhere
+     * and the true counts live in the ZIP64 record the locator names. Reading
+     * it is what separates "uses ZIP64" from "is corrupt", and the checker has
+     * to tell those apart to report either one honestly.
+     *
+     * @param array<string, int> $fields
+     */
+    private static function followZip64EndRecords(string $bytes, array &$fields): void
+    {
+        $usesSentinels =
+            $fields['entries'] === self::UINT16_MAX
+            || $fields['cdSize'] === self::UINT32_MAX
+            || $fields['cdOffset'] === self::UINT32_MAX;
+        if (!$usesSentinels || $fields['offset'] < self::LOCATOR_SIZE) {
+            return;
+        }
+
+        $locator = self::unpackAt(
+            $bytes,
+            $fields['offset'] - self::LOCATOR_SIZE,
+            'Vsignature/Vdisk/Poffset/Vdisks',
+            self::LOCATOR_SIZE,
+        );
+        if ($locator === null || $locator['signature'] !== self::ZIP64_LOCATOR_RECORD) {
+            return;
+        }
+
+        $format = 'Vsignature/Psize/vversionMadeBy/vversionNeeded/Vdisk/VcdDisk/PdiskEntries/Pentries/PcdSize/PcdOffset';
+        $record = self::unpackAt($bytes, $locator['offset'], $format, self::ZIP64_EOCD_SIZE);
+        if ($record === null || $record['signature'] !== self::ZIP64_EOCD_RECORD) {
+            return;
+        }
+
+        $fields['entries'] = $record['entries'];
+        $fields['cdSize'] = $record['cdSize'];
+        $fields['cdOffset'] = $record['cdOffset'];
+        $fields['cdEnd'] = $locator['offset'];
     }
 
     /**
@@ -184,8 +238,8 @@ final class ZipConformance
         if ($eocd['commentLength'] !== 0) {
             $violations[] = 'archive carries a ZIP comment';
         }
-        if (($eocd['cdOffset'] + $eocd['cdSize']) !== $offset) {
-            $violations[] = 'central directory does not end where the end-of-central-directory record begins';
+        if (($eocd['cdOffset'] + $eocd['cdSize']) !== $eocd['cdEnd']) {
+            $violations[] = 'central directory does not end where the end records begin';
         }
     }
 
@@ -215,6 +269,9 @@ final class ZipConformance
                 $offset + self::CENTRAL_HEADER_SIZE + $header['nameLength'],
                 $header['extraLength'],
             );
+            // Keep the raw fields for the checks, and resolve separately where
+            // the local header really is, so a ZIP64 entry can still be followed.
+            $entry['realLocalOffset'] = self::resolveLocalOffset($entry);
             $entries[] = $entry;
 
             $offset +=
@@ -222,6 +279,56 @@ final class ZipConformance
         }
 
         return $entries;
+    }
+
+    /**
+     * A promoted local header offset lives in the 0x0001 extra, after whichever
+     * of the two sizes were promoted with it. Only sentinel fields are present,
+     * in that fixed order, so the position depends on what was promoted.
+     *
+     * @param array<string, mixed> $entry
+     */
+    private static function resolveLocalOffset(array $entry): int
+    {
+        if ($entry['localOffset'] !== self::UINT32_MAX) {
+            return $entry['localOffset'];
+        }
+
+        $values = self::zip64ExtraValues($entry['extra']);
+        $position = 0;
+        foreach (['uncompressedSize', 'compressedSize'] as $promotedFirst) {
+            if ($entry[$promotedFirst] === self::UINT32_MAX) {
+                $position++;
+            }
+        }
+
+        return $values[$position] ?? $entry['localOffset'];
+    }
+
+    /**
+     * The 64-bit values carried by the ZIP64 extra field, in wire order.
+     *
+     * @return list<int>
+     */
+    private static function zip64ExtraValues(string $extra): array
+    {
+        $offset = 0;
+        $length = strlen($extra);
+
+        while (($offset + 4) <= $length) {
+            $field = self::unpackAt($extra, $offset, 'vtag/vsize', 4);
+            if ($field === null) {
+                return [];
+            }
+            if ($field['tag'] === self::ZIP64_EXTRA_TAG) {
+                $payload = substr($extra, $offset + 4, intdiv($field['size'], 8) * 8);
+                $values = unpack('P*', $payload);
+                return $values === false ? [] : array_values($values);
+            }
+            $offset += 4 + $field['size'];
+        }
+
+        return [];
     }
 
     /**
@@ -264,7 +371,7 @@ final class ZipConformance
     private static function checkLocalHeader(string $bytes, array $entry, array &$violations): void
     {
         $label = self::label($entry);
-        $offset = $entry['localOffset'];
+        $offset = $entry['realLocalOffset'];
         $max = self::MAX_VERSION_NEEDED;
 
         $format = 'Vsignature/vversionNeeded/vflags/vmethod/vmodTime/vmodDate/Vcrc/VcompressedSize/VuncompressedSize/vnameLength/vextraLength';
@@ -304,11 +411,19 @@ final class ZipConformance
     /**
      * @param list<string> $violations
      */
+    /**
+     * General purpose bit 3 is deliberately not a violation.
+     *
+     * Excel 365 opens an archive whose local headers defer crc and sizes to a
+     * classic trailing descriptor. What it refuses is ZIP64, which the
+     * non-seekable path happened to enable at the same time. Banning bit 3 here
+     * would forbid a form Excel accepts, and rule out ever streaming to a
+     * non-seekable output again.
+     *
+     * @param list<string> $violations
+     */
     private static function checkFlags(string $label, string $where, int $flags, array &$violations): void
     {
-        if (($flags & self::FLAG_DATA_DESCRIPTOR) !== 0) {
-            $violations[] = "{$label}: {$where} defers sizes to a data descriptor, general purpose bit 3";
-        }
         if (($flags & self::FLAG_ENCRYPTED) !== 0) {
             $violations[] = "{$label}: {$where} marks the entry encrypted";
         }
