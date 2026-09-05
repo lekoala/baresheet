@@ -22,7 +22,7 @@ When writing numbers, Baresheet serializes floats with 17 significant digits so 
 Two downstream limits apply:
 
 - **Excel stores at most 15 significant digits.** A float with more digits is written faithfully but Excel rounds it for storage and display. This is expected for `float` values, which are IEEE doubles anyway.
-- **Large PHP integers above `2^53` are not exact in Excel.** Excel parses numeric cells as doubles, so a PHP `int` such as `9_900_000_000_000_000_123` loses the digits beyond the 15th — an exact round-trip is not guaranteed. Keep long identifiers (order numbers, IDs) as **strings** to preserve them.
+- **Large PHP integers above `2^53` are not exact in Excel.** Excel parses numeric cells as doubles, so a PHP `int` such as `9_007_199_254_740_993` (= `2^53 + 1`) loses the digits beyond the 15th — an exact round-trip is not guaranteed. Keep long identifiers (order numbers, IDs) as **strings** to preserve them.
 
 ## Writing
 
