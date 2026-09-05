@@ -13,6 +13,8 @@ $writer = new CsvWriter();
 $writer->escapeFormulas = true; // Protects against formula injection by prefixing a single-quote
 ```
 
+Escaping applies to strings and to `Stringable` objects (converted to their string form first). Numeric cells are never escaped, so a negative float written as a number keeps its leading `-` instead of being mistaken for a formula.
+
 ### Selective Formula Escaping
 
 For advanced use cases, `escapeFormulas` also accepts a **callable** that receives the cell value and column index, allowing you to selectively escape only specific columns:

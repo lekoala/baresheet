@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
+use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Options;
 
 class CsvTest extends TestCase
@@ -286,6 +287,46 @@ class CsvTest extends TestCase
         self::assertEquals(1, $callCount);
     }
 
+    public function testFormulaEscapingAppliesToStringableCells(): void
+    {
+        $cell = new class implements \Stringable {
+            public function __toString(): string
+            {
+                return '=SUM(A1:A10)';
+            }
+        };
+
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $writer->escapeFormulas = true;
+        $output = $writer->writeString([[$cell]]);
+
+        self::assertStringContainsString("'=SUM(A1:A10)", $output);
+    }
+
+    public function testFormulaEscapingCallableReceivesStringableAsString(): void
+    {
+        $cell = new class implements \Stringable {
+            public function __toString(): string
+            {
+                return '=1+1';
+            }
+        };
+
+        $received = null;
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $writer->escapeFormulas = static function (string $cell, int $colIndex) use (&$received): string {
+            $received = $cell;
+            return "'" . $cell;
+        };
+
+        $output = $writer->writeString([[$cell]]);
+
+        self::assertSame('=1+1', $received);
+        self::assertStringContainsString("'=1+1", $output);
+    }
+
     public function testCustomSeparator(): void
     {
         $writer = new CsvWriter();
@@ -458,5 +499,52 @@ class CsvTest extends TestCase
         self::assertCount(2, $data);
         self::assertEquals('jane', $data[0]['name']);
         self::assertEquals('bob', $data[1]['name']);
+    }
+
+    public function testScalarSerializationContract(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $output = $writer->writeString([
+            [false, true, 1.234_567_890_123_456_7, null, 42, 'text'],
+        ]);
+
+        // bool -> "1"/"0", float -> precision-independent, null -> empty cell.
+        self::assertSame("0,1,1.2345678901234567,,42,text\r\n", $output);
+    }
+
+    public function testFloatSerializationIsPrecisionIndependent(): void
+    {
+        $old = ini_get('precision');
+        try {
+            ini_set('precision', '5');
+            $writer = new CsvWriter();
+            $writer->bom = false;
+            $output = $writer->writeString([[1.234_567_890_123_456_7]]);
+            self::assertStringContainsString('1.2345678901234567', $output);
+        } finally {
+            ini_set('precision', $old === false ? '14' : $old);
+        }
+    }
+
+    public function testNegativeFloatIsNotFormulaEscaped(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $writer->escapeFormulas = true;
+        $output = $writer->writeString([[-1.5, '=formula']]);
+
+        self::assertStringContainsString('-1.5', $output);
+        self::assertStringNotContainsString("'-1.5", $output);
+        self::assertStringContainsString("'=formula", $output);
+    }
+
+    public function testNonFiniteFloatThrows(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('Cannot write a non-finite numeric value');
+        $writer->writeString([[INF]]);
     }
 }

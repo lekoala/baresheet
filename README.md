@@ -227,6 +227,14 @@ $writer->writeFile([
 
 `TimeValue` and `DurationValue` are optional writer markers: a caller who never uses them never sees them. The readers never inject Baresheet objects into ordinary rows — `DateTimeImmutable` is standard PHP. See [docs/value-types.md](docs/value-types.md) for timezone semantics, precision, and 32-bit notes.
 
+### CSV specifics
+
+CSV cells are always written as text. To make export output deterministic across PHP configurations, the CSV writer serializes scalars explicitly: `bool` as `1`/`0`, floats with 17 significant digits (independent of the `precision` ini setting and of `LC_NUMERIC`), and `null` as an empty cell. Note the behavior change: `false` is now written as `0`, whereas it previously produced an empty cell indistinguishable from `null`. Non-finite floats (`INF`/`NAN`) are rejected with a `WriteException`, like the XLSX/ODS writers.
+
+With `escapeFormulas`, formula protection applies to strings and `Stringable` objects; numeric cells are never mistaken for formulas, so a negative float keeps its leading `-`.
+
+When `outputEncoding` targets a non-UTF-8 encoding without a BOM, the whole CSV stream — including separators and end-of-line bytes — is transcoded (`ext-iconv` is required and bundled with PHP by default). Cells that are not valid UTF-8 or cannot be represented in the target encoding raise a `WriteException` instead of being silently substituted.
+
 ## Advanced Usage
 
 - [Headers and column mapping](docs/headers.md) — required columns, column selection, injected and hierarchical headers, aliases, header discovery, normalization, strict mode

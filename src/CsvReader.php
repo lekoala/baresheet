@@ -156,8 +156,6 @@ class CsvReader implements ReaderInterface
                         "Failed to append iconv filter for encoding {$encoding}. Ensure iconv extension is enabled.",
                     );
                 }
-                // BOM takes precedence over manual encoding
-                $inputEncoding = null;
             }
 
             // Prepare normalized sample for separator detection
@@ -166,6 +164,14 @@ class CsvReader implements ReaderInterface
                 $converted = mb_convert_encoding($normalizedSample, 'UTF-8', $inputBOM->encoding());
                 $normalizedSample = (string) $converted;
             }
+        }
+
+        if ($inputBOM !== null) {
+            // Every BOM-bearing input resolves to UTF-8: a UTF-8 BOM is native,
+            // a non-UTF-8 one was transcoded above. This overrides any manual
+            // inputEncoding so the requested outputEncoding conversion always
+            // starts from the effective UTF-8 input instead of being skipped.
+            $inputEncoding = 'UTF-8';
         }
 
         // Auto-detect separator
@@ -181,7 +187,9 @@ class CsvReader implements ReaderInterface
         ) {
             // Fallback detection if we need to convert but have no BOM
             $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
-            if ($detected && $detected !== 'UTF-8') {
+            if ($detected) {
+                // Keep the effective encoding (including 'UTF-8') so the requested
+                // outputEncoding conversion is actually applied to UTF-8 input.
                 $inputEncoding = $detected;
             }
         }
