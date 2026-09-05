@@ -1,3 +1,24 @@
+# Ensure LF line endings on every checkout, regardless of core.autocrlf.
+# The project mandates LF via .editorconfig and phpcs (PSR-12).
+* text=auto
+*.php text eol=lf
+*.md text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.dist text eol=lf
+*.csv text eol=lf
+*.editorconfig text eol=lf
+*.gitignore text eol=lf
+*.gitattributes text eol=lf
+
+# Binary fixtures used by tests and interop checks.
+*.xls binary
+*.xlsx binary
+*.ods binary
+*.zip binary
+
 /tests export-ignore
 /.github export-ignore
 /.editorconfig export-ignore
