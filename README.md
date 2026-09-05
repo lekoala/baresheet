@@ -240,7 +240,7 @@ When `outputEncoding` targets a non-UTF-8 encoding, the whole CSV stream — inc
 ## Advanced Usage
 
 - [Headers and column mapping](docs/headers.md) — required columns, column selection, injected and hierarchical headers, aliases, header discovery, normalization, strict mode
-- [Streaming](docs/streaming.md) — output modes and what each costs when generation fails, ZIP64 and non-seekable output, PSR-7 / Symfony / Laravel responses
+- [Streaming](docs/streaming.md) — output modes, failure semantics, ZIP64 and non-seekable output, PSR-7 / Symfony / Laravel responses
 - [Value types](docs/value-types.md) — timezone-free civil dates, microsecond precision, 32-bit PHP
 - [Security](docs/security.md) — CSV formula injection, XLSX sheet protection
 

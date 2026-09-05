@@ -22,7 +22,7 @@ $stream = Baresheet::writeStream($data, 'xlsx');
 - No complete temporary archive; nothing on disk grows with the export.
 - The download starts immediately, whatever the export size.
 - No `Content-Length`, so no progress bar or estimated time.
-- Headers are already sent when generation begins, so a failure part-way through cannot become a clean HTTP error. The client keeps a truncated file it believes is complete.
+- Headers are already sent when generation begins, so a failure part-way through cannot become a clean HTTP error. The client may receive a truncated or unusable file instead.
 
 **`stream = false`** builds the document first, then sends it.
 
@@ -30,7 +30,7 @@ $stream = Baresheet::writeStream($data, 'xlsx');
 - `Content-Length` is known and sent, which also lets the client detect a truncated transfer.
 - Costs temporary disk proportional to the output, for the duration of the request.
 
-For an ordinary user-facing XLSX or ODS download where temporary disk space is available, `stream: false` is often preferable: the workbook is fully built before the response starts, so nothing half-written can reach the user. Keep streaming for large exports, low-latency downloads, and environments where temporary disk matters — a hundred concurrent 100 MB exports mean up to 10 GB of temporary space under buffering.
+For user-facing XLSX or ODS downloads where reporting generation errors cleanly matters more than immediate delivery, `stream: false` can be preferable when temporary disk space is available: the workbook is fully built before the response starts, so nothing half-written reaches the user. Keep streaming for large exports, low-latency downloads, and environments where temporary disk matters — a hundred concurrent 100 MB exports mean up to 10 GB of temporary space under buffering.
 
 ```php
 $writer = new XlsxWriter();
@@ -47,11 +47,11 @@ The two modes are not equivalent across formats. XLSX and ODS build into a tempo
 
 | Rows    | CSV `stream = true` | CSV `stream = false` |
 |---------|---------------------|----------------------|
-| 10,000  | flat                | 0.54 MB              |
-| 100,000 | flat                | 5.46 MB              |
-| 500,000 | flat                | 29.46 MB             |
+| 10,000  | 1.8 MB              | 2.4 MB               |
+| 100,000 | 1.8 MB              | 7.3 MB               |
+| 500,000 | 1.8 MB              | 31.3 MB              |
 
-Peak PHP memory with generator input. XLSX and ODS stay flat in both modes — roughly 0.55 MB and 1.0 MB respectively — at any row count.
+Total `memory_get_peak_usage()` of a CLI process with generator input, so each figure includes a ~1.8 MB baseline for the runtime and autoloader. On the same measurement XLSX and ODS stay flat in both modes, around 2.4 MB and 2.8 MB at any row count.
 
 So `stream: false` is a disk trade for XLSX and ODS, and a memory trade for CSV. Prefer setting it on the writer rather than through a shared `Options` instance when one request produces several formats.
 
