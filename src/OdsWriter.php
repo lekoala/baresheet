@@ -383,7 +383,7 @@ class OdsWriter implements WriterInterface
                     if (is_float($value) && !is_finite($value)) {
                         throw new WriteException('Cannot write a non-finite numeric value');
                     }
-                    $strValue = (string) $value;
+                    $strValue = is_float($value) ? Spread::serializeFloat($value) : (string) $value;
                     $buffer .=
                         '<table:table-cell'
                         . $rowCellStyle

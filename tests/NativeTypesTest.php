@@ -515,6 +515,54 @@ class NativeTypesTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testHighPrecisionFloatRoundTrip(): void
+    {
+        $value = 1.234_567_890_123_456_7;
+        foreach (['xlsx', 'ods'] as $ext) {
+            $tempFile = $this->tempFile($ext);
+            $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
+            $writer->inferNumericStrings = false;
+            $writer->writeFile([[$value]], $tempFile);
+
+            $reader = $ext === 'xlsx' ? new XlsxReader() : new OdsReader();
+            $reader->stringifyValues = false;
+            $rows = iterator_to_array($reader->readFile($tempFile));
+            self::assertSame($value, $rows[0][0], $ext);
+
+            unlink($tempFile);
+        }
+    }
+
+    public function testNumericWritesRoundTripUnderCommaLocale(): void
+    {
+        $commaLocale = $this->commaDecimalLocale();
+        if ($commaLocale === null) {
+            self::markTestSkipped('No comma-decimal locale available');
+        }
+        $original = setlocale(LC_NUMERIC, 0);
+        $date = new DateTimeImmutable('2026-08-13 14:30:15', new DateTimeZone('UTC'));
+        try {
+            setlocale(LC_NUMERIC, $commaLocale);
+            foreach (['xlsx', 'ods'] as $ext) {
+                $tempFile = $this->tempFile($ext);
+                $writer = $ext === 'xlsx' ? new XlsxWriter() : new OdsWriter();
+                $writer->inferNumericStrings = false;
+                $writer->writeFile([[1.5, $date]], $tempFile);
+
+                $reader = $ext === 'xlsx' ? new XlsxReader() : new OdsReader();
+                $reader->stringifyValues = false;
+                $rows = iterator_to_array($reader->readFile($tempFile));
+                self::assertSame(1.5, $rows[0][0], $ext);
+                self::assertInstanceOf(DateTimeImmutable::class, $rows[0][1], $ext);
+                self::assertSame('2026-08-13 14:30:15', $rows[0][1]->format('Y-m-d H:i:s'), $ext);
+
+                unlink($tempFile);
+            }
+        } finally {
+            setlocale(LC_NUMERIC, $original);
+        }
+    }
+
     public function testDurationValueRoundTrip(): void
     {
         foreach (['xlsx', 'ods'] as $ext) {

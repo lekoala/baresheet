@@ -399,6 +399,61 @@ class SpreadTest extends TestCase
         Spread::escapeXmlAttr("x\xEF\xBF\xBF");
     }
 
+    public function testSerializeFloatKeepsFullDoublePrecision(): void
+    {
+        $value = 1.234_567_890_123_456_7;
+        $s = Spread::serializeFloat($value);
+        self::assertSame('1.2345678901234567', $s);
+        self::assertSame($value, (float) $s);
+    }
+
+    public function testSerializeFloatTrimsWholeValues(): void
+    {
+        self::assertSame('5', Spread::serializeFloat(5.0));
+        self::assertSame('-1234.5', Spread::serializeFloat(-1234.5));
+        self::assertSame('45292.5', Spread::serializeFloat(45_292.5));
+    }
+
+    public function testSerializeFloatIsIndependentOfPrecisionIni(): void
+    {
+        $old = ini_get('precision');
+        ini_set('precision', '5');
+        try {
+            $s = Spread::serializeFloat(1.234_567_890_123_456_7);
+        } finally {
+            ini_set('precision', $old);
+        }
+        self::assertSame('1.2345678901234567', $s);
+    }
+
+    public function testSerializeFloatRoundTripsExtremes(): void
+    {
+        foreach ([0.1, 1e20, 1e-300, 1e-308, -6.02e23, 3.141_592_653_589_793] as $value) {
+            $s = Spread::serializeFloat($value);
+            self::assertSame($value, (float) $s, "round-trip failed for {$value} (serialized as {$s})");
+            self::assertStringNotContainsString(',', $s);
+        }
+    }
+
+    public function testSerializeFloatUsesDotDecimalSeparatorAcrossLocaleChanges(): void
+    {
+        $commaLocale = $this->commaDecimalLocale();
+        if ($commaLocale === null) {
+            self::markTestSkipped('No comma-decimal locale available');
+        }
+        $original = setlocale(LC_NUMERIC, 0);
+        try {
+            self::assertSame('1.5', Spread::serializeFloat(1.5));
+            setlocale(LC_NUMERIC, $commaLocale);
+            self::assertSame('1,5', sprintf('%.17G', 1.5));
+            self::assertSame('1.5', Spread::serializeFloat(1.5));
+            setlocale(LC_NUMERIC, $original);
+            self::assertSame('1.5', Spread::serializeFloat(1.5));
+        } finally {
+            setlocale(LC_NUMERIC, $original);
+        }
+    }
+
     public function testValidateSheetNameValid(): void
     {
         self::assertSame('Sheet1', Spread::validateSheetName('Sheet1'));

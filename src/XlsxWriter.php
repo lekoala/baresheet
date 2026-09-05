@@ -400,7 +400,7 @@ class XlsxWriter implements WriterInterface
 
                 if ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
+                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
                     $vl = 16;
                 } elseif ($value instanceof DurationValue) {
                     $excelSerial = Spread::durationComponentsToSerial(
@@ -410,15 +410,15 @@ class XlsxWriter implements WriterInterface
                         $value->seconds,
                         $value->microsecond,
                     );
-                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%.17g</v></c>', $cn, $excelSerial);
+                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {
                     $excelSerial = Spread::timeToExcel($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="3"><v>%.17g</v></c>', $cn, $excelSerial);
+                    $buffer .= sprintf('<c r="%s" t="n" s="3"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
                     $vl = 8;
                 } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="1"><v>%.17g</v></c>', $cn, $excelDate);
+                    $buffer .= sprintf('<c r="%s" t="n" s="1"><v>%s</v></c>', $cn, Spread::serializeFloat($excelDate));
                     $vl = 16;
                 } elseif (is_bool($value)) {
                     $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
@@ -435,7 +435,7 @@ class XlsxWriter implements WriterInterface
                     if (is_float($value) && !is_finite($value)) {
                         throw new WriteException('Cannot write a non-finite numeric value');
                     }
-                    $strValue = (string) $value;
+                    $strValue = is_float($value) ? Spread::serializeFloat($value) : (string) $value;
                     $vl = strlen($strValue);
                     $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                 } elseif ($this->inferNumericStrings && Spread::isNumericCellValue($value)) {

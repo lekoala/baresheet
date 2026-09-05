@@ -15,6 +15,15 @@ Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natu
 
 `int\|float` is a convenient PHP representation of a spreadsheet Number; the distinction itself is not guaranteed to survive a round-trip (`12.0` reads back as `12`).
 
+### Numeric precision
+
+When writing numbers, Baresheet serializes floats with 17 significant digits so the `double` value round-trips exactly, regardless of PHP's `precision` ini setting or the active `LC_NUMERIC` locale.
+
+Two downstream limits apply:
+
+- **Excel stores at most 15 significant digits.** A float with more digits is written faithfully but Excel rounds it for storage and display. This is expected for `float` values, which are IEEE doubles anyway.
+- **Large PHP integers above `2^53` are not exact in Excel.** Excel parses numeric cells as doubles, so a PHP `int` such as `9_900_000_000_000_000_123` loses the digits beyond the 15th — an exact round-trip is not guaranteed. Keep long identifiers (order numbers, IDs) as **strings** to preserve them.
+
 ## Writing
 
 | PHP                 | Spreadsheet                |

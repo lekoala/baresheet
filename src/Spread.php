@@ -1114,6 +1114,37 @@ class Spread
     }
 
     /**
+     * Serialize a finite float for a raw XML numeric cell value.
+     *
+     * The result carries 17 significant digits (enough to round-trip the IEEE
+     * double), is independent of the `precision` ini setting, and always uses
+     * '.' as the decimal separator regardless of the active LC_NUMERIC locale.
+     * Trailing fractional zeros are trimmed, so whole values are written as
+     * plain integers ("5.0" -> "5"). Scientific notation is emitted for very
+     * large or very small magnitudes (e.g. "1.0E+20").
+     *
+     * Notes on the downstream limits: Excel only stores/rounds to 15
+     * significant digits, which is fine for floats (already doubles). PHP
+     * integers above 2^53 cannot be represented exactly as XML numbers
+     * because Excel parses them as IEEE doubles; keep long identifiers as
+     * strings, an exact round-trip of large numeric ints is not guaranteed.
+     *
+     * @param float $value A finite value; callers reject NaN/INF first.
+     */
+    public static function serializeFloat(float $value): string
+    {
+        $s = sprintf('%.17G', $value);
+        // %F is the only float specifier that ignores the locale; %G (like %g,
+        // %e) can insert the locale decimal separator. localeconv() is read on
+        // every call because the locale may change at any point in the process.
+        $decimalPoint = localeconv()['decimal_point'];
+        if ($decimalPoint !== '.') {
+            $s = str_replace($decimalPoint, '.', $s);
+        }
+        return $s;
+    }
+
+    /**
      * Classify an Excel number format code into a semantic temporal type.
      *
      * This is an extension of what Baresheet already recognizes, not a full

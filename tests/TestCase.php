@@ -16,4 +16,23 @@ abstract class TestCase extends BaseTestCase
     {
         return sys_get_temp_dir() . '/baresheet_' . bin2hex(random_bytes(6)) . '.' . $ext;
     }
+
+    /**
+     * Find an LC_NUMERIC locale whose decimal separator is a comma, or null
+     * when none is installed. The current locale is restored before returning.
+     */
+    protected function commaDecimalLocale(): ?string
+    {
+        $original = setlocale(LC_NUMERIC, 0);
+        try {
+            foreach (['de-DE', 'de_DE.UTF-8', 'de_DE', 'fr-FR', 'fr_FR.UTF-8', 'nl-NL', 'nl_NL.UTF-8', 'es-ES', 'it-IT'] as $loc) {
+                if (setlocale(LC_NUMERIC, $loc) !== false && (localeconv()['decimal_point'] ?? '.') === ',') {
+                    return $loc;
+                }
+            }
+        } finally {
+            setlocale(LC_NUMERIC, $original !== false ? $original : null);
+        }
+        return null;
+    }
 }
