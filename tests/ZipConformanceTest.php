@@ -43,6 +43,15 @@ class ZipConformanceTest extends TestCase
         return $cases;
     }
 
+    /**
+     * Both HTTP output paths belong here, for both formats.
+     *
+     * ODS streamed straight to php://output until this test was written, which
+     * gave every entry a proactive ZIP64 header. Excel 365 refuses such an .ods
+     * exactly as it refuses such an .xlsx, so ODS now buffers to a seekable
+     * stream the way XLSX has since 0.7.1. The ODF import filter is no more
+     * tolerant of ZIP64 than the OPC layer is.
+     */
     #[DataProvider('emitters')]
     public function testEmittedArchiveStaysInTheClassicZipSubset(string $format, string $method): void
     {
@@ -99,7 +108,7 @@ class ZipConformanceTest extends TestCase
      */
     public function testCheckerRejectsTheProactiveZip64OfANonSeekableStream(): void
     {
-        $bytes = $this->capture(function (): void {
+        $bytes = $this->capture(static function (): void {
             $stream = fopen('php://output', 'wb');
             self::assertIsResource($stream);
 

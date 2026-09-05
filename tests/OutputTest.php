@@ -199,9 +199,15 @@ namespace LeKoala\Baresheet\Tests {
                 $headers,
                 'Content-Type: application/vnd.oasis.opendocument.spreadsheet',
             ));
-            $this->assertFalse(
+            $this->assertTrue(
                 $this->hasHeaderPrefix($headers, 'Content-Length:'),
-                'Streamed output should not have Content-Length header',
+                'ODS output should have Content-Length after building the archive',
+            );
+
+            $this->assertSame(
+                20,
+                unpack('v', substr($output, 4, 2))[1],
+                'An ordinary spreadsheet produced by output() must use classic ZIP 2.0',
             );
         }
 

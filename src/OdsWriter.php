@@ -94,23 +94,39 @@ class OdsWriter implements WriterInterface
     }
 
     /**
-     * Stream ODS directly to php://output via DirectZipWriter.
+     * Build ODS on a seekable temporary stream before copying it to php://output.
+     *
+     * A seekable stream lets DirectZipWriter enable ZIP64 only when the final
+     * archive metadata actually requires it. Proactive ZIP64 headers on a
+     * non-seekable HTTP stream are rejected by some spreadsheet clients.
      *
      * @param iterable<WritableRow> $data
      */
     public function outputStream(iterable $data, string $filename): void
     {
         $filename = Spread::ensureExtension($filename, 'ods');
-        Spread::outputHeaders(self::MIMETYPE, $filename);
+        $archive = $this->writeStream($data);
 
-        $output = fopen('php://output', 'wb');
-        if ($output === false) {
-            throw new WriteException('Failed to open php://output');
-        }
         try {
-            $this->buildDirectZip($data, $output);
+            $stats = fstat($archive);
+            $size = $stats !== false ? $stats['size'] : null;
+
+            Spread::outputHeaders(self::MIMETYPE, $filename, $size);
+
+            $output = fopen('php://output', 'wb');
+            if ($output === false) {
+                throw new WriteException('Failed to open php://output');
+            }
+
+            try {
+                if (stream_copy_to_stream($archive, $output) === false) {
+                    throw new WriteException('Failed to stream ODS output');
+                }
+            } finally {
+                fclose($output);
+            }
         } finally {
-            fclose($output);
+            fclose($archive);
         }
     }
 
