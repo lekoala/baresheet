@@ -16,7 +16,7 @@
 
     <!-- PHP user-space stream wrappers must use the stream_* method names. -->
     <rule ref="PSR1.Methods.CamelCapsMethodName">
-        <exclude-pattern>tests/Support/FailingFlushStream.php</exclude-pattern>
+        <exclude-pattern>tests/Support/</exclude-pattern>
     </rule>
 
     <rule ref="Generic.Files.LineLength">

@@ -8,6 +8,7 @@ use Closure;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
 use LeKoala\Baresheet\Tests\Support\FailingFlushStream;
+use LeKoala\Baresheet\Tests\Support\FailingWriteStream;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 class DirectZipWriterTest extends TestCase
@@ -271,8 +272,6 @@ class DirectZipWriterTest extends TestCase
         yield 'a' => ['a'];
         yield 'ab' => ['ab'];
         yield 'a+b' => ['a+b'];
-        yield 'c' => ['c'];
-        yield 'c+b' => ['c+b'];
     }
 
     #[DataProvider('appendModes')]
@@ -323,6 +322,66 @@ class DirectZipWriterTest extends TestCase
         }
 
         @unlink($file);
+    }
+
+    public function testCPlusBStreamProducesValidArchive(): void
+    {
+        // 'c+b' is not an append mode: fseek() is honored and bytes may be
+        // replaced, so the seekable patch strategy works end to end.
+        $file = $this->tempFile('zip');
+        $stream = fopen($file, 'c+b');
+        self::assertIsResource($stream);
+
+        $writer = new DirectZipWriter($stream);
+        self::assertTrue($writer->isSeekable(), 'c+b mode must allow seeking and patching');
+        $writer->addString('stored.txt', "stored content\n", store: true);
+        $writer->finish();
+        fclose($stream);
+
+        self::assertSame("stored content\n", $this->readEntry($file, 'stored.txt'));
+        @unlink($file);
+    }
+
+    public function testFinalizationWriteFailureMarksWriterFailed(): void
+    {
+        $scheme = 'baresheetfailwrite';
+        stream_wrapper_register($scheme, FailingWriteStream::class);
+
+        try {
+            $stream = fopen($scheme . '://zip', 'w+b');
+            self::assertIsResource($stream);
+
+            $writer = new DirectZipWriter($stream);
+            $writer->addString('a.txt', 'AAA');
+
+            $wrapper = stream_get_meta_data($stream)['wrapper_data'];
+            self::assertInstanceOf(FailingWriteStream::class, $wrapper);
+            $wrapper->exhaustBudget();
+
+            // The first central-directory write must fail and poison the writer.
+            try {
+                $writer->finish();
+                self::fail('finish() must report a failed central-directory write');
+            } catch (WriteException $e) {
+                self::assertStringContainsString('write', $e->getMessage());
+            }
+
+            try {
+                $writer->addString('late.txt', 'too late');
+                self::fail('addString() must be rejected after a failed finalization');
+            } catch (WriteException $e) {
+                self::assertStringContainsString('failed state', $e->getMessage());
+            }
+
+            try {
+                $writer->finish();
+                self::fail('finish() must be rejected after a failed finalization');
+            } catch (WriteException $e) {
+                self::assertStringContainsString('failed state', $e->getMessage());
+            }
+        } finally {
+            stream_wrapper_unregister($scheme);
+        }
     }
 
     public function testExact65535EntriesUsesClassicEocd(): void

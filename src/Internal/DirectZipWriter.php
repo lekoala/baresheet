@@ -95,9 +95,10 @@ final class DirectZipWriter
         $meta = stream_get_meta_data($output);
 
         $mode = $meta['mode'];
-        if ($mode[0] === 'a' || $mode[0] === 'c') {
-            // Append ('a') and oversized ('c') modes ignore fseek() on writes,
-            // so header patches would be appended instead of replacing bytes.
+        if ($mode[0] === 'a') {
+            // Append modes place every write at the end of the stream regardless
+            // of fseek(), so header patches would be appended instead of
+            // replacing the reserved bytes.
             throw new WriteException('ZIP output stream must not be in an append mode');
         }
 
@@ -525,6 +526,11 @@ final class DirectZipWriter
     {
         $this->assertOpen();
 
+        // From here on any failure leaves a half-written central directory, so
+        // the writer must never be reused. Cleared once every finalization
+        // write succeeded (before flushing).
+        $this->failed = true;
+
         $centralDirectoryOffset = $this->position();
         $entryCount = count($this->entries);
 
@@ -654,6 +660,7 @@ final class DirectZipWriter
         }
 
         $this->writeAll($eocd);
+        $this->failed = false;
         if (fflush($this->output) === false) {
             $this->failed = true;
             throw new WriteException('Unable to flush ZIP output stream');
