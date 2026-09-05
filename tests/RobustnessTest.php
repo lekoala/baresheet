@@ -648,7 +648,7 @@ class RobustnessTest extends TestCase
             $writer->writeString([[str_repeat('x', 32_768)]]);
             self::fail('Expected WriteException for an over-long cell');
         } catch (WriteException $e) {
-            self::assertStringContainsString("Cell A1", $e->getMessage());
+            self::assertStringContainsString('Cell A1', $e->getMessage());
             self::assertStringContainsString('exceeds the maximum of 32767 characters', $e->getMessage());
         }
     }

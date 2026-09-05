@@ -78,9 +78,7 @@ final class FailingWriteStream
         return ['size' => strlen($this->data)];
     }
 
-    public function stream_close(): void
-    {
-    }
+    public function stream_close(): void {}
 
     /** Refuse any further write: spend the budget up to the current size. */
     public function exhaustBudget(): void

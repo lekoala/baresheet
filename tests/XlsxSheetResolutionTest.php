@@ -73,7 +73,8 @@ class XlsxSheetResolutionTest extends TestCase
         return (
             '<?xml version="1.0" encoding="UTF-8"?>'
             . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
-            . '<row r="1">' . "\n"
+            . '<row r="1">'
+            . "\n"
             . $cells
             . '</row></sheetData></worksheet>'
         );
