@@ -23,6 +23,20 @@ namespace LeKoala\Baresheet {
     }
 }
 
+// Spread::outputHeaders() delegates to the Internal namespace, which resolves
+// its own header()/headers_sent() calls; the mock must cover it too.
+namespace LeKoala\Baresheet\Internal {
+    function headers_sent(): bool
+    {
+        return false;
+    }
+
+    function header(string $string, bool $replace = true, int $http_response_code = 0): void
+    {
+        $GLOBALS['baresheet_mock_headers'][] = $string;
+    }
+}
+
 namespace LeKoala\Baresheet\Tests {
     use LeKoala\Baresheet\Baresheet;
     use LeKoala\Baresheet\CsvWriter;

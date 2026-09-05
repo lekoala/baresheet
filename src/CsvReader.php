@@ -8,6 +8,7 @@ use Generator;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
+use LeKoala\Baresheet\Internal\CsvSupport;
 use LogicException;
 
 /**
@@ -53,7 +54,7 @@ class CsvReader implements ReaderInterface
      */
     public function readString(string $contents): Generator
     {
-        $temp = Spread::getMaxMemTempStream();
+        $temp = CsvSupport::getMaxMemTempStream();
         try {
             fwrite($temp, $contents);
             rewind($temp);
@@ -84,7 +85,7 @@ class CsvReader implements ReaderInterface
      */
     public function readFile(string $filename): Generator
     {
-        $stream = Spread::getInputStream($filename);
+        $stream = CsvSupport::getInputStream($filename);
         try {
             yield from $this->parseStream($stream);
         } finally {

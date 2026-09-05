@@ -55,7 +55,7 @@ That's it. The `Baresheet` facade always creates a fresh reader/writer, applies 
 | Auto width / freeze / filter | —   | ✓    | —   |
 
 - **Streaming by default** — reads and writes (including browser `output()`) are streamed, so PHP memory stays flat regardless of file size.
-- **Low memory** — a ~0.7 MB peak reading or ~1.3 MB writing 50,000 XLSX rows (see [Performance](#performance)).
+- **Low memory** — ~0.15 MB for CSV, ~0.7 MB peak reading or ~1.3 MB writing 50,000 XLSX rows (see [Performance](#performance)).
 - **No runtime Composer dependencies** — only PHP core extensions; XLSX/ODS packaging uses an internal ZIP writer.
 - **Pragmatic headers** — required columns, selection, aliases, injected and hierarchical headers, header discovery, normalization, and strict mode ([docs/headers.md](docs/headers.md)).
 - **Native values** — in XLSX/ODS, numbers, booleans, and dates come back as real PHP types, not strings; CSV is textual by nature ([Native values](#native-values)).
@@ -255,21 +255,21 @@ Also in the package:
 
 ### Reading 50,000 Rows
 
-| Library    | CSV  | XLSX | ODS  | Peak PHP Memory             |
-|------------|------|------|------|-----------------------------|
-| Baresheet  | 1.0× | 1.0× | 1.0× | 0.5–0.7 MB                  |
-| League     | 1.7× | —    | —    | 0.31 MB                     |
-| SimpleXLSX | —    | 1.9× | —    | 34.1 MB                     |
-| OpenSpout  | 2.9× | 6.0× | 3.5× | 0.2–0.6 MB                  |
+| Library    | CSV  | XLSX | ODS  | Peak PHP Memory                                       |
+|------------|------|------|------|-------------------------------------------------------|
+| Baresheet  | 1.0× | 1.0× | 1.0× | 0.15 MB (CSV) · 0.64 MB (XLSX) · 0.48 MB (ODS)        |
+| League     | 1.6× | —    | —    | 0.31 MB                                               |
+| SimpleXLSX | —    | 2.0× | —    | 34.1 MB                                               |
+| OpenSpout  | 3.0× | 6.0× | 3.4× | 0.15–0.55 MB                                          |
 
 ### Writing 50,000 Rows
 
 | Library       | CSV  | XLSX | ODS  | Peak PHP Memory                                        |
 |---------------|------|------|------|--------------------------------------------------------|
-| Baresheet     | 1.0× | 1.0× | 1.0× | 0.50 MB (CSV) · 1.31 MB (XLSX) · 1.48 MB (ODS)         |
-| League        | 1.1× | —    | —    | 0.25 MB                                                |
+| Baresheet     | 1.0× | 1.0× | 1.0× | 0.14 MB (CSV) · 1.31 MB (XLSX) · 1.48 MB (ODS)         |
+| League        | 1.2× | —    | —    | 0.25 MB                                                |
 | SimpleXLSXGen | —    | 2.7× | —    | 109.85 MB                                              |
-| OpenSpout     | 2.3× | 3.4× | 5.1× | 0.12–0.70 MB                                           |
+| OpenSpout     | 2.4× | 3.5× | 5.2× | 0.12–0.70 MB                                           |
 
 Memory is measured in an isolated subprocess via `memory_get_peak_usage()`, covering PHP-managed allocations only (not native allocations inside zlib or libzip). Baresheet's stream-based `XMLReader` never loads the entire worksheet document into PHP memory. See [docs/streaming.md](docs/streaming.md) for write-memory details.
 

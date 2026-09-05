@@ -6,6 +6,7 @@ namespace LeKoala\Baresheet;
 
 use InvalidArgumentException;
 use LeKoala\Baresheet\Exception\WriteException;
+use LeKoala\Baresheet\Internal\CsvSupport;
 
 /**
  * Zero-dependency CSV writer using native PHP fputcsv.
@@ -47,7 +48,7 @@ class CsvWriter implements WriterInterface
      */
     public function writeStream(iterable $data)
     {
-        $stream = Spread::getMaxMemTempStream();
+        $stream = CsvSupport::getMaxMemTempStream();
         $this->writeInternal($stream, $data);
         rewind($stream);
         return $stream;
@@ -78,9 +79,9 @@ class CsvWriter implements WriterInterface
      */
     public function writeFile(iterable $data, string $filename): bool
     {
-        $filename = Spread::ensureExtension($filename, 'csv');
+        $filename = CsvSupport::ensureExtension($filename, 'csv');
 
-        $stream = Spread::getOutputStream($filename);
+        $stream = CsvSupport::getOutputStream($filename);
         $this->writeInternal($stream, $data);
         fclose($stream);
         return true;
@@ -91,7 +92,7 @@ class CsvWriter implements WriterInterface
      */
     public function output(iterable $data, string $filename): void
     {
-        $filename = Spread::ensureExtension($filename, 'csv');
+        $filename = CsvSupport::ensureExtension($filename, 'csv');
 
         if ($this->stream) {
             $this->outputStream($data, $filename);
@@ -99,7 +100,7 @@ class CsvWriter implements WriterInterface
         }
 
         $content = $this->writeString($data);
-        Spread::outputHeaders(self::MIMETYPE, $filename, strlen($content));
+        CsvSupport::outputHeaders(self::MIMETYPE, $filename, strlen($content));
         echo $content;
     }
 
@@ -108,8 +109,8 @@ class CsvWriter implements WriterInterface
      */
     public function outputStream(iterable $data, string $filename): void
     {
-        Spread::outputHeaders(self::MIMETYPE, $filename);
-        $stream = Spread::getOutputStream();
+        CsvSupport::outputHeaders(self::MIMETYPE, $filename);
+        $stream = CsvSupport::getOutputStream();
         $this->writeInternal($stream, $data);
         fclose($stream);
     }
@@ -244,7 +245,7 @@ class CsvWriter implements WriterInterface
     /**
      * Single flat pass that prepares a row for fputcsv: converts Stringable cells
      * to text, applies formula escaping (opt-in), serializes numbers (bool ->
-     * "1"/"0", float via {@see Spread::serializeFloat()}, non-finite floats are
+     * "1"/"0", float via {@see CsvSupport::serializeFloat()}, non-finite floats are
      * rejected like the XLSX/ODS writers, null -> empty) and, when the whole
      * stream is transcoded, validates each text cell so invalid UTF-8 or an
      * unrepresentable character raises an explicit error instead of being
@@ -297,7 +298,7 @@ class CsvWriter implements WriterInterface
                 if (!is_finite($cell)) {
                     throw new WriteException('Cannot write a non-finite numeric value');
                 }
-                $row[$key] = Spread::serializeFloat($cell);
+                $row[$key] = CsvSupport::serializeFloat($cell);
             }
             $colIndex++;
         }
