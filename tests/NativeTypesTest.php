@@ -539,7 +539,7 @@ class NativeTypesTest extends TestCase
         if ($commaLocale === null) {
             self::markTestSkipped('No comma-decimal locale available');
         }
-        $original = setlocale(LC_NUMERIC, 0);
+        $original = setlocale(LC_NUMERIC, '0');
         $date = new DateTimeImmutable('2026-08-13 14:30:15', new DateTimeZone('UTC'));
         try {
             setlocale(LC_NUMERIC, $commaLocale);

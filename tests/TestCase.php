@@ -23,7 +23,7 @@ abstract class TestCase extends BaseTestCase
      */
     protected function commaDecimalLocale(): ?string
     {
-        $original = setlocale(LC_NUMERIC, 0);
+        $original = setlocale(LC_NUMERIC, '0');
         $locales = [
             'de-DE',
             'de_DE.UTF-8',

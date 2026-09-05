@@ -78,5 +78,7 @@ final class FailingFlushStream
         return ['size' => strlen($this->data)];
     }
 
-    public function stream_close(): void {}
+    public function stream_close(): void
+    {
+    }
 }

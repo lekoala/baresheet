@@ -881,7 +881,10 @@ class Spread
      */
     private static function needsXmlSlowPath(string $str): bool
     {
-        return preg_match("/[&<>\"'\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]/", $str) === 1;
+        // Single-quoted so PCRE sees the \xNN sequences: PHP pre-parses \x in
+        // double-quoted strings into raw bytes, whose NULs are only supported
+        // in regex patterns since PHP 8.2.7.
+        return preg_match('/[&<>"\'\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]/', $str) === 1;
     }
 
     /**

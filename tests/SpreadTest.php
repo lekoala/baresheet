@@ -442,7 +442,7 @@ class SpreadTest extends TestCase
         if ($commaLocale === null) {
             self::markTestSkipped('No comma-decimal locale available');
         }
-        $original = setlocale(LC_NUMERIC, 0);
+        $original = setlocale(LC_NUMERIC, '0');
         try {
             self::assertSame('1.5', Spread::serializeFloat(1.5));
             setlocale(LC_NUMERIC, $commaLocale);
