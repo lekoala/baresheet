@@ -7,6 +7,8 @@ namespace LeKoala\Baresheet\Tests;
 use Closure;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Tests\Support\FailingFlushStream;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class DirectZipWriterTest extends TestCase
 {
@@ -227,6 +229,131 @@ class DirectZipWriterTest extends TestCase
         @unlink($file);
     }
 
+    public function testFinishFlushFailureThrows(): void
+    {
+        $scheme = 'baresheetfailflush';
+        stream_wrapper_register($scheme, FailingFlushStream::class);
+
+        try {
+            $stream = fopen($scheme . '://zip', 'w+b');
+            self::assertIsResource($stream);
+
+            $writer = new DirectZipWriter($stream);
+            $writer->addString('a.txt', 'AAA');
+
+            try {
+                $writer->finish();
+                self::fail('finish() must report a failed flush');
+            } catch (WriteException) {
+            }
+
+            // Once the flush failed the archive is indeterminate: no further
+            // writes or finish attempts may succeed.
+            try {
+                $writer->addString('late.txt', 'too late');
+                self::fail('addString() must be rejected after a failed flush');
+            } catch (WriteException) {
+            }
+
+            try {
+                $writer->finish();
+                self::fail('finish() must be rejected after a failed flush');
+            } catch (WriteException) {
+            }
+        } finally {
+            stream_wrapper_unregister($scheme);
+        }
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function appendModes(): iterable
+    {
+        yield 'a' => ['a'];
+        yield 'ab' => ['ab'];
+        yield 'a+b' => ['a+b'];
+        yield 'c' => ['c'];
+        yield 'c+b' => ['c+b'];
+    }
+
+    #[DataProvider('appendModes')]
+    public function testAppendModeRejected(string $mode): void
+    {
+        $file = $this->tempFile('zip');
+        $stream = fopen($file, $mode);
+        self::assertIsResource($stream);
+
+        try {
+            $this->expectException(WriteException::class);
+            new DirectZipWriter($stream);
+        } finally {
+            fclose($stream);
+            @unlink($file);
+        }
+    }
+
+    public function testProducerExceptionMarksWriterFailed(): void
+    {
+        $file = $this->tempFile('zip');
+        $w = DirectZipWriter::create($file);
+        $w->addString('before.txt', 'BEFORE');
+
+        try {
+            $w->addCallback('broken.txt', static function (Closure $write): void {
+                $write('partial payload');
+                throw new \RuntimeException('Simulated producer failure');
+            });
+            self::fail('The producer exception must propagate');
+        } catch (\RuntimeException $e) {
+            self::assertSame('Simulated producer failure', $e->getMessage());
+        }
+
+        // The entry was partially written; the archive can no longer be used.
+        try {
+            $w->addString('late.txt', 'too late');
+            self::fail('addString() must be rejected after a partial entry failure');
+        } catch (WriteException $e) {
+            self::assertStringContainsString('failed state', $e->getMessage());
+        }
+
+        try {
+            $w->finish();
+            self::fail('finish() must be rejected after a partial entry failure');
+        } catch (WriteException $e) {
+            self::assertStringContainsString('failed state', $e->getMessage());
+        }
+
+        @unlink($file);
+    }
+
+    public function testExact65535EntriesUsesClassicEocd(): void
+    {
+        // 65535 is both the classic EOCD capacity and the ZIP64 sentinel value.
+        // An archive with exactly that many entries must stay classic (no ZIP64
+        // records) and remain readable by an independent reader.
+        $file = $this->tempFile('zip');
+        $w = DirectZipWriter::create($file);
+        for ($i = 0; $i < 65_535; $i++) {
+            $w->addString("e{$i}.txt", "entry {$i}");
+        }
+        $w->finish();
+
+        $raw = (string) file_get_contents($file);
+        self::assertFalse(
+            str_contains($raw, pack('V', 0x0706_4b50)),
+            'a 65535-entry archive must not carry a ZIP64 locator',
+        );
+
+        $eocd = substr($raw, -22);
+        self::assertSame(0x0605_4b50, unpack('V', substr($eocd, 0, 4))[1]);
+        self::assertSame(65_535, unpack('v', substr($eocd, 8, 2))[1], 'classic entries-on-disk count');
+        self::assertSame(65_535, unpack('v', substr($eocd, 10, 2))[1], 'classic total entry count');
+
+        self::assertSame(65_535, $this->entryCount($file));
+        self::assertSame('entry 0', $this->readEntry($file, 'e0.txt'));
+        self::assertSame('entry 65534', $this->readEntry($file, 'e65534.txt'));
+        @unlink($file);
+    }
+
     public function testInvalidCompressionLevelThrows(): void
     {
         $file = $this->tempFile('zip');
@@ -299,11 +426,15 @@ class DirectZipWriterTest extends TestCase
     public function testLocalHeaderMetadataZip64ExactLimit(): void
     {
         // 0xFFFF_FFFF itself fits in classic ZIP; the next value requires ZIP64.
-        [$versionClassic, $zip64Classic] = DirectZipWriter::localHeaderMetadata(0, 0xFFFF_FFFF, 0);
-        [$versionZip64, $zip64True] = DirectZipWriter::localHeaderMetadata(0, 0x1_0000_0000, 0);
+        // Both sizes at the exact sentinel must stay real 32-bit values, not be
+        // mistaken for ZIP64 markers.
+        [$version, $zip64, $sizePatch] = DirectZipWriter::localHeaderMetadata(0, 0xFFFF_FFFF, 0xFFFF_FFFF);
+        self::assertSame(20, $version);
+        self::assertFalse($zip64);
+        self::assertSame(0xFFFF_FFFF, unpack('V', substr($sizePatch, 4, 4))[1]);
+        self::assertSame(0xFFFF_FFFF, unpack('V', substr($sizePatch, 8, 4))[1]);
 
-        self::assertSame(20, $versionClassic);
-        self::assertFalse($zip64Classic);
+        [$versionZip64, $zip64True] = DirectZipWriter::localHeaderMetadata(0, 0x1_0000_0000, 0);
         self::assertSame(45, $versionZip64);
         self::assertTrue($zip64True);
     }

@@ -77,6 +77,9 @@ final class DirectZipWriter
 
     private bool $finished = false;
 
+    /** Set once an operation leaves the archive in an indeterminate state. */
+    private bool $failed = false;
+
     /**
      * @param resource $output Writable stream. Seekable streams use header
      * patching; non-seekable streams use ZIP64 data descriptors.
@@ -90,6 +93,14 @@ final class DirectZipWriter
         }
 
         $meta = stream_get_meta_data($output);
+
+        $mode = $meta['mode'];
+        if ($mode[0] === 'a' || $mode[0] === 'c') {
+            // Append ('a') and oversized ('c') modes ignore fseek() on writes,
+            // so header patches would be appended instead of replacing bytes.
+            throw new WriteException('ZIP output stream must not be in an append mode');
+        }
+
         $this->seekable = $meta['seekable'] === true;
 
         if ($compressionLevel < -1 || $compressionLevel > 9) {
@@ -172,6 +183,7 @@ final class DirectZipWriter
             $lastModificationDateTime ?? new DateTimeImmutable(),
         );
 
+        $this->failed = true;
         $this->writeAll(pack(
             'VvvvvvVVVvv',
             self::LOCAL_FILE_HEADER_SIGNATURE,
@@ -201,6 +213,7 @@ final class DirectZipWriter
             'method' => self::METHOD_STORE,
             'version' => self::VERSION_CLASSIC,
         ];
+        $this->failed = false;
     }
 
     /**
@@ -326,6 +339,7 @@ final class DirectZipWriter
             strlen($localExtra),
         );
 
+        $this->failed = true;
         $this->writeAll($localHeader);
         $this->writeAll($name);
         $this->writeAll($localExtra);
@@ -439,6 +453,7 @@ final class DirectZipWriter
             'method' => $method,
             'version' => $version,
         ];
+        $this->failed = false;
     }
 
     /**
@@ -639,7 +654,10 @@ final class DirectZipWriter
         }
 
         $this->writeAll($eocd);
-        fflush($this->output);
+        if (fflush($this->output) === false) {
+            $this->failed = true;
+            throw new WriteException('Unable to flush ZIP output stream');
+        }
 
         $this->finished = true;
     }
@@ -656,6 +674,10 @@ final class DirectZipWriter
     {
         if ($this->finished) {
             throw new WriteException('ZIP archive has already been finished');
+        }
+
+        if ($this->failed) {
+            throw new WriteException('ZIP archive is in a failed state and can no longer be written');
         }
     }
 
