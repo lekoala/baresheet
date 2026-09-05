@@ -9,9 +9,13 @@ use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
+use LeKoala\Baresheet\Exception\WriteException;
+use LeKoala\Baresheet\Meta;
 use LeKoala\Baresheet\OdsReader;
+use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
+use LeKoala\Baresheet\XlsxWriter;
 use ZipArchive;
 
 /**
@@ -512,5 +516,108 @@ class RobustnessTest extends TestCase
         self::assertStringContainsString('a,b', $contents);
 
         fclose($stream);
+    }
+
+    // -- 9. XML-invalid cell content must be rejected with position, not silently corrupted --
+
+    public function testXlsxWriterRejectsInvalidUtf8CellWithPosition(): void
+    {
+        $writer = new XlsxWriter();
+        try {
+            $writer->writeString([["caf\xE9"]]);
+            self::fail('Expected WriteException');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("sheet 'Sheet1', cell A1", $e->getMessage());
+            self::assertStringContainsString('Invalid UTF-8', $e->getMessage());
+        }
+    }
+
+    public function testXlsxWriterRejectsForbiddenCodePointCellWithPosition(): void
+    {
+        $writer = new XlsxWriter();
+        try {
+            $writer->writeString([["a\xEF\xBF\xBE b"]]);
+            self::fail('Expected WriteException');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("sheet 'Sheet1', cell A1", $e->getMessage());
+            self::assertStringContainsString('U+FFFE or U+FFFF', $e->getMessage());
+        }
+    }
+
+    public function testOdsWriterRejectsInvalidUtf8CellWithPosition(): void
+    {
+        $writer = new OdsWriter();
+        try {
+            $writer->writeString([["caf\xE9"]]);
+            self::fail('Expected WriteException');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("sheet 'Sheet1', cell A1", $e->getMessage());
+            self::assertStringContainsString('Invalid UTF-8', $e->getMessage());
+        }
+    }
+
+    public function testOdsWriterRejectsForbiddenCodePointCellWithPosition(): void
+    {
+        $writer = new OdsWriter();
+        try {
+            $writer->writeString([["a\xEF\xBF\xBF b"]]);
+            self::fail('Expected WriteException');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("sheet 'Sheet1', cell A1", $e->getMessage());
+            self::assertStringContainsString('U+FFFE or U+FFFF', $e->getMessage());
+        }
+    }
+
+    public function testXlsxMetadataFieldRejectsInvalidUtf8(): void
+    {
+        $writer = new XlsxWriter();
+        $writer->meta = new Meta(title: "caf\xE9");
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('metadata title');
+        $writer->writeString([['a']]);
+    }
+
+    public function testOdsMetadataFieldRejectsInvalidUtf8(): void
+    {
+        $writer = new OdsWriter();
+        $writer->meta = new Meta(creator: "caf\xE9");
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('metadata creator');
+        $writer->writeString([['a']]);
+    }
+
+    public function testWritersRoundTripValidUnicode(): void
+    {
+        $rows = [['café 😊', 'Zoë']];
+
+        $xlsx = $this->tempFile('xlsx');
+        Baresheet::write($rows, $xlsx);
+        self::assertSame($rows, iterator_to_array((new XlsxReader())->readFile($xlsx)));
+        unlink($xlsx);
+
+        $ods = $this->tempFile('ods');
+        Baresheet::write($rows, $ods);
+        self::assertSame($rows, iterator_to_array((new OdsReader())->readFile($ods)));
+        unlink($ods);
+    }
+
+    public function testFailedXlsxWriteCleansUpInternalTempButNotDestination(): void
+    {
+        $tempDir = $this->tempFile('dir');
+        mkdir($tempDir);
+        $destination = $tempDir . '/out.xlsx';
+
+        $writer = new XlsxWriter();
+        $writer->tempPath = $tempDir;
+        try {
+            $writer->writeFile([["caf\xE9"]], $destination);
+            self::fail('Expected WriteException');
+        } catch (WriteException) {
+        }
+
+        $leftovers = glob($tempDir . '/xlsx_native*') ?? [];
+        self::assertSame([], $leftovers);
+        self::assertFileDoesNotExist($destination);
+        rmdir($tempDir);
     }
 }

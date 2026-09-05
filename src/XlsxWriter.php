@@ -173,25 +173,29 @@ class XlsxWriter implements WriterInterface
             $baseName = $filename;
         }
 
-        $stream = @fopen($baseName, 'w+b');
-        if (!$stream) {
-            throw new WriteException("Failed to open '{$baseName}' for writing");
-        }
-
+        $stream = false;
         try {
-            $this->buildDirectZip($data, $stream);
-        } finally {
-            fclose($stream);
-        }
+            $stream = @fopen($baseName, 'w+b');
+            if (!$stream) {
+                throw new WriteException("Failed to open '{$baseName}' for writing");
+            }
 
-        // Copy from temp location to final destination when using tempPath
-        if ($this->tempPath) {
-            try {
-                copy($baseName, $filename);
-            } finally {
-                if (is_file($baseName)) {
-                    unlink($baseName);
+            $this->buildDirectZip($data, $stream);
+
+            // Copy from temp location to final destination when using tempPath
+            if ($this->tempPath) {
+                if (!copy($baseName, $filename)) {
+                    throw new WriteException("Failed to copy '{$baseName}' to '{$filename}'");
                 }
+            }
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+            // Never touch the caller's destination on failure; only clean up the
+            // temporary built by this operation when tempPath is in use.
+            if ($this->tempPath && is_file($baseName)) {
+                unlink($baseName);
             }
         }
 
@@ -357,6 +361,7 @@ class XlsxWriter implements WriterInterface
     ): void {
         $r = 0;
         $colCache = [];
+        $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $boldStyle = $this->boldHeaders ? ' s="2"' : '';
         $autoWidth = $trackWidths;
         $sharedStringsOpt = $this->sharedStrings;
@@ -446,7 +451,7 @@ class XlsxWriter implements WriterInterface
                     // Only invoke mb_strlen if autoWidth is enabled, as it requires accurate multi-byte character counts.
                     $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
 
-                    $escaped = Spread::escapeXml($strValue);
+                    $escaped = Spread::escapeXml($strValue, "sheet '{$sheetName}', cell {$cn}");
 
                     // For shared strings logic, use strlen for byte-length threshold checking
                     $strByteLen = $autoWidth ? strlen($strValue) : $vl;
@@ -683,13 +688,13 @@ class XlsxWriter implements WriterInterface
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
         $created = gmdate('Y-m-d\TH:i:s\Z');
-        $title = Spread::escapeXml($metaObj->title ?? '');
-        $subject = Spread::escapeXml($metaObj->subject ?? '');
-        $creator = Spread::escapeXml($metaObj->creator ?? '');
-        $keywords = Spread::escapeXml($metaObj->keywords ?? '');
-        $description = Spread::escapeXml($metaObj->description ?? '');
-        $category = Spread::escapeXml($metaObj->category ?? '');
-        $language = Spread::escapeXml($metaObj->language ?? 'en-US');
+        $title = Spread::escapeXml($metaObj->title ?? '', 'metadata title');
+        $subject = Spread::escapeXml($metaObj->subject ?? '', 'metadata subject');
+        $creator = Spread::escapeXml($metaObj->creator ?? '', 'metadata creator');
+        $keywords = Spread::escapeXml($metaObj->keywords ?? '', 'metadata keywords');
+        $description = Spread::escapeXml($metaObj->description ?? '', 'metadata description');
+        $category = Spread::escapeXml($metaObj->category ?? '', 'metadata category');
+        $language = Spread::escapeXml($metaObj->language ?? 'en-US', 'metadata language');
 
         return <<<XML
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>

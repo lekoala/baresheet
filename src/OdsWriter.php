@@ -157,30 +157,29 @@ class OdsWriter implements WriterInterface
             $baseName = $filename;
         }
 
-        $stream = @fopen($baseName, 'w+b');
-        if ($stream === false) {
-            if ($this->tempPath && is_file($baseName)) {
-                unlink($baseName);
-            }
-            throw new WriteException("Failed to open '{$baseName}' for writing");
-        }
-
+        $stream = false;
         try {
-            $this->buildDirectZip($data, $stream);
-        } finally {
-            fclose($stream);
-        }
+            $stream = @fopen($baseName, 'w+b');
+            if ($stream === false) {
+                throw new WriteException("Failed to open '{$baseName}' for writing");
+            }
 
-        // Copy from temp location to final destination when using tempPath
-        if ($this->tempPath) {
-            try {
+            $this->buildDirectZip($data, $stream);
+
+            // Copy from temp location to final destination when using tempPath
+            if ($this->tempPath) {
                 if (!copy($baseName, $filename)) {
                     throw new WriteException("Failed to copy '{$baseName}' to '{$filename}'");
                 }
-            } finally {
-                if (is_file($baseName)) {
-                    unlink($baseName);
-                }
+            }
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+            // Never touch the caller's destination on failure; only clean up the
+            // temporary built by this operation when tempPath is in use.
+            if ($this->tempPath && is_file($baseName)) {
+                unlink($baseName);
             }
         }
 
@@ -223,6 +222,7 @@ class OdsWriter implements WriterInterface
     {
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $sheetName = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
+        $cellContext = static fn (int $row, int $column): string => "sheet '{$sheetVal}', cell " . Spread::cellAddress($row - 1, $column);
 
         $write(
             '<?xml version="1.0" encoding="UTF-8"?>'
@@ -290,6 +290,8 @@ class OdsWriter implements WriterInterface
             $buffer .= '<table:table-row>';
 
             $rowCellStyle = $headerRowsRemaining > 0 && $boldHeadersOpt ? ' table:style-name="bold"' : '';
+
+            $i = 0;
 
             foreach ($row as $value) {
                 if ($value instanceof \Time\Duration) {
@@ -419,7 +421,7 @@ class OdsWriter implements WriterInterface
                     } else {
                         $strValue = '';
                     }
-                    $escaped = Spread::escapeXml($strValue);
+                    $escaped = Spread::escapeXml($strValue, $cellContext($r, $i));
                     $buffer .=
                         '<table:table-cell'
                         . $rowCellStyle
@@ -429,6 +431,7 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 }
+                $i++;
             }
             if ($headerRowsRemaining > 0) {
                 $headerRowsRemaining--;
@@ -489,25 +492,25 @@ class OdsWriter implements WriterInterface
     private function genMeta(): string
     {
         $metaObj = is_array($this->meta) ? Meta::fromArray($this->meta) : $this->meta;
-        $creator = Spread::escapeXml($metaObj->creator ?? '');
+        $creator = Spread::escapeXml($metaObj->creator ?? '', 'metadata creator');
         $titleVal = $metaObj?->title;
-        $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal) . '</dc:title>' : '';
+        $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal, 'metadata title') . '</dc:title>' : '';
         $subjectVal = $metaObj?->subject;
-        $subject = $subjectVal ? '<dc:subject>' . Spread::escapeXml($subjectVal) . '</dc:subject>' : '';
+        $subject = $subjectVal ? '<dc:subject>' . Spread::escapeXml($subjectVal, 'metadata subject') . '</dc:subject>' : '';
         $keywordsVal = $metaObj?->keywords;
         $keywords = '';
         if ($keywordsVal !== null && $keywordsVal !== '') {
             $parts = array_filter(array_map('trim', explode(',', $keywordsVal)));
             foreach ($parts as $part) {
-                $keywords .= '<meta:keyword>' . Spread::escapeXml($part) . '</meta:keyword>';
+                $keywords .= '<meta:keyword>' . Spread::escapeXml($part, 'metadata keywords') . '</meta:keyword>';
             }
         }
         $descriptionVal = $metaObj?->description;
         $description = $descriptionVal
-            ? '<dc:description>' . Spread::escapeXml($descriptionVal) . '</dc:description>'
+            ? '<dc:description>' . Spread::escapeXml($descriptionVal, 'metadata description') . '</dc:description>'
             : '';
         $languageVal = $metaObj?->language;
-        $language = $languageVal ? '<dc:language>' . Spread::escapeXml($languageVal) . '</dc:language>' : '';
+        $language = $languageVal ? '<dc:language>' . Spread::escapeXml($languageVal, 'metadata language') . '</dc:language>' : '';
         $date = date('Y-m-d\TH:i:s');
 
         return <<<XML

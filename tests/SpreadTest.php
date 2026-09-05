@@ -327,6 +327,35 @@ class SpreadTest extends TestCase
         self::assertSame($allowed, Spread::escapeXml($allowed));
     }
 
+    public function testEscapeXmlKeepsValidUnicodeText(): void
+    {
+        self::assertSame('café 😊', Spread::escapeXml('café 😊'));
+    }
+
+    public function testEscapeXmlRejectsInvalidUtf8(): void
+    {
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessageMatches('/invalid UTF-8/i');
+        Spread::escapeXml("caf\xE9");
+    }
+
+    public function testEscapeXmlRejectsForbiddenXmlCodePoint(): void
+    {
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessageMatches('/U\+FFFE or U\+FFFF/');
+        Spread::escapeXml("a\xEF\xBF\xBE b");
+    }
+
+    public function testEscapeXmlContextAppearsInRejectionMessage(): void
+    {
+        try {
+            Spread::escapeXml(str_repeat("a\xEF\xBF\xBF", 1), "sheet 'Data', cell B3");
+            self::fail('Expected WriteException');
+        } catch (WriteException $e) {
+            self::assertStringContainsString("sheet 'Data', cell B3", $e->getMessage());
+        }
+    }
+
     public function testEscapeXmlAttrEmptyString(): void
     {
         self::assertSame('', Spread::escapeXmlAttr(''));
@@ -354,6 +383,20 @@ class SpreadTest extends TestCase
     {
         $dirty = "Hello\x00World\x0B";
         self::assertSame('HelloWorld', Spread::escapeXmlAttr($dirty));
+    }
+
+    public function testEscapeXmlAttrRejectsInvalidUtf8(): void
+    {
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessageMatches('/invalid UTF-8/i');
+        Spread::escapeXmlAttr("caf\xE9");
+    }
+
+    public function testEscapeXmlAttrRejectsForbiddenXmlCodePoint(): void
+    {
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessageMatches('/U\+FFFE or U\+FFFF/');
+        Spread::escapeXmlAttr("x\xEF\xBF\xBF");
     }
 
     public function testValidateSheetNameValid(): void

@@ -917,43 +917,72 @@ class Spread
     }
 
     /**
-     * Escape string for XML, stripping control chars (\x00-\x1F) except tab, LF, CR.
+     * Reject strings that cannot be encoded as XML 1.0: invalid UTF-8 and the
+     * XML-forbidden code points U+FFFE/U+FFFF. Control chars are deliberately
+     * not rejected here; callers strip them via stripControlChars.
+     *
+     * @param string $context Human-readable location (cell or metadata field) for the error message.
+     * @throws WriteException
      */
-    public static function escapeXml(string $str): string
+    private static function assertXmlSafeString(string $str, string $context): void
+    {
+        if (preg_match('//u', $str) !== 1) {
+            throw new WriteException("Invalid UTF-8 in {$context}");
+        }
+        if (preg_match('/[\x{FFFE}\x{FFFF}]/u', $str) === 1) {
+            throw new WriteException("Forbidden XML character (U+FFFE or U+FFFF) in {$context}");
+        }
+    }
+
+    /**
+     * Fast-path test: true when the string needs the slow path. Returns true
+     * when the string contains XML meta characters, control chars to strip or
+     * any byte >= 0x80, so non-ASCII strings are always validated for UTF-8
+     * (pure ASCII cannot be invalid UTF-8 nor contain U+FFFE/U+FFFF).
+     */
+    private static function needsXmlSlowPath(string $str): bool
+    {
+        return preg_match("/[&<>\"'\x00-\x08\x0B\x0C\x0E-\x1F\x80-\xFF]/", $str) === 1;
+    }
+
+    /**
+     * Escape string for XML, stripping control chars (\x00-\x1F) except tab, LF, CR.
+     *
+     * @param string $context Location (cell or metadata field) reported when the string
+     *                        cannot be encoded as valid XML 1.0.
+     * @throws WriteException If $str is not valid UTF-8 or contains U+FFFE/U+FFFF.
+     */
+    public static function escapeXml(string $str, string $context = 'value'): string
     {
         if ($str === '') {
             return '';
         }
-        // Fast path for common plain-text strings: return early if no XML special chars or invalid control chars exist
-        if (
-            strpbrk(
-                $str,
-                "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-            ) === false
-        ) {
+        // Fast path for common plain-text strings: return early if no XML
+        // special chars, invalid control chars or non-ASCII bytes exist.
+        if (!self::needsXmlSlowPath($str)) {
             return $str;
         }
+        self::assertXmlSafeString($str, $context);
         $str = self::stripControlChars($str);
         return htmlspecialchars($str, ENT_XML1 | ENT_COMPAT, 'UTF-8');
     }
 
     /**
      * Escape string for XML attributes (includes quotes)
+     *
+     * @throws WriteException If $str is not valid UTF-8 or contains U+FFFE/U+FFFF.
      */
-    public static function escapeXmlAttr(string $str): string
+    public static function escapeXmlAttr(string $str, string $context = 'value'): string
     {
         if ($str === '') {
             return '';
         }
-        // Fast path for common plain-text strings: return early if no XML special chars or invalid control chars exist
-        if (
-            strpbrk(
-                $str,
-                "&<>\"'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0B\x0C\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-            ) === false
-        ) {
+        // Fast path for common plain-text strings: return early if no XML
+        // special chars, invalid control chars or non-ASCII bytes exist.
+        if (!self::needsXmlSlowPath($str)) {
             return $str;
         }
+        self::assertXmlSafeString($str, $context);
         $str = self::stripControlChars($str);
         return str_replace(['&', '<', '>', '"', "'"], ['&amp;', '&lt;', '&gt;', '&quot;', '&apos;'], $str);
     }
