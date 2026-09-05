@@ -513,6 +513,7 @@ class CsvTest extends TestCase
         self::assertSame("0,1,1.2345678901234567,,42,text\r\n", $output);
     }
 
+    // @mago-expect lint:no-ini-set
     public function testFloatSerializationIsPrecisionIndependent(): void
     {
         $old = ini_get('precision');

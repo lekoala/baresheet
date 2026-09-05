@@ -234,4 +234,69 @@ class LeagueCsvInteropTest extends InteropTestCase
         self::assertSame($expected, $leagueRecords);
         self::assertSame($expected, $baresheetRecords);
     }
+
+    public function testLeagueReadsBaresheetScalarSerialization(): void
+    {
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $csv = $writer->writeString([
+            [false, true, 1.234_567_890_123_456_7, null, 42, -1.5],
+        ]);
+
+        $reader = LeagueReader::createFromString($csv);
+        $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
+
+        $records = array_values(iterator_to_array($reader->getRecords()));
+
+        self::assertSame(
+            [['0', '1', '1.2345678901234567', '', '42', '-1.5']],
+            $records,
+        );
+    }
+
+    // @mago-expect lint:no-ini-set
+    public function testLeagueReadsBaresheetFloatUnderLowPrecisionIni(): void
+    {
+        $old = ini_get('precision');
+        try {
+            ini_set('precision', '5');
+            $writer = new CsvWriter();
+            $writer->bom = false;
+            $csv = $writer->writeString([[1.234_567_890_123_456_7]]);
+        } finally {
+            ini_set('precision', $old === false ? '14' : $old);
+        }
+
+        $reader = LeagueReader::createFromString($csv);
+        $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
+
+        $records = array_values(iterator_to_array($reader->getRecords()));
+
+        self::assertSame([['1.2345678901234567']], $records);
+    }
+
+    public function testLeagueReadsBaresheetFloatUnderCommaDecimalLocale(): void
+    {
+        $commaLocale = $this->commaDecimalLocale();
+        if ($commaLocale === null) {
+            self::markTestSkipped('No comma-decimal locale available');
+        }
+
+        $original = setlocale(LC_NUMERIC, 0);
+        try {
+            setlocale(LC_NUMERIC, $commaLocale);
+            $writer = new CsvWriter();
+            $writer->bom = false;
+            $csv = $writer->writeString([[1.5]]);
+        } finally {
+            setlocale(LC_NUMERIC, $original !== false ? $original : null);
+        }
+
+        $reader = LeagueReader::createFromString($csv);
+        $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
+
+        $records = array_values(iterator_to_array($reader->getRecords()));
+
+        self::assertSame([['1.5']], $records);
+    }
 }
