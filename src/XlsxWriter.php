@@ -468,7 +468,11 @@ class XlsxWriter implements WriterInterface
                         $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
                     } else {
                         $buffer .=
-                            '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t>' . $escaped . '</t></is></c>';
+                            '<c r="' . $cn . '" t="inlineStr"'
+                            . $cellStyle
+                            . '><is><t xml:space="preserve">'
+                            . $escaped
+                            . '</t></is></c>';
                     }
                 }
                 $buffer .= "\r\n";
@@ -652,7 +656,7 @@ class XlsxWriter implements WriterInterface
             . $count
             . '">';
         foreach ($sharedStrings as $str) {
-            $xml .= '<si><t>' . $str . '</t></si>';
+            $xml .= '<si><t xml:space="preserve">' . $str . '</t></si>';
         }
         $xml .= '</sst>';
         return $xml;

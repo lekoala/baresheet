@@ -414,6 +414,7 @@ class SpreadTest extends TestCase
         self::assertSame('45292.5', Spread::serializeFloat(45_292.5));
     }
 
+    // @mago-expect lint:no-ini-set
     public function testSerializeFloatIsIndependentOfPrecisionIni(): void
     {
         $old = ini_get('precision');

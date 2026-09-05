@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
@@ -86,5 +87,82 @@ class SharedStringsTest extends TestCase
             ],
             $data,
         );
+    }
+
+    public function testWriterEmitsXmlSpacePreserveOnSharedStrings(): void
+    {
+        $writer = new XlsxWriter();
+        $writer->sharedStrings = true;
+        $tempFile = $this->tempFile('xlsx');
+        $writer->writeFile([['  lead ', 'plain', 'trail  ']], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sst = $zip->getFromName('xl/sharedStrings.xml');
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        self::assertIsString($sst);
+        self::assertIsString($sheet);
+        self::assertStringContainsString('<t xml:space="preserve">  lead </t>', $sst);
+        self::assertStringContainsString('<t xml:space="preserve">trail  </t>', $sst);
+        self::assertStringNotContainsString('<is>', $sheet);
+        Spread::safeXml($sst);
+        Spread::safeXml($sheet);
+    }
+
+    public function testWriterEmitsXmlSpacePreserveOnInlineStrings(): void
+    {
+        $long = str_repeat('x', 200);
+        $writer = new XlsxWriter();
+        $writer->sharedStrings = true;
+        $tempFile = $this->tempFile('xlsx');
+        $writer->writeFile([[' short  ', $long]], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sst = $zip->getFromName('xl/sharedStrings.xml');
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        self::assertIsString($sst);
+        self::assertIsString($sheet);
+        self::assertStringContainsString('<t xml:space="preserve"> short  </t>', $sst);
+        self::assertStringContainsString('<is><t xml:space="preserve">' . $long . '</t></is>', $sheet);
+        Spread::safeXml($sst);
+        Spread::safeXml($sheet);
+    }
+
+    public function testWriterEmitsXmlSpacePreserveOnDefaultInlinePath(): void
+    {
+        $writer = new XlsxWriter();
+        $tempFile = $this->tempFile('xlsx');
+        $writer->writeFile([['  spaced  ']], $tempFile);
+
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        self::assertIsString($sheet);
+        self::assertStringContainsString('<is><t xml:space="preserve">  spaced  </t></is>', $sheet);
+        Spread::safeXml($sheet);
+    }
+
+    public function testReaderRoundTripsWhitespaceOnInlineStrings(): void
+    {
+        $writer = new XlsxWriter();
+        $tempFile = $this->tempFile('xlsx');
+        $data = [['  alpha  ', "tab\there", '   ']];
+        $writer->writeFile($data, $tempFile);
+
+        $reader = new XlsxReader();
+        $rows = iterator_to_array($reader->readFile($tempFile));
+        self::assertSame($data, $rows);
+
+        unlink($tempFile);
     }
 }
