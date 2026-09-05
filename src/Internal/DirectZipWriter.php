@@ -19,8 +19,7 @@ use LeKoala\Baresheet\Exception\WriteException;
  * Capabilities:
  *  - classic ZIP and ZIP64; seekable outputs enable ZIP64 only when final
  *    sizes or offsets require it. Non-seekable output stays classic and
- *    refuses to pass 4 GiB, because promoting mid-stream would mean a ZIP64
- *    descriptor, and Excel opens no archive carrying ZIP64 in any form
+ *    refuses to pass 4 GiB, since Excel opens no archive carrying ZIP64
  *  - DEFLATE and STORE compression
  *  - UTF-8 filenames (EFS flag)
  *  - seekable and non-seekable output
@@ -519,11 +518,8 @@ final class DirectZipWriter
     /**
      * Refuse to promote a streamed archive to ZIP64.
      *
-     * A seekable target can go back and rewrite a header, so it upgrades to
-     * ZIP64 the moment the real sizes need it. A non-seekable one cannot: it
-     * has already committed to a classic 32-bit header, and its only way out
-     * would be a ZIP64 descriptor, which is exactly what spreadsheet clients
-     * reject. Failing loudly beats emitting an archive they cannot open.
+     * The header is already written and cannot be patched, so the only way out
+     * would be a ZIP64 descriptor, which spreadsheet clients reject.
      */
     private function assertFitsClassicZip(string $name, int $compressedSize, int $uncompressedSize): void
     {
@@ -561,8 +557,8 @@ final class DirectZipWriter
             $csOverflow = $entry['compressedSize'] > self::UINT32_MAX;
             $offsetOverflow = $entry['offset'] > self::UINT32_MAX;
 
-            // Entry sizes were checked as they were written; an offset only
-            // overflows once the archive as a whole passes 4 GiB.
+            // Sizes were checked as they were written; an offset only overflows
+            // once the archive as a whole passes 4 GiB.
             if ($offsetOverflow && !$this->seekable) {
                 throw new WriteException(
                     "ZIP entry '{$entry['name']}' starts past 4 GiB, which a streamed archive cannot express "

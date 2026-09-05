@@ -24,6 +24,7 @@ class CsvWriter implements WriterInterface
     public string $escape = '';
     public string $eol = "\r\n";
     public bool|Bom|string $bom = true;
+    /** @var bool CSV has no archive to build, so buffering holds the whole document in memory. */
     public bool $stream = true;
     public bool $strict = false;
     /**

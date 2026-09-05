@@ -96,17 +96,10 @@ class OdsWriter implements WriterInterface
     /**
      * Stream ODS straight to php://output, without building it first.
      *
-     * Bytes reach the client as they are produced, so the download starts at
-     * once instead of after the whole archive is built, and no temporary file
-     * is written. Peak memory is the same either way — the buffered path spills
-     * to disk rather than holding the archive. What streaming costs is the
-     * Content-Length, unknown until the archive is finished; set $stream to
-     * false to buffer and send it.
-     *
-     * DirectZipWriter keeps a non-seekable target on classic ZIP, announcing
-     * each entry's sizes in a trailing data descriptor. Excel accepts that; it
-     * is ZIP64 it refuses, and a streamed archive now fails rather than
-     * promoting to it past 4 GiB.
+     * No temporary file and an immediate first byte, at the cost of the
+     * Content-Length. On a non-seekable target DirectZipWriter stays on classic
+     * ZIP with a trailing data descriptor, which Excel accepts; see
+     * docs/streaming.md for the trade-off and the 4 GiB ceiling.
      *
      * @param iterable<WritableRow> $data
      */

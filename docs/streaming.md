@@ -13,11 +13,24 @@ Baresheet::output($data, 'report.xlsx');
 $stream = Baresheet::writeStream($data, 'xlsx');
 ```
 
-## Content-Length and Buffering
+## Output Modes
 
-Because the total file size is unknown before the transfer starts, streaming means the server cannot send a `Content-Length` header. The browser download will therefore not display a progress bar or an estimated time of completion.
+`stream` chooses between two I/O strategies. For XLSX and ODS it is not a memory decision — both modes hold no more than a small buffer — but a decision about *when the HTTP response commits*.
 
-To bypass streaming and force buffering, use `stream: false` with `output()`. Baresheet will buffer the file (either in memory for CSV, or via a temporary zip file for XLSX/ODS) to precisely calculate and send the `Content-Length` header along with it.
+**`stream = true` (the default)** sends bytes to `php://output` as they are produced.
+
+- No complete temporary archive; nothing on disk grows with the export.
+- The download starts immediately, whatever the export size.
+- No `Content-Length`, so no progress bar or estimated time.
+- Headers are already sent when generation begins, so a failure part-way through cannot become a clean HTTP error. The client keeps a truncated file it believes is complete.
+
+**`stream = false`** builds the document first, then sends it.
+
+- Generation finishes before any header is sent, so an error becomes a real HTTP error response instead of a corrupt download.
+- `Content-Length` is known and sent, which also lets the client detect a truncated transfer.
+- Costs temporary disk proportional to the output, for the duration of the request.
+
+For an ordinary user-facing XLSX or ODS download where temporary disk space is available, `stream: false` is often preferable: the workbook is fully built before the response starts, so nothing half-written can reach the user. Keep streaming for large exports, low-latency downloads, and environments where temporary disk matters — a hundred concurrent 100 MB exports mean up to 10 GB of temporary space under buffering.
 
 ```php
 $writer = new XlsxWriter();
@@ -27,6 +40,20 @@ $writer->output($data, 'report.xlsx');
 // or via Options
 Baresheet::output($data, 'report.xlsx', new Options(stream: false));
 ```
+
+### CSV buffers in memory, not on disk
+
+The two modes are not equivalent across formats. XLSX and ODS build into a temporary file, so buffering trades disk. CSV has no archive to build, so it materialises the whole document as a PHP string instead:
+
+| Rows    | CSV `stream = true` | CSV `stream = false` |
+|---------|---------------------|----------------------|
+| 10,000  | flat                | 0.54 MB              |
+| 100,000 | flat                | 5.46 MB              |
+| 500,000 | flat                | 29.46 MB             |
+
+Peak PHP memory with generator input. XLSX and ODS stay flat in both modes — roughly 0.55 MB and 1.0 MB respectively — at any row count.
+
+So `stream: false` is a disk trade for XLSX and ODS, and a memory trade for CSV. Prefer setting it on the writer rather than through a shared `Options` instance when one request produces several formats.
 
 ## Write Memory and Modes
 

@@ -7,22 +7,13 @@ namespace LeKoala\Baresheet\Tests\Support;
 /**
  * Container-level conformance checks for the archives the writers emit.
  *
- * Excel refuses a workbook whose ZIP container uses features it does not
- * implement, and the dialog it shows names neither the offending part nor the
- * reason. These checks keep the container inside the classic ZIP subset Excel
- * accepts, so that class of defect fails in CI instead of at a user's desk.
+ * Excel refuses a container using features it does not implement, and names
+ * neither the part nor the reason. These checks keep it inside the classic ZIP
+ * subset, so that defect fails in CI instead of at a user's desk.
  *
- * The case that already shipped is ZIP64: entries written to a non-seekable
- * stream advertise ZIP64 up front because their final sizes are not yet known,
- * and Excel rejects the result even though ZipArchive and most PHP readers
- * accept it.
- *
- * Which half of that was fatal was settled empirically in Excel 365, by opening
- * four archives with identical XML whose containers differed on one axis each:
- * a classic control, the version byte alone raised to 45, genuine ZIP64
- * structures, and a classic trailing data descriptor. Only the ZIP64 archive
- * failed. So the rules below ban ZIP64 outright, ignore the version byte on its
- * own, and say nothing about how an entry announces its sizes.
+ * Tested in Excel 365 with four archives differing on one axis each: only the
+ * ZIP64 one failed. So ZIP64 is banned outright, while the version byte and a
+ * trailing data descriptor are not violations on their own.
  *
  * Works on raw bytes only, so it stays valid as the writers change.
  *
@@ -154,12 +145,8 @@ final class ZipConformance
     }
 
     /**
-     * Resolve the real directory location when the classic record holds sentinels.
-     *
-     * A ZIP64 archive is still walkable: the classic end record points nowhere
-     * and the true counts live in the ZIP64 record the locator names. Reading
-     * it is what separates "uses ZIP64" from "is corrupt", and the checker has
-     * to tell those apart to report either one honestly.
+     * Follow the locator when the classic end record holds sentinels. Without
+     * this a ZIP64 archive reads as corrupt rather than as using ZIP64.
      *
      * @param array<string, int> $fields
      */
@@ -203,16 +190,14 @@ final class ZipConformance
     {
         $offset = $eocd['offset'];
 
-        // The ZIP64 locator sits immediately before the EOCD when present, so
-        // its absence is the strongest single signal that no ZIP64 record exists.
+        // The locator sits immediately before the EOCD when present.
         $locator = substr($bytes, $offset - self::LOCATOR_SIZE, 4);
         if ($offset >= self::LOCATOR_SIZE && $locator === self::ZIP64_LOCATOR_SIGNATURE) {
             $violations[] = 'ZIP64 end-of-central-directory locator present';
         }
 
-        // Scan the structural tail only: the central directory and the end
-        // records never hold compressed data, so a signature match here cannot
-        // be a false positive from deflated bytes.
+        // Structural tail only: it holds no compressed data, so a signature
+        // match here cannot be a false positive from deflated bytes.
         $tail = substr($bytes, $eocd['cdOffset']);
         if (str_contains($tail, self::ZIP64_EOCD_SIGNATURE)) {
             $violations[] = 'ZIP64 end-of-central-directory record present';
@@ -269,8 +254,7 @@ final class ZipConformance
                 $offset + self::CENTRAL_HEADER_SIZE + $header['nameLength'],
                 $header['extraLength'],
             );
-            // Keep the raw fields for the checks, and resolve separately where
-            // the local header really is, so a ZIP64 entry can still be followed.
+            // Raw fields stay for the checks; this resolves where to actually look.
             $entry['realLocalOffset'] = self::resolveLocalOffset($entry);
             $entries[] = $entry;
 
@@ -282,9 +266,8 @@ final class ZipConformance
     }
 
     /**
-     * A promoted local header offset lives in the 0x0001 extra, after whichever
-     * of the two sizes were promoted with it. Only sentinel fields are present,
-     * in that fixed order, so the position depends on what was promoted.
+     * A promoted offset lives in the 0x0001 extra, after whichever sizes were
+     * promoted with it: only sentinel fields are present, in that fixed order.
      *
      * @param array<string, mixed> $entry
      */
@@ -409,16 +392,8 @@ final class ZipConformance
     }
 
     /**
-     * @param list<string> $violations
-     */
-    /**
-     * General purpose bit 3 is deliberately not a violation.
-     *
-     * Excel 365 opens an archive whose local headers defer crc and sizes to a
-     * classic trailing descriptor. What it refuses is ZIP64, which the
-     * non-seekable path happened to enable at the same time. Banning bit 3 here
-     * would forbid a form Excel accepts, and rule out ever streaming to a
-     * non-seekable output again.
+     * Bit 3 is deliberately absent: Excel accepts a trailing data descriptor,
+     * and banning it would rule out streaming to a non-seekable output.
      *
      * @param list<string> $violations
      */

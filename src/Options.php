@@ -21,6 +21,8 @@ class Options
         public bool $strict = false,
         /**
          * @var bool If true, writers stream the output directly to stdout instead of buffering.
+         *           Buffering costs temporary disk for XLSX/ODS but PHP memory for CSV;
+         *           see docs/streaming.md before setting it for several formats at once.
          */
         public bool $stream = true,
         /** @var bool If true, empty lines are skipped during reading. */
