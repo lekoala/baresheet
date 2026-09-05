@@ -16,6 +16,8 @@ class CsvWriter implements WriterInterface
 {
     public const MIMETYPE = 'text/csv';
 
+    private const FORMULA_ESCAPE_CHARS = "=+-@\t\r";
+
     public string $separator = ',';
     public string $enclosure = '"';
     public string $escape = '';
@@ -131,8 +133,24 @@ class CsvWriter implements WriterInterface
         try {
             $bomToWrite = $this->resolveBomToWrite();
             $outputEncoding = $this->outputEncoding;
+            if ($outputEncoding === '') {
+                // An empty outputEncoding means "no conversion", like null.
+                $outputEncoding = null;
+            }
 
             $this->assertValidEncodingOptions($bomToWrite, $outputEncoding);
+
+            // Transcoding now targets a single encoding for the whole stream and is
+            // delegated to a convert.iconv write filter, so the separator, enclosure
+            // and end-of-line bytes are encoded too. Per-cell mb_convert_encoding
+            // used to leave those structure bytes in ASCII, producing files that
+            // mixed the target encoding with ASCII (reproduced as 61002c62000d0a
+            // with UTF-16LE). The target encoding is resolved once and the filter is
+            // attached for every allowed path: a non-UTF-8 Bom configures it from
+            // its own encoding, otherwise a non-UTF-8 outputEncoding configures it
+            // whether the header is absent or a raw string. A UTF-8 outputEncoding
+            // is a no-op because fputcsv already emits UTF-8.
+            $transcodeEncoding = null;
 
             if ($bomToWrite !== null) {
                 if ($bomToWrite instanceof Bom) {
@@ -150,25 +168,16 @@ class CsvWriter implements WriterInterface
                 // writes UTF-8 internally, but the filter transcodes it before it hits the stream.
                 if ($bomToWrite instanceof Bom && !$bomToWrite->isUtf8()) {
                     $streamFilter = self::appendTranscodeFilter($stream, $bomToWrite->encoding(), 'BOM encoding');
+                    $transcodeEncoding = $bomToWrite->encoding();
                 }
             }
 
-            // outputEncoding used to be applied per cell with mb_convert_encoding,
-            // which left the CSV structure bytes (separator, enclosure, EOL) in
-            // ASCII — producing files that mixed the target encoding with ASCII
-            // (reproduced as 61002c62000d0a with UTF-16LE). When no BOM already
-            // configures a stream filter, transcode the whole stream instead, like
-            // the non-UTF-8 BOM path does. Per-cell encoding is then skipped so
-            // the bytes are not converted twice. A UTF-8 outputEncoding is a no-op
-            // because fputcsv already emits UTF-8.
-            $transcodeEncoding = null;
-            if ($outputEncoding !== null && $outputEncoding !== '') {
+            if ($outputEncoding !== null) {
                 if (self::isUtf8Encoding($outputEncoding)) {
                     $outputEncoding = null;
-                } elseif ($bomToWrite === null) {
+                } else {
                     $streamFilter = self::appendTranscodeFilter($stream, $outputEncoding, 'outputEncoding');
                     $transcodeEncoding = $outputEncoding;
-                    $outputEncoding = null;
                 }
             }
 
@@ -178,19 +187,11 @@ class CsvWriter implements WriterInterface
                 $separator = ',';
             }
             $escapeFormulas = $this->escapeFormulas;
+            $doEscape = (bool) $escapeFormulas;
 
-            // Determine processing needs to avoid repetitive checks in the loop
-            $hasEncoding = $outputEncoding !== null;
-            $isCallable = is_callable($escapeFormulas);
-
-        // NOTE: We intentionally inline the processing logic for both headers and data rows
-        // instead of using a closure or generator. Benchmarks show that closures and generators
-        // add ~150% overhead in tight loops for CSV writing. The code duplication below is
-        // a deliberate trade-off for maximum performance when processing large datasets.
-
-        // Narrow the callable type once for PHPStan
+            // Narrow the callable type once for PHPStan
             /** @var callable(string, int): string|null $escapeFn */
-            $escapeFn = $isCallable ? $escapeFormulas : null;
+            $escapeFn = is_callable($escapeFormulas) ? $escapeFormulas : null;
 
             // Headers: inline processing
             $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
@@ -199,56 +200,7 @@ class CsvWriter implements WriterInterface
                 $headerRows = $headerSchema->headerRows();
 
                 foreach ($headerRows as $row) {
-                    if ($escapeFormulas || $hasEncoding) {
-                        $row = self::stringifyStringables($row);
-                        if ($escapeFormulas && $hasEncoding) {
-                            if ($escapeFn !== null) {
-                                $colIndex = 0;
-                                foreach ($row as &$cell) {
-                                    if (is_string($cell)) {
-                                        /** @var string $outputEncoding */
-                                        $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
-                                    }
-                                    $colIndex++;
-                                }
-                                unset($cell);
-                            } else {
-                                $chars = "=+-@\t\r";
-                                foreach ($row as &$cell) {
-                                    if (is_string($cell)) {
-                                        if ($cell !== '' && str_contains($chars, $cell[0])) {
-                                            $cell = "'" . $cell;
-                                        }
-                                        /** @var string $outputEncoding */
-                                        $cell = mb_convert_encoding($cell, $outputEncoding);
-                                    }
-                                }
-                                unset($cell);
-                            }
-                        } elseif ($escapeFormulas) {
-                            if ($escapeFn !== null) {
-                                $colIndex = 0;
-                                foreach ($row as &$cell) {
-                                    if (is_string($cell)) {
-                                        $cell = $escapeFn($cell, $colIndex);
-                                    }
-                                    $colIndex++;
-                                }
-                                unset($cell);
-                            } else {
-                                $row = self::escapeRow($row);
-                            }
-                        } elseif ($hasEncoding) {
-                            foreach ($row as &$v) {
-                                if (is_string($v)) {
-                                    /** @var string $outputEncoding */
-                                    $v = mb_convert_encoding($v, $outputEncoding);
-                                }
-                            }
-                            unset($v);
-                        }
-                    }
-                    self::serializeTypes($row, $transcodeEncoding);
+                    $row = self::processRow($row, $doEscape, $escapeFn, $transcodeEncoding);
                     /** @var array<int|string, bool|float|int|string|null> $row */
                     $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
                     if ($result === false) {
@@ -275,56 +227,7 @@ class CsvWriter implements WriterInterface
                     $row = $headerSchema->flattenRow((array) $row);
                 }
 
-                if ($escapeFormulas || $hasEncoding) {
-                    $row = self::stringifyStringables($row);
-                    if ($escapeFormulas && $hasEncoding) {
-                        if ($escapeFn !== null) {
-                            $colIndex = 0;
-                            foreach ($row as &$cell) {
-                                if (is_string($cell)) {
-                                    /** @var string $outputEncoding */
-                                    $cell = mb_convert_encoding((string) $escapeFn($cell, $colIndex), $outputEncoding);
-                                }
-                                $colIndex++;
-                            }
-                            unset($cell);
-                        } else {
-                            $chars = "=+-@\t\r";
-                            foreach ($row as &$cell) {
-                                if (is_string($cell)) {
-                                    if ($cell !== '' && str_contains($chars, $cell[0])) {
-                                        $cell = "'" . $cell;
-                                    }
-                                    /** @var string $outputEncoding */
-                                    $cell = mb_convert_encoding($cell, $outputEncoding);
-                                }
-                            }
-                            unset($cell);
-                        }
-                    } elseif ($escapeFormulas) {
-                        if ($escapeFn !== null) {
-                            $colIndex = 0;
-                            foreach ($row as &$cell) {
-                                if (is_string($cell)) {
-                                    $cell = $escapeFn($cell, $colIndex);
-                                }
-                                $colIndex++;
-                            }
-                            unset($cell);
-                        } else {
-                            $row = self::escapeRow($row);
-                        }
-                    } elseif ($hasEncoding) {
-                        foreach ($row as &$v) {
-                            if (is_string($v)) {
-                                /** @var string $outputEncoding */
-                                $v = mb_convert_encoding($v, $outputEncoding);
-                            }
-                        }
-                        unset($v);
-                    }
-                }
-                self::serializeTypes($row, $transcodeEncoding);
+                $row = self::processRow($row, $doEscape, $escapeFn, $transcodeEncoding);
                 /** @var array<int|string, bool|float|int|string|null> $row */
                 $result = fputcsv($stream, $row, $separator, $this->enclosure, $this->escape, $this->eol);
                 if ($result === false) {
@@ -339,86 +242,45 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * Prefix dangerous formula characters with a single-quote to prevent injection.
+     * Single flat pass that prepares a row for fputcsv: converts Stringable cells
+     * to text, applies formula escaping (opt-in), serializes numbers (bool ->
+     * "1"/"0", float via {@see Spread::serializeFloat()}, non-finite floats are
+     * rejected like the XLSX/ODS writers, null -> empty) and, when the whole
+     * stream is transcoded, validates each text cell so invalid UTF-8 or an
+     * unrepresentable character raises an explicit error instead of being
+     * silently dropped by the stream filter.
      *
-     * @param array<mixed> $row
+     * The loop iterates by value and only writes back cells that actually change,
+     * so a row made of plain cells (string/int/null) is not copied. Numbers are
+     * never mistaken for formulas: a negative float keeps its leading "-". The
+     * colIndex counter keeps the escapeFormulas callable contract.
+     *
+     * @param array<mixed>                       $row
+     * @param callable(string, int): string|null $escapeFn Custom escaper, or null for the default one.
+     * @param string|null                        $transcodeEncoding Active full-stream target encoding, if any.
      * @return array<mixed>
-     */
-    private static function escapeRow(array $row): array
-    {
-        $chars = "=+-@\t\r";
-        foreach ($row as &$cell) {
-            if (is_string($cell) && $cell !== '' && str_contains($chars, $cell[0])) {
-                $cell = "'" . $cell;
-            }
-        }
-        return $row;
-    }
-
-    /**
-     * Normalize Stringable cells to strings before the escaping/encoding steps so
-     * they are treated as the text they produce. Numbers are deliberately left
-     * untouched here: a numeric cell must never be mistaken for a formula (a
-     * negative float must not gain a "'" prefix), and the scalar serialization
-     * happens only in {@see serializeTypes()}, after escaping.
-     *
-     * @param array<mixed> $row
-     * @return array<mixed>
-     */
-    private static function stringifyStringables(array $row): array
-    {
-        foreach ($row as &$cell) {
-            if ($cell instanceof \Stringable) {
-                $cell = (string) $cell;
-            }
-        }
-        unset($cell);
-        return $row;
-    }
-
-    /**
-     * Serialize the cell values per the explicit CSV contract just before fputcsv:
-     * Stringable -> its string form, bool -> "1"/"0", float via
-     * {@see Spread::serializeFloat()} (non-finite floats are rejected like the
-     * XLSX/ODS writers), null -> empty.
-     *
-     * In the common case where no escaping/encoding ran, this is the single pass
-     * over the row. When the whole stream is transcoded ($transcodeEncoding is
-     * set), every text cell is additionally validated so invalid UTF-8 or an
-     * unrepresentable character raises an explicit error instead of producing a
-     * silently truncated/cleaned file.
-     *
-     * @param array<mixed>  $row Modified in place to avoid a copy per row.
-     * @param string|null   $transcodeEncoding Active full-stream target encoding, if any.
      * @throws WriteException For non-finite floats, invalid UTF-8 or unrepresentable text.
      */
-    private static function serializeTypes(array &$row, ?string $transcodeEncoding = null): void
+    private static function processRow(array $row, bool $escapeFormulas, $escapeFn, ?string $transcodeEncoding): array
     {
-        if ($transcodeEncoding === null) {
-            // Fast path (no full-stream transcoding): one cheap guard per cell.
-            foreach ($row as &$cell) {
-                if (is_string($cell) || $cell === null || is_int($cell)) {
-                    continue;
-                }
-                if ($cell instanceof \Stringable) {
-                    $cell = (string) $cell;
-                } elseif (is_bool($cell)) {
-                    $cell = $cell ? '1' : '0';
-                } elseif (is_float($cell)) {
-                    if (!is_finite($cell)) {
-                        throw new WriteException('Cannot write a non-finite numeric value');
-                    }
-                    $cell = Spread::serializeFloat($cell);
-                }
+        $chars = self::FORMULA_ESCAPE_CHARS;
+        $colIndex = 0;
+        foreach ($row as $key => $cell) {
+            if ($cell instanceof \Stringable) {
+                $cell = (string) $cell;
+                $row[$key] = $cell;
             }
-            unset($cell);
-            return;
-        }
-
-        // Transcoding mode: every text cell must be valid UTF-8 and representable.
-        foreach ($row as &$cell) {
             if (is_string($cell) || $cell === null || is_int($cell)) {
-                if (is_string($cell)) {
+                if (is_string($cell) && $escapeFormulas) {
+                    if ($escapeFn !== null) {
+                        $cell = $escapeFn($cell, $colIndex);
+                        $row[$key] = $cell;
+                    } elseif ($cell !== '' && str_contains($chars, $cell[0])) {
+                        $cell = "'" . $cell;
+                        $row[$key] = $cell;
+                    }
+                }
+                if (is_string($cell) && $transcodeEncoding !== null) {
                     if (preg_match('//u', $cell) !== 1) {
                         throw new WriteException('Invalid UTF-8 in CSV cell');
                     }
@@ -426,20 +288,20 @@ class CsvWriter implements WriterInterface
                         throw new WriteException('CSV cell cannot be represented in ' . $transcodeEncoding);
                     }
                 }
+                $colIndex++;
                 continue;
             }
-            if ($cell instanceof \Stringable) {
-                $cell = (string) $cell;
-            } elseif (is_bool($cell)) {
-                $cell = $cell ? '1' : '0';
+            if (is_bool($cell)) {
+                $row[$key] = $cell ? '1' : '0';
             } elseif (is_float($cell)) {
                 if (!is_finite($cell)) {
                     throw new WriteException('Cannot write a non-finite numeric value');
                 }
-                $cell = Spread::serializeFloat($cell);
+                $row[$key] = Spread::serializeFloat($cell);
             }
+            $colIndex++;
         }
-        unset($cell);
+        return $row;
     }
 
     /**

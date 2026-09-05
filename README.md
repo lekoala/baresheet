@@ -233,7 +233,7 @@ CSV cells are always written as text. To make export output deterministic across
 
 With `escapeFormulas`, formula protection applies to strings and `Stringable` objects; numeric cells are never mistaken for formulas, so a negative float keeps its leading `-`.
 
-When `outputEncoding` targets a non-UTF-8 encoding without a BOM, the whole CSV stream — including separators and end-of-line bytes — is transcoded (`ext-iconv` is required and bundled with PHP by default). Cells that are not valid UTF-8 or cannot be represented in the target encoding raise a `WriteException` instead of being silently substituted.
+When `outputEncoding` targets a non-UTF-8 encoding, the whole CSV stream — including separators and end-of-line bytes — is transcoded, also when a raw string BOM is provided (`ext-iconv` is required and bundled with PHP by default). Cells that are not valid UTF-8 or cannot be represented in the target encoding raise a `WriteException` instead of being silently substituted.
 
 ## Advanced Usage
 

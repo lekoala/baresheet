@@ -163,4 +163,62 @@ class CsvEncodingTest extends TestCase
         $rows = iterator_to_array($reader->readString("\xEF\xBB\xBFcaf\xC3\xA9\n"));
         self::assertSame("caf\xE9", $rows[0][0]);
     }
+
+    public function testOutputEncodingEmptyStringIsNoOp(): void
+    {
+        // '' must mean "no conversion", like null — not a ValueError from
+        // mb_convert_encoding with an empty target.
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $writer->outputEncoding = '';
+        $output = $writer->writeString([['a', 'b']]);
+        self::assertSame("a,b\r\n", $output);
+    }
+
+    public function testCustomStringBomWithOutputEncodingTranscodesWholeStream(): void
+    {
+        // A raw string BOM must not bypass the full-stream transcoding: the BOM
+        // bytes stay raw but the data (separators and EOL included) is encoded.
+        $writer = new CsvWriter();
+        $writer->bom = "\xFF\xFE";
+        $writer->outputEncoding = 'UTF-16LE';
+        $output = $writer->writeString([['a', 'b']]);
+
+        self::assertStringStartsWith("\xFF\xFE", $output);
+        $payload = substr($output, 2);
+        self::assertTrue(mb_check_encoding($payload, 'UTF-16LE'));
+        self::assertSame('61002c0062000d000a00', bin2hex($payload));
+    }
+
+    public function testStringableUnrepresentableInOutputEncodingThrows(): void
+    {
+        // The text produced by a Stringable cell must go through the same
+        // representability validation as a plain string (no native warning, no
+        // generic "Failed to write line").
+        $cell = new class implements \Stringable {
+            public function __toString(): string
+            {
+                return "a\xE2\x82\xAC";
+            }
+        };
+        $writer = new CsvWriter();
+        $writer->bom = false;
+        $writer->outputEncoding = 'ISO-8859-1';
+
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('cannot be represented in ISO-8859-1');
+        $writer->writeString([[$cell]]);
+    }
+
+    public function testNonUtf8BomPathValidatesCells(): void
+    {
+        // The non-UTF-8 BOM filter must still make every cell pass the
+        // transcoding validation (invalid UTF-8 is caught before the filter).
+        $writer = new CsvWriter();
+        $writer->bom = \LeKoala\Baresheet\Bom::Utf16Le;
+
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('Invalid UTF-8 in CSV cell');
+        $writer->writeString([["a\xC3b"]]);
+    }
 }
