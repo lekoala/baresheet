@@ -24,8 +24,19 @@ abstract class TestCase extends BaseTestCase
     protected function commaDecimalLocale(): ?string
     {
         $original = setlocale(LC_NUMERIC, 0);
+        $locales = [
+            'de-DE',
+            'de_DE.UTF-8',
+            'de_DE',
+            'fr-FR',
+            'fr_FR.UTF-8',
+            'nl-NL',
+            'nl_NL.UTF-8',
+            'es-ES',
+            'it-IT',
+        ];
         try {
-            foreach (['de-DE', 'de_DE.UTF-8', 'de_DE', 'fr-FR', 'fr_FR.UTF-8', 'nl-NL', 'nl_NL.UTF-8', 'es-ES', 'it-IT'] as $loc) {
+            foreach ($locales as $loc) {
                 if (setlocale(LC_NUMERIC, $loc) !== false && (localeconv()['decimal_point'] ?? '.') === ',') {
                     return $loc;
                 }

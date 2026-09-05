@@ -222,7 +222,9 @@ class OdsWriter implements WriterInterface
     {
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $sheetName = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
-        $cellContext = static fn (int $row, int $column): string => "sheet '{$sheetVal}', cell " . Spread::cellAddress($row - 1, $column);
+        $cellContext = static fn(int $row, int $column): string => (
+            "sheet '{$sheetVal}', cell " . Spread::cellAddress($row - 1, $column)
+        );
 
         $write(
             '<?xml version="1.0" encoding="UTF-8"?>'
@@ -496,7 +498,9 @@ class OdsWriter implements WriterInterface
         $titleVal = $metaObj?->title;
         $title = $titleVal ? '<dc:title>' . Spread::escapeXml($titleVal, 'metadata title') . '</dc:title>' : '';
         $subjectVal = $metaObj?->subject;
-        $subject = $subjectVal ? '<dc:subject>' . Spread::escapeXml($subjectVal, 'metadata subject') . '</dc:subject>' : '';
+        $subject = $subjectVal
+            ? '<dc:subject>' . Spread::escapeXml($subjectVal, 'metadata subject') . '</dc:subject>'
+            : '';
         $keywordsVal = $metaObj?->keywords;
         $keywords = '';
         if ($keywordsVal !== null && $keywordsVal !== '') {
@@ -510,7 +514,9 @@ class OdsWriter implements WriterInterface
             ? '<dc:description>' . Spread::escapeXml($descriptionVal, 'metadata description') . '</dc:description>'
             : '';
         $languageVal = $metaObj?->language;
-        $language = $languageVal ? '<dc:language>' . Spread::escapeXml($languageVal, 'metadata language') . '</dc:language>' : '';
+        $language = $languageVal
+            ? '<dc:language>' . Spread::escapeXml($languageVal, 'metadata language') . '</dc:language>'
+            : '';
         $date = date('Y-m-d\TH:i:s');
 
         return <<<XML

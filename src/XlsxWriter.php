@@ -400,7 +400,11 @@ class XlsxWriter implements WriterInterface
 
                 if ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
+                    $buffer .= sprintf(
+                        '<c r="%s" t="n" s="4"><v>%s</v></c>',
+                        $cn,
+                        Spread::serializeFloat($excelSerial),
+                    );
                     $vl = 16;
                 } elseif ($value instanceof DurationValue) {
                     $excelSerial = Spread::durationComponentsToSerial(
@@ -410,11 +414,19 @@ class XlsxWriter implements WriterInterface
                         $value->seconds,
                         $value->microsecond,
                     );
-                    $buffer .= sprintf('<c r="%s" t="n" s="4"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
+                    $buffer .= sprintf(
+                        '<c r="%s" t="n" s="4"><v>%s</v></c>',
+                        $cn,
+                        Spread::serializeFloat($excelSerial),
+                    );
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {
                     $excelSerial = Spread::timeToExcel($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="3"><v>%s</v></c>', $cn, Spread::serializeFloat($excelSerial));
+                    $buffer .= sprintf(
+                        '<c r="%s" t="n" s="3"><v>%s</v></c>',
+                        $cn,
+                        Spread::serializeFloat($excelSerial),
+                    );
                     $vl = 8;
                 } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
@@ -468,7 +480,9 @@ class XlsxWriter implements WriterInterface
                         $buffer .= '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
                     } else {
                         $buffer .=
-                            '<c r="' . $cn . '" t="inlineStr"'
+                            '<c r="'
+                            . $cn
+                            . '" t="inlineStr"'
                             . $cellStyle
                             . '><is><t xml:space="preserve">'
                             . $escaped
