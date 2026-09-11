@@ -322,6 +322,7 @@ class XlsxWriter implements WriterInterface
 
         $firstSeen = false;
         $columnKeys = null;
+        $columnKeysMap = null;
         foreach ($data as $row) {
             $isList = array_is_list($row);
             if (!$firstSeen) {
@@ -330,6 +331,7 @@ class XlsxWriter implements WriterInterface
                     // The first associative row defines the columns: its keys become
                     // the header and every following associative row is aligned on them.
                     $columnKeys = array_keys($row);
+                    $columnKeysMap = array_flip($columnKeys);
                     yield $columnKeys;
                 }
             }
@@ -354,7 +356,7 @@ class XlsxWriter implements WriterInterface
             // Unknown keys would be silently dropped by alignment, so they are
             // rejected instead of losing data.
             foreach ($rowByKey as $key => $_rowValue) {
-                if (!in_array($key, $columnKeys, true)) {
+                if (!isset($columnKeysMap[$key])) {
                     $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
                     throw new WriteException(
                         "Row contains column key '{$key}' absent from the header (sheet '{$sheetName}')",
