@@ -69,6 +69,22 @@ class SpreadTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testGetPropertiesCsv(): void
+    {
+        $props = Spread::getProperties(__DIR__ . '/data/auto.csv');
+        self::assertEquals('csv', $props['format']);
+        self::assertEmpty($props['meta']);
+        self::assertEmpty($props['sheets']);
+    }
+
+    public function testGetPropertiesUnknownExtension(): void
+    {
+        $props = Spread::getProperties('file.unknown');
+        self::assertEquals('unknown', $props['format']);
+        self::assertEmpty($props['meta']);
+        self::assertEmpty($props['sheets']);
+    }
+
     public function testGetSheetNamesXlsx(): void
     {
         $tempFile = $this->tempFile('xlsx');
