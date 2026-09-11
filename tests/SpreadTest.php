@@ -739,6 +739,40 @@ class SpreadTest extends TestCase
         self::assertSame('0:00:00.000001', Spread::formatDurationComponents(false, 0, 0, 0, 1));
     }
 
+    public function testTimeToExcel(): void
+    {
+        // Midnight
+        $midnight = new \LeKoala\Baresheet\Value\TimeValue(0, 0, 0, 0);
+        self::assertSame(0.0, Spread::timeToExcel($midnight));
+
+        // Noon (12:00 PM) - half a day
+        $noon = new \LeKoala\Baresheet\Value\TimeValue(12, 0, 0, 0);
+        self::assertSame(0.5, Spread::timeToExcel($noon));
+
+        // 6:00 AM - quarter of a day
+        $sixAm = new \LeKoala\Baresheet\Value\TimeValue(6, 0, 0, 0);
+        self::assertSame(0.25, Spread::timeToExcel($sixAm));
+
+        // 6:00 PM - three quarters of a day
+        $sixPm = new \LeKoala\Baresheet\Value\TimeValue(18, 0, 0, 0);
+        self::assertSame(0.75, Spread::timeToExcel($sixPm));
+
+        // Edge case: End of the day (23:59:59.999999)
+        $endOfDay = new \LeKoala\Baresheet\Value\TimeValue(23, 59, 59, 999_999);
+        $expectedEndOfDay = ((23 * 3600.0) + (59 * 60) + 59 + (999_999 / 1_000_000)) / 86_400;
+        self::assertSame($expectedEndOfDay, Spread::timeToExcel($endOfDay));
+
+        // Specific time: 10:30:45
+        $specificTime = new \LeKoala\Baresheet\Value\TimeValue(10, 30, 45, 0);
+        $expectedSpecific = ((10 * 3600.0) + (30 * 60) + 45) / 86_400;
+        self::assertSame($expectedSpecific, Spread::timeToExcel($specificTime));
+
+        // With microseconds
+        $withMicroseconds = new \LeKoala\Baresheet\Value\TimeValue(0, 0, 1, 500_000); // 1.5 seconds
+        $expectedMicro = 1.5 / 86_400;
+        self::assertSame($expectedMicro, Spread::timeToExcel($withMicroseconds));
+    }
+
     public function testZipGetData(): void
     {
         $tempZip = $this->tempFile('zip');
