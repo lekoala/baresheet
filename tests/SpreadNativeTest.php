@@ -237,7 +237,7 @@ class SpreadNativeTest extends TestCase
     }
 
     #[DataProvider('timeProvider')]
-    public function testExcelTimeToTimeValue(float $fraction, TimeValue $expected): void
+    public function testExcelTimeToTimeValue(float|string $fraction, TimeValue $expected): void
     {
         self::assertEquals($expected, Spread::excelTimeToTimeValue($fraction));
     }
@@ -250,6 +250,8 @@ class SpreadNativeTest extends TestCase
             '23:59:59' => [((23 * 3600) + (59 * 60) + 59) / 86_400, new TimeValue(23, 59, 59)],
             'wrap past a day' => [1.5, new TimeValue(12, 0, 0)],
             'fractional' => [0.604_166_666_666_666_6, new TimeValue(14, 30, 0)],
+            'string input' => ['0.5', new TimeValue(12, 0, 0)],
+            'string input negative' => ['-0.25', new TimeValue(18, 0, 0)],
         ];
     }
 
