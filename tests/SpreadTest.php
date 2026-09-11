@@ -187,17 +187,17 @@ class SpreadTest extends TestCase
         self::assertSame('12:00:00', Spread::excelTimeToString('0.5'));
 
         // Values > 1 should ignore the whole number days
-        self::assertSame('12:00:00', Spread::excelTimeToString(45214.5));
+        self::assertSame('12:00:00', Spread::excelTimeToString(45_214.5));
 
         // 0.25 is 6:00 AM
         self::assertSame('06:00:00', Spread::excelTimeToString(0.25));
 
         // Specific time (12:30:45)
-        $fraction = (12 * 3600 + 30 * 60 + 45) / 86400;
+        $fraction = ((12 * 3600) + (30 * 60) + 45) / 86_400;
         self::assertSame('12:30:45', Spread::excelTimeToString($fraction));
 
         // Fraction with microseconds
-        self::assertSame('12:00:00.000864', Spread::excelTimeToString(0.50000001));
+        self::assertSame('12:00:00.000864', Spread::excelTimeToString(0.500_000_01));
     }
 
     public function testDurationComponentsToSerial(): void
