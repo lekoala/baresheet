@@ -176,6 +176,30 @@ class SpreadTest extends TestCase
         self::assertEquals(45_292.25, Spread::dateToExcel($dtQuarter));
     }
 
+    public function testExcelTimeToString(): void
+    {
+        // 0 fraction is midnight
+        self::assertSame('00:00:00', Spread::excelTimeToString(0.0));
+        self::assertSame('00:00:00', Spread::excelTimeToString('0.0'));
+
+        // 0.5 is 12:00 PM
+        self::assertSame('12:00:00', Spread::excelTimeToString(0.5));
+        self::assertSame('12:00:00', Spread::excelTimeToString('0.5'));
+
+        // Values > 1 should ignore the whole number days
+        self::assertSame('12:00:00', Spread::excelTimeToString(45214.5));
+
+        // 0.25 is 6:00 AM
+        self::assertSame('06:00:00', Spread::excelTimeToString(0.25));
+
+        // Specific time (12:30:45)
+        $fraction = (12 * 3600 + 30 * 60 + 45) / 86400;
+        self::assertSame('12:30:45', Spread::excelTimeToString($fraction));
+
+        // Fraction with microseconds
+        self::assertSame('12:00:00.000864', Spread::excelTimeToString(0.50000001));
+    }
+
     public function testDurationComponentsToSerial(): void
     {
         // 0 duration
