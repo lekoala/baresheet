@@ -98,6 +98,31 @@ class Spread
         return CsvSupport::getInputStream($filename);
     }
 
+    /**
+     * Resolve a filename for use inside a zip:// stream URI.
+     *
+     * '#' is the wrapper's archive/entry separator, so a path containing it
+     * cannot be addressed directly: the file is copied to a safe temporary
+     * name and that name is returned instead. Callers must delete the second
+     * return value once streaming is done.
+     *
+     * @return array{0: string, 1: ?string} [streamable filename, temp copy to clean up]
+     * @throws InvalidDocumentException
+     */
+    public static function zipStreamableFilename(string $filename): array
+    {
+        if (!str_contains($filename, '#')) {
+            return [$filename, null];
+        }
+
+        $tempFilename = self::getTempFilename();
+        if (!@copy($filename, $tempFilename)) {
+            unlink($tempFilename);
+            throw new InvalidDocumentException("Failed to stage '{$filename}' for streaming");
+        }
+        return [$tempFilename, $tempFilename];
+    }
+
     public static function ensureExtension(string $filename, string $ext): string
     {
         return CsvSupport::ensureExtension($filename, $ext);
@@ -583,6 +608,7 @@ class Spread
      */
     public static function getProperties(string $filename): array
     {
+        self::isSafePath($filename);
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
         $arr = [
@@ -685,6 +711,7 @@ class Spread
      */
     public static function getSheetNames(string $filename): array
     {
+        self::isSafePath($filename);
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
         $zip = new ZipArchive();

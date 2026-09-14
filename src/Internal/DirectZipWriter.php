@@ -114,7 +114,12 @@ final class DirectZipWriter
 
         $this->output = $output;
         $position = ftell($output);
-        $this->position = $position === false ? 0 : $position;
+        if ($position === false) {
+            // Without a reliable position, entry offsets in the central
+            // directory would be wrong and the archive silently corrupt.
+            throw new WriteException('ZIP output stream does not report its position (ftell failed)');
+        }
+        $this->position = $position;
     }
 
     public static function create(string $filename, int $compressionLevel = 6): self

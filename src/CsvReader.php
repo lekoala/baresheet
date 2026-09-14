@@ -125,6 +125,10 @@ class CsvReader implements ReaderInterface
 
         $sample = '';
         $inputBOM = null;
+        // Read filter appended below for non-UTF-8 BOMs. Tracked here so it is
+        // detached in the finally: the stream may belong to the caller
+        // (readStream) and must not keep the transcoding filter afterwards.
+        $readFilter = null;
 
         if ($needsSample) {
             // Auto-detect separator from first ~4KB before consuming the stream
@@ -151,8 +155,12 @@ class CsvReader implements ReaderInterface
                 }
 
                 $encoding = $inputBOM->encoding();
-                $filter = @stream_filter_append($stream, 'convert.iconv.' . $encoding . '/UTF-8', STREAM_FILTER_READ);
-                if (!$filter) {
+                $readFilter = @stream_filter_append(
+                    $stream,
+                    'convert.iconv.' . $encoding . '/UTF-8',
+                    STREAM_FILTER_READ,
+                );
+                if (!$readFilter) {
                     throw new InvalidDocumentException(
                         "Failed to append iconv filter for encoding {$encoding}. Ensure iconv extension is enabled.",
                     );
@@ -236,55 +244,134 @@ class CsvReader implements ReaderInterface
 
         $headerOffsetCount = 0;
 
-        while (
-            !feof($stream)
-            && ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
-        ) {
-            // fgetcsv returns [null] for blank lines.
-            if ($this->skipEmptyLines && $line === [null]) {
-                continue;
-            }
+        try {
+            while (
+                !feof($stream)
+                && ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
+            ) {
+                // fgetcsv returns [null] for blank lines.
+                if ($this->skipEmptyLines && $line === [null]) {
+                    continue;
+                }
 
-            if ($doEncode) {
-                // ⚡ Bolt: Fast-path optimization
-                // Iterating by reference avoids the overhead of calling a closure for every element,
-                // resulting in a ~15-20% performance improvement for string encoding over large datasets.
-                foreach ($line as &$v) {
-                    if (is_string($v)) {
-                        $v = mb_convert_encoding($v, (string) $this->outputEncoding, (string) $inputEncoding);
+                if ($doEncode) {
+                    // ⚡ Bolt: Fast-path optimization
+                    // Iterating by reference avoids the overhead of calling a closure for every element,
+                    // resulting in a ~15-20% performance improvement for string encoding over large datasets.
+                    foreach ($line as &$v) {
+                        if (is_string($v)) {
+                            $v = mb_convert_encoding($v, (string) $this->outputEncoding, (string) $inputEncoding);
+                        }
+                    }
+                    unset($v);
+                }
+
+                // Skip rows before the header block (explicit int offset)
+                if (
+                    !$autoScanning
+                    && $this->headerOffset !== null
+                    && $this->headerOffset !== 'auto'
+                    && $headerOffsetCount < $this->headerOffset
+                ) {
+                    $headerOffsetCount++;
+                    continue;
+                }
+
+                $rowWidth = count($line);
+
+                // Auto-detection: slide window until requiredColumns match
+                if ($autoScanning) {
+                    $autoWindow[] = $line;
+                    if (count($autoWindow) > $this->headerRows) {
+                        array_shift($autoWindow);
+                    }
+                    if (count($autoWindow) >= $this->headerRows) {
+                        try {
+                            /** @var array<int, array<int, ?string>> $autoWindow */
+                            $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
+                            $candidate->checkRequiredColumns($this->requiredColumns);
+                            // Window rows ARE the header — build schema from them
+                            $schema = $candidate;
+                            $autoScanning = false;
+                            // Apply columns and aliases
+                            if (!empty($this->columns)) {
+                                $selectionSchema = $schema->select($this->columns);
+                            }
+                            if (!empty($this->aliases)) {
+                                $schema = $schema->rename($this->aliases);
+                                if ($selectionSchema !== null) {
+                                    $selectionSchema = $selectionSchema->rename($this->aliases);
+                                }
+                            }
+                            $expectedCols = $schema->columnCount();
+                        } catch (InvalidDocumentException|MissingColumnException) {
+                            // Not matched — keep scanning
+                        }
+                    }
+                    continue;
+                }
+
+                // Top-level strict: only for non-assoc or after header is resolved.
+                // During header collection, rows may legitimately differ in width.
+                if ($this->strict && !($this->assoc && $schema === null)) {
+                    if ($expectedCols === null) {
+                        $expectedCols = $rowWidth;
+                    } elseif ($rowWidth !== $expectedCols) {
+                        $rowIdx = $count + 1;
+                        throw new InvalidRowException(
+                            "Row {$rowIdx} has {$rowWidth} columns, expected {$expectedCols}. Potential malformed data or unclosed quote.",
+                            row: $rowIdx,
+                        );
                     }
                 }
-                unset($v);
-            }
 
-            // Skip rows before the header block (explicit int offset)
-            if (
-                !$autoScanning
-                && $this->headerOffset !== null
-                && $this->headerOffset !== 'auto'
-                && $headerOffsetCount < $this->headerOffset
-            ) {
-                $headerOffsetCount++;
-                continue;
-            }
-
-            $rowWidth = count($line);
-
-            // Auto-detection: slide window until requiredColumns match
-            if ($autoScanning) {
-                $autoWindow[] = $line;
-                if (count($autoWindow) > $this->headerRows) {
-                    array_shift($autoWindow);
-                }
-                if (count($autoWindow) >= $this->headerRows) {
-                    try {
-                        /** @var array<int, array<int, ?string>> $autoWindow */
-                        $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
-                        $candidate->checkRequiredColumns($this->requiredColumns);
-                        // Window rows ARE the header — build schema from them
-                        $schema = $candidate;
-                        $autoScanning = false;
-                        // Apply columns and aliases
+                if ($this->assoc) {
+                    // No headers yet, use first N lines as headers
+                    if ($schema === null) {
+                        if ($this->headerRows === 1) {
+                            $headerNames = array_map('strval', $line);
+                            $schema = HeaderSchema::fromFlatHeaders($headerNames, $this->headerNormalizer);
+                        } else {
+                            $headerRowsBuffer = [$line];
+                            $skippedForHeader = $headerRowsBuffer;
+                            // Collect remaining header rows
+                            while (
+                                count($headerRowsBuffer) < $this->headerRows
+                                && ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape))
+                                    !== false
+                            ) {
+                                if ($this->skipEmptyLines && $line === [null]) {
+                                    $skippedForHeader[] = $line;
+                                    continue;
+                                }
+                                if ($doEncode) {
+                                    foreach ($line as &$v) {
+                                        if (is_string($v)) {
+                                            $v = mb_convert_encoding(
+                                                $v,
+                                                (string) $this->outputEncoding,
+                                                (string) $inputEncoding,
+                                            );
+                                        }
+                                    }
+                                    unset($v);
+                                }
+                                $headerRowsBuffer[] = $line;
+                            }
+                            if (count($headerRowsBuffer) < $this->headerRows) {
+                                throw new InvalidDocumentException(
+                                    'Not enough rows for header: expected ' . $this->headerRows . ' rows but found '
+                                        . count($headerRowsBuffer),
+                                );
+                            }
+                            /** @var array<int, array<int, ?string>> $headerRowsBuffer */
+                            $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
+                        }
+                        $expectedCols = $schema->columnCount();
+                        // requiredColumns → columns → aliases
+                        if (!empty($this->requiredColumns)) {
+                            $schema->checkRequiredColumns($this->requiredColumns);
+                        }
                         if (!empty($this->columns)) {
                             $selectionSchema = $schema->select($this->columns);
                         }
@@ -294,126 +381,54 @@ class CsvReader implements ReaderInterface
                                 $selectionSchema = $selectionSchema->rename($this->aliases);
                             }
                         }
-                        $expectedCols = $schema->columnCount();
-                    } catch (InvalidDocumentException|MissingColumnException) {
-                        // Not matched — keep scanning
+                        continue;
                     }
-                }
-                continue;
-            }
-
-            // Top-level strict: only for non-assoc or after header is resolved.
-            // During header collection, rows may legitimately differ in width.
-            if ($this->strict && !($this->assoc && $schema === null)) {
-                if ($expectedCols === null) {
-                    $expectedCols = $rowWidth;
-                } elseif ($rowWidth !== $expectedCols) {
-                    $rowIdx = $count + 1;
-                    throw new InvalidRowException(
-                        "Row {$rowIdx} has {$rowWidth} columns, expected {$expectedCols}. Potential malformed data or unclosed quote.",
-                        row: $rowIdx,
-                    );
-                }
-            }
-
-            if ($this->assoc) {
-                // No headers yet, use first N lines as headers
-                if ($schema === null) {
-                    if ($this->headerRows === 1) {
-                        $headerNames = array_map('strval', $line);
-                        $schema = HeaderSchema::fromFlatHeaders($headerNames, $this->headerNormalizer);
-                    } else {
-                        $headerRowsBuffer = [$line];
-                        $skippedForHeader = $headerRowsBuffer;
-                        // Collect remaining header rows
-                        while (
-                            count($headerRowsBuffer) < $this->headerRows
-                            && ($line = fgetcsv($stream, null, $separator, $this->enclosure, $this->escape)) !== false
-                        ) {
-                            if ($this->skipEmptyLines && $line === [null]) {
-                                $skippedForHeader[] = $line;
-                                continue;
-                            }
-                            if ($doEncode) {
-                                foreach ($line as &$v) {
-                                    if (is_string($v)) {
-                                        $v = mb_convert_encoding(
-                                            $v,
-                                            (string) $this->outputEncoding,
-                                            (string) $inputEncoding,
-                                        );
-                                    }
-                                }
-                                unset($v);
-                            }
-                            $headerRowsBuffer[] = $line;
-                        }
-                        if (count($headerRowsBuffer) < $this->headerRows) {
-                            throw new InvalidDocumentException(
-                                'Not enough rows for header: expected ' . $this->headerRows . ' rows but found '
-                                    . count($headerRowsBuffer),
+                    $expected = $schema->columnCount();
+                    if ($rowWidth !== $expected) {
+                        if ($this->strict) {
+                            $rowIdx = $count + 1;
+                            throw new InvalidRowException(
+                                "Row {$rowIdx} has {$rowWidth} columns, expected {$expected}",
+                                row: $rowIdx,
                             );
                         }
-                        /** @var array<int, array<int, ?string>> $headerRowsBuffer */
-                        $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
-                    }
-                    $expectedCols = $schema->columnCount();
-                    // requiredColumns → columns → aliases
-                    if (!empty($this->requiredColumns)) {
-                        $schema->checkRequiredColumns($this->requiredColumns);
-                    }
-                    if (!empty($this->columns)) {
-                        $selectionSchema = $schema->select($this->columns);
-                    }
-                    if (!empty($this->aliases)) {
-                        $schema = $schema->rename($this->aliases);
-                        if ($selectionSchema !== null) {
-                            $selectionSchema = $selectionSchema->rename($this->aliases);
+                        // Normalize: pad short rows, truncate long rows
+                        if ($rowWidth < $expected) {
+                            $line = array_pad($line, $expected, null);
+                        } else {
+                            $line = array_slice($line, 0, $expected);
                         }
                     }
+                    // Use selection schema if columns were specified
+                    if ($selectionSchema !== null) {
+                        $line = $selectionSchema->mapRow($line);
+                    } else {
+                        $line = $schema->mapRow($line);
+                    }
+                } elseif ($selectionSchema !== null) {
+                    // Non-assoc mode: pick by index
+                    $selected = [];
+                    foreach ($selectionSchema->indices() as $idx) {
+                        $selected[] = $line[$idx] ?? null;
+                    }
+                    $line = $selected;
+                }
+
+                if ($count < $this->offset) {
+                    $count++;
                     continue;
                 }
-                $expected = $schema->columnCount();
-                if ($rowWidth !== $expected) {
-                    if ($this->strict) {
-                        $rowIdx = $count + 1;
-                        throw new InvalidRowException(
-                            "Row {$rowIdx} has {$rowWidth} columns, expected {$expected}",
-                            row: $rowIdx,
-                        );
-                    }
-                    // Normalize: pad short rows, truncate long rows
-                    if ($rowWidth < $expected) {
-                        $line = array_pad($line, $expected, null);
-                    } else {
-                        $line = array_slice($line, 0, $expected);
-                    }
-                }
-                // Use selection schema if columns were specified
-                if ($selectionSchema !== null) {
-                    $line = $selectionSchema->mapRow($line);
-                } else {
-                    $line = $schema->mapRow($line);
-                }
-            } elseif ($selectionSchema !== null) {
-                // Non-assoc mode: pick by index
-                $selected = [];
-                foreach ($selectionSchema->indices() as $idx) {
-                    $selected[] = $line[$idx] ?? null;
-                }
-                $line = $selected;
-            }
 
-            if ($count < $this->offset) {
+                yield $line;
                 $count++;
-                continue;
+                $yieldCount++;
+                if ($this->limit !== null && $yieldCount >= $this->limit) {
+                    return;
+                }
             }
-
-            yield $line;
-            $count++;
-            $yieldCount++;
-            if ($this->limit !== null && $yieldCount >= $this->limit) {
-                return;
+        } finally {
+            if (is_resource($readFilter)) {
+                stream_filter_remove($readFilter);
             }
         }
 

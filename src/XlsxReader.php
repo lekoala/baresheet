@@ -83,79 +83,100 @@ class XlsxReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
+        // Entries are streamed below via zip:// URIs. A '#' in the path is the
+        // wrapper's fragment separator, so such files are staged to a temp copy.
+        [$streamFilename, $streamTemp] = Spread::zipStreamableFilename($filename);
+
         try {
-            // Locate shared strings without loading them: they are streamed below via zip://
-            // after the archive is closed, exactly like the worksheet.
-            $sharedStringsUri = null;
-            $ssIdx = $zip->locateName('xl/sharedStrings.xml');
-            if ($ssIdx !== false) {
-                $ssStat = $zip->statIndex($ssIdx);
-                if ($ssStat !== false && $ssStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
+            try {
+                // Locate shared strings without loading them: they are streamed below via zip://
+                // after the archive is closed, exactly like the worksheet.
+                $sharedStringsUri = null;
+                $ssIdx = $zip->locateName('xl/sharedStrings.xml');
+                if ($ssIdx !== false) {
+                    $ssStat = $zip->statIndex($ssIdx);
+                    if ($ssStat !== false && $ssStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
+                        throw new InvalidDocumentException(
+                            'ZIP entry \'xl/sharedStrings.xml\' exceeds maximum allowed size ('
+                            . self::MAX_STREAMED_ENTRY_SIZE
+                            . ' bytes).',
+                        );
+                    }
+                    $sharedStringsUri = 'zip://' . $streamFilename . '#xl/sharedStrings.xml';
+                }
+
+                // Styles
+                $cellFormats = [];
+                $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
+                if ($stylesData) {
+                    $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
+                }
+
+                // Check 1904 date system
+                $is1904 = false;
+                $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
+                if ($wbData) {
+                    $wbXml = Spread::safeXml($wbData);
+                    if (isset($wbXml->workbookPr)) {
+                        $date1904 = (string) $wbXml->workbookPr['date1904'];
+                        $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
+                    }
+                }
+
+                // Resolve worksheet path from sheet name/index
+                $wsPath = $this->resolveSheetPath($zip);
+                $wsIdx = $zip->locateName($wsPath);
+                if ($wsIdx === false) {
+                    throw new InvalidDocumentException('No data');
+                }
+
+                // The worksheet is streamed directly via zip:// below (not loaded into PHP
+                // memory); the maximum size is configurable via maxWorksheetSize.
+                $wsStat = $zip->statIndex($wsIdx);
+                if (
+                    $this->maxWorksheetSize !== null
+                    && $wsStat !== false
+                    && $wsStat['size'] > $this->maxWorksheetSize
+                ) {
                     throw new InvalidDocumentException(
-                        'ZIP entry \'xl/sharedStrings.xml\' exceeds maximum allowed size ('
-                        . self::MAX_STREAMED_ENTRY_SIZE
-                        . ' bytes).',
+                        "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
                     );
                 }
-                $sharedStringsUri = 'zip://' . $filename . '#xl/sharedStrings.xml';
+            } finally {
+                $zip->close();
             }
 
-            // Styles
-            $cellFormats = [];
-            $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
-            if ($stylesData) {
-                $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
+            $colFormats = [];
+            $isDateCache = [];
+
+            // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
+            // Streamed via XMLReader to avoid holding the full XML string and SimpleXML DOM
+            // in memory simultaneously.
+            $sharedStrings = $sharedStringsUri !== null ? self::readSharedStrings($sharedStringsUri) : [];
+
+            // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
+            // saving a full disk write+read cycle (~40ms on typical hardware).
+            $reader = new \XMLReader();
+            if (!$reader->open('zip://' . $streamFilename . '#' . $wsPath, null, LIBXML_NONET)) {
+                throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
             }
 
-            // Check 1904 date system
-            $is1904 = false;
-            $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
-            if ($wbData) {
-                $wbXml = Spread::safeXml($wbData);
-                if (isset($wbXml->workbookPr)) {
-                    $date1904 = (string) $wbXml->workbookPr['date1904'];
-                    $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
-                }
-            }
-
-            // Resolve worksheet path from sheet name/index
-            $wsPath = $this->resolveSheetPath($zip);
-            $wsIdx = $zip->locateName($wsPath);
-            if ($wsIdx === false) {
-                throw new InvalidDocumentException('No data');
-            }
-
-            // The worksheet is streamed directly via zip:// below (not loaded into PHP
-            // memory); the maximum size is configurable via maxWorksheetSize.
-            $wsStat = $zip->statIndex($wsIdx);
-            if ($this->maxWorksheetSize !== null && $wsStat !== false && $wsStat['size'] > $this->maxWorksheetSize) {
-                throw new InvalidDocumentException(
-                    "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
+            try {
+                yield from $this->parseWorksheet(
+                    $reader,
+                    $sharedStrings,
+                    $cellFormats,
+                    $colFormats,
+                    $isDateCache,
+                    $is1904,
                 );
+            } finally {
+                $reader->close();
             }
         } finally {
-            $zip->close();
-        }
-
-        $colFormats = [];
-        $isDateCache = [];
-
-        // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
-        // Streamed via XMLReader to avoid holding the full XML string and SimpleXML DOM
-        // in memory simultaneously.
-        $sharedStrings = $sharedStringsUri !== null ? self::readSharedStrings($sharedStringsUri) : [];
-
-        // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
-        // saving a full disk write+read cycle (~40ms on typical hardware).
-        $reader = new \XMLReader();
-        if (!$reader->open('zip://' . $filename . '#' . $wsPath, null, LIBXML_NONET)) {
-            throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
-        }
-
-        try {
-            yield from $this->parseWorksheet($reader, $sharedStrings, $cellFormats, $colFormats, $isDateCache, $is1904);
-        } finally {
-            $reader->close();
+            if ($streamTemp !== null && is_file($streamTemp)) {
+                unlink($streamTemp);
+            }
         }
     }
 
@@ -320,6 +341,14 @@ class XlsxReader implements ReaderInterface
                                 }
                                 $colRefCache[$colLetter] = $cellIndex;
                             }
+                        }
+
+                        // A reference behind the current position means an out-of-order
+                        // or duplicate cell, which a sequential reader cannot realign.
+                        if ($cellIndex < $col) {
+                            throw new InvalidDocumentException(
+                                "Out-of-order or duplicate cell reference '{$r}' in row {$rowCount}.",
+                            );
                         }
 
                         // Optimization: Skip parsing unselected cells entirely

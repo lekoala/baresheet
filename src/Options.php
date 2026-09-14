@@ -148,6 +148,19 @@ class Options
         if ($this->limit !== null && $this->limit < 0) {
             throw new \InvalidArgumentException('Limit must be >= 0 or null, got ' . $this->limit);
         }
+        if ($this->headerRows < 1) {
+            throw new \InvalidArgumentException('headerRows must be >= 1, got ' . $this->headerRows);
+        }
+        if (
+            $this->headerOffset !== null
+            && $this->headerOffset !== 'auto'
+            && (!is_int($this->headerOffset) || $this->headerOffset < 0)
+        ) {
+            throw new \InvalidArgumentException(
+                'headerOffset must be null, a non-negative integer, or "auto", got '
+                . var_export($this->headerOffset, true),
+            );
+        }
         if ($this->separator !== 'auto' && strlen($this->separator) !== 1) {
             throw new \InvalidArgumentException(
                 'Separator must be a single character or "auto", got "' . $this->separator . '"',

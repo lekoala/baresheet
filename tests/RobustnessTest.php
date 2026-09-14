@@ -14,6 +14,7 @@ use LeKoala\Baresheet\Meta;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 use ZipArchive;
@@ -709,5 +710,194 @@ class RobustnessTest extends TestCase
         unlink($file);
 
         self::assertSame([['Hello World']], $data);
+    }
+
+    // -- 12. ODS covered-table-cell must occupy its column positions --
+
+    public function testOdsCoveredTableCellKeepsColumnAlignment(): void
+    {
+        // A merged region emits covered-table-cell placeholders (possibly
+        // repeated); skipping them used to shift every later cell left.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell>'
+            . '<table:covered-table-cell table:number-columns-repeated="2"/>'
+            . '<table:table-cell office:value-type="string"><text:p>c</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $rows = iterator_to_array((new OdsReader())->readFile($file));
+            self::assertSame([['a', null, null, 'c']], $rows);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testOdsCoveredTableCellContentIsIgnored(): void
+    {
+        // Per the ODF spec, content inside a covered cell is ignored.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell>'
+            . '<table:covered-table-cell><text:p>phantom</text:p></table:covered-table-cell>'
+            . '<table:table-cell office:value-type="string"><text:p>c</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $rows = iterator_to_array((new OdsReader())->readFile($file));
+            self::assertSame([['a', null, 'c']], $rows);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    // -- 13. A large run of empty cells must not swallow trailing cells --
+
+    public function testOdsLargeNullRepeatDoesNotSwallowTrailingCells(): void
+    {
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell table:number-columns-repeated="200"/>'
+            . '<table:table-cell office:value-type="string"><text:p>tail</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $rows = iterator_to_array((new OdsReader())->readFile($file));
+            self::assertCount(1, $rows);
+            self::assertCount(201, $rows[0]);
+            self::assertSame('tail', $rows[0][200]);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    // -- 14. Malformed ODS durations keep the raw value, like dates do --
+
+    public function testOdsMalformedDurationFallsBackToRawValue(): void
+    {
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell office:value-type="time" office:time-value="NOT_A_DURATION">'
+            . '<text:p>NOT_A_DURATION</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $reader = new OdsReader();
+            $reader->stringifyValues = false;
+            $rows = iterator_to_array($reader->readFile($file));
+            self::assertSame('NOT_A_DURATION', $rows[0][0]);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    // -- 15. Out-of-order XLSX cell references are invalid, not realigned --
+
+    public function testXlsxOutOfOrderCellReferenceThrows(): void
+    {
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="B1"><v>2</v></c><c r="A1"><v>1</v></c></row>'
+            . '</sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $reader = new XlsxReader();
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('Out-of-order or duplicate cell reference');
+
+        try {
+            iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    // -- 16. '#' in the filename falls back to a staged temp copy --
+
+    public function testXlsxReadFileWithHashInFilename(): void
+    {
+        $file = $this->tempFile('xlsx');
+        $writer = new XlsxWriter();
+        $writer->sharedStrings = true;
+        $writer->writeFile([['a', 'b'], ['1', '2']], $file);
+
+        $hashFile = sys_get_temp_dir() . '/baresheet_#' . bin2hex(random_bytes(4)) . '.xlsx';
+        try {
+            self::assertTrue(copy($file, $hashFile));
+            $rows = iterator_to_array((new XlsxReader())->readFile($hashFile));
+            self::assertSame([['a', 'b'], ['1', '2']], $rows);
+        } finally {
+            @unlink($file);
+            @unlink($hashFile);
+        }
+    }
+
+    public function testOdsReadFileWithHashInFilename(): void
+    {
+        $file = $this->tempFile('ods');
+        (new OdsWriter())->writeFile([['a', 'b'], ['1', '2']], $file);
+
+        $hashFile = sys_get_temp_dir() . '/baresheet_#' . bin2hex(random_bytes(4)) . '.ods';
+        try {
+            self::assertTrue(copy($file, $hashFile));
+            $rows = iterator_to_array((new OdsReader())->readFile($hashFile));
+            self::assertSame([['a', 'b'], ['1', '2']], $rows);
+        } finally {
+            @unlink($file);
+            @unlink($hashFile);
+        }
+    }
+
+    // -- 17. The transcoding read filter must not leak onto the caller's stream --
+
+    public function testCsvReaderDetachesTranscodeFilterFromCallerStream(): void
+    {
+        if (!extension_loaded('iconv')) {
+            self::markTestSkipped('iconv extension required');
+        }
+
+        $stream = fopen('php://temp', 'r+');
+        self::assertIsResource($stream);
+        fwrite($stream, "\xFF\xFE" . mb_convert_encoding("a,b\n1,2\n", 'UTF-16LE', 'UTF-8'));
+        rewind($stream);
+
+        $reader = new CsvReader();
+        $rows = iterator_to_array($reader->readStream($stream));
+        self::assertSame([['a', 'b'], ['1', '2']], $rows);
+
+        // With the filter removed, the caller sees the raw UTF-16 bytes again.
+        rewind($stream);
+        $raw = fread($stream, 4);
+        fclose($stream);
+        self::assertSame("\xFF\xFEa\x00", $raw);
+    }
+
+    // -- 18. Property helpers honour the same path policy as the readers --
+
+    public function testGetPropertiesRejectsUnsafePath(): void
+    {
+        $this->expectException(InvalidDocumentException::class);
+        Spread::getProperties('http://example.com/file.xlsx');
+    }
+
+    public function testGetSheetNamesRejectsUnsafePath(): void
+    {
+        $this->expectException(InvalidDocumentException::class);
+        Spread::getSheetNames('phar://archive.phar/file');
+    }
+
+    // -- 19. CSV cells outside the scalar contract fail with WriteException --
+
+    public function testCsvWriterRejectsUnsupportedCellType(): void
+    {
+        $writer = new CsvWriter();
+        $this->expectException(WriteException::class);
+        $this->expectExceptionMessage('Unsupported CSV cell type');
+        $writer->writeString([[new \DateTimeImmutable()]]);
     }
 }

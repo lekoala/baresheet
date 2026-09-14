@@ -303,6 +303,24 @@ class DirectZipWriterTest extends TestCase
         }
     }
 
+    public function testNonTellableOutputRejected(): void
+    {
+        $stream = fopen('php://stdin', 'r');
+        self::assertIsResource($stream);
+        if (ftell($stream) !== false) {
+            fclose($stream);
+            self::markTestSkipped('php://stdin reports a position in this environment');
+        }
+
+        try {
+            $this->expectException(WriteException::class);
+            $this->expectExceptionMessage('ftell');
+            new DirectZipWriter($stream);
+        } finally {
+            fclose($stream);
+        }
+    }
+
     public function testProducerExceptionMarksWriterFailed(): void
     {
         $file = $this->tempFile('zip');

@@ -300,6 +300,11 @@ class CsvWriter implements WriterInterface
                     throw new WriteException('Cannot write a non-finite numeric value');
                 }
                 $row[$key] = CsvSupport::serializeFloat($cell);
+            } else {
+                // Anything else (objects, arrays, resources) is outside the CSV
+                // cell contract; fail explicitly rather than letting fputcsv
+                // raise a TypeError.
+                throw new WriteException('Unsupported CSV cell type: ' . get_debug_type($cell));
             }
             $colIndex++;
         }

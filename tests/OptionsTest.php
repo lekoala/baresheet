@@ -269,6 +269,33 @@ class OptionsTest extends TestCase
         new Options(maxWorksheetSize: 0);
     }
 
+    public function testInvalidHeaderRowsThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('headerRows must be >= 1');
+
+        new Options(headerRows: 0);
+    }
+
+    public function testHeaderOffsetValidation(): void
+    {
+        // null, non-negative integers and 'auto' are accepted.
+        new Options(headerOffset: null);
+        new Options(headerOffset: 0);
+        new Options(headerOffset: 3);
+        new Options(headerOffset: 'auto');
+        self::addToAssertionCount(1);
+
+        foreach ([-1, 'bogus', '2'] as $bad) {
+            try {
+                new Options(headerOffset: $bad);
+                self::fail('headerOffset ' . var_export($bad, true) . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+        }
+    }
+
     public function testValidEdgeCases(): void
     {
         // These should not throw

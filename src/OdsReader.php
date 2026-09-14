@@ -111,89 +111,98 @@ class OdsReader implements ReaderInterface
         }
 
         // Open content.xml as a zip:// stream directly — avoids writing a temp file first,
-        // saving a full disk write+read cycle (~40ms on typical hardware).
-        $reader = new \XMLReader();
-        if (!$reader->open('zip://' . $filename . '#content.xml', null, LIBXML_NONET)) {
-            throw new InvalidDocumentException("Failed to open zip://{$filename}#content.xml");
-        }
+        // saving a full disk write+read cycle (~40ms on typical hardware). A '#' in the
+        // path is the wrapper's fragment separator, so such files are staged to a temp copy.
+        [$streamFilename, $streamTemp] = Spread::zipStreamableFilename($filename);
 
         try {
-            // Map of table-cell style name => whether it renders an elapsed
-            // duration (number:truncate-on-overflow="false"), distinguishing a
-            // time of day from a duration shorter than 24 hours in ODS.
-            $cellToDataStyles = [];
-            $dataStyleDurations = [];
-            if ($stylesXml !== null && $stylesXml !== '') {
-                self::scanTimeStyles($stylesXml, $cellToDataStyles, $dataStyleDurations);
+            $reader = new \XMLReader();
+            if (!$reader->open('zip://' . $streamFilename . '#content.xml', null, LIBXML_NONET)) {
+                throw new InvalidDocumentException("Failed to open zip://{$filename}#content.xml");
             }
-            $timeStyles = self::scanContentAutoStyles($reader, $cellToDataStyles, $dataStyleDurations);
 
-            $tableIndex = 0;
-            $schema = !empty($this->headers)
-                ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
-                : null;
-            $totalColumns = $schema !== null ? $schema->columnCount() : null;
-            $yieldCount = 0;
-            $selectionSchema = null;
+            try {
+                // Map of table-cell style name => whether it renders an elapsed
+                // duration (number:truncate-on-overflow="false"), distinguishing a
+                // time of day from a duration shorter than 24 hours in ODS.
+                $cellToDataStyles = [];
+                $dataStyleDurations = [];
+                if ($stylesXml !== null && $stylesXml !== '') {
+                    self::scanTimeStyles($stylesXml, $cellToDataStyles, $dataStyleDurations);
+                }
+                $timeStyles = self::scanContentAutoStyles($reader, $cellToDataStyles, $dataStyleDurations);
 
-            // Pre-build column map and validate required columns from injected headers
-            if ($schema !== null) {
-                if (!empty($this->requiredColumns)) {
-                    $schema->checkRequiredColumns($this->requiredColumns);
-                }
-                if (!empty($this->columns)) {
-                    $selectionSchema = $schema->select($this->columns);
-                }
-                if (!empty($this->aliases)) {
-                    if ($selectionSchema !== null) {
-                        $selectionSchema = $selectionSchema->rename($this->aliases);
+                $tableIndex = 0;
+                $schema = !empty($this->headers)
+                    ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
+                    : null;
+                $totalColumns = $schema !== null ? $schema->columnCount() : null;
+                $yieldCount = 0;
+                $selectionSchema = null;
+
+                // Pre-build column map and validate required columns from injected headers
+                if ($schema !== null) {
+                    if (!empty($this->requiredColumns)) {
+                        $schema->checkRequiredColumns($this->requiredColumns);
                     }
-                    $schema = $schema->rename($this->aliases);
-                }
-            }
-
-            if ($this->limit === 0) {
-                return;
-            }
-
-            while ($reader->read()) {
-                if ($reader->nodeType !== \XMLReader::ELEMENT) {
-                    continue;
-                }
-                if ($reader->localName !== 'table') {
-                    continue;
-                }
-                if ($reader->namespaceURI !== self::NS_TABLE) {
-                    continue;
+                    if (!empty($this->columns)) {
+                        $selectionSchema = $schema->select($this->columns);
+                    }
+                    if (!empty($this->aliases)) {
+                        if ($selectionSchema !== null) {
+                            $selectionSchema = $selectionSchema->rename($this->aliases);
+                        }
+                        $schema = $schema->rename($this->aliases);
+                    }
                 }
 
-                $name = $reader->getAttributeNs('name', self::NS_TABLE);
-                if (!$this->isTargetSheet($tableIndex, $name)) {
-                    $tableIndex++;
-                    continue;
+                if ($this->limit === 0) {
+                    return;
                 }
 
-                if ($reader->isEmptyElement) {
-                    continue;
+                while ($reader->read()) {
+                    if ($reader->nodeType !== \XMLReader::ELEMENT) {
+                        continue;
+                    }
+                    if ($reader->localName !== 'table') {
+                        continue;
+                    }
+                    if ($reader->namespaceURI !== self::NS_TABLE) {
+                        continue;
+                    }
+
+                    $name = $reader->getAttributeNs('name', self::NS_TABLE);
+                    if (!$this->isTargetSheet($tableIndex, $name)) {
+                        $tableIndex++;
+                        continue;
+                    }
+
+                    if ($reader->isEmptyElement) {
+                        continue;
+                    }
+
+                    yield from $this->parseTable(
+                        $reader,
+                        $schema,
+                        $totalColumns,
+                        $yieldCount,
+                        $selectionSchema,
+                        $timeStyles,
+                    );
+
+                    return;
                 }
 
-                yield from $this->parseTable(
-                    $reader,
-                    $schema,
-                    $totalColumns,
-                    $yieldCount,
-                    $selectionSchema,
-                    $timeStyles,
-                );
-
-                return;
-            }
-
-            if ($this->sheet !== null) {
-                throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
+                if ($this->sheet !== null) {
+                    throw new SheetNotFoundException("Sheet '{$this->sheet}' not found");
+                }
+            } finally {
+                $reader->close();
             }
         } finally {
-            $reader->close();
+            if ($streamTemp !== null && is_file($streamTemp)) {
+                unlink($streamTemp);
+            }
         }
     }
 
@@ -380,8 +389,9 @@ class OdsReader implements ReaderInterface
                 while ($moved && $reader->depth > $rowDepth) {
                     if (
                         $reader->nodeType === \XMLReader::ELEMENT
-                        && $reader->localName === 'table-cell'
                         && $reader->namespaceURI === self::NS_TABLE
+                        && ($reader->localName === 'table-cell'
+                        || $reader->localName === 'covered-table-cell')
                     ) {
                         $colRepeat = (int) ($reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1');
                         $colIndex = count($rowTemplate);
@@ -389,6 +399,18 @@ class OdsReader implements ReaderInterface
                             throw new InvalidDocumentException(
                                 'Row exceeds the maximum number of columns (' . self::MAX_COLUMNS . ').',
                             );
+                        }
+
+                        // A covered cell is a placeholder for the merged region of a
+                        // previous cell: it occupies column positions but carries no
+                        // value (any content it holds is ignored per the ODF spec).
+                        // Emitting nulls keeps the logical column alignment intact.
+                        if ($reader->localName === 'covered-table-cell') {
+                            for ($i = 0; $i < $colRepeat; $i++) {
+                                $rowTemplate[] = null;
+                            }
+                            $moved = $reader->read();
+                            continue;
                         }
 
                         // Optimization: Skip parsing unselected cells
@@ -460,10 +482,6 @@ class OdsReader implements ReaderInterface
                             $typed = $this->legacyCellValue($value, $valueType, $textP);
                         } else {
                             $typed = $this->decodeTypedCell($value, $valueType, $textP, $timeStyles, $cellStyleName);
-                        }
-
-                        if ($typed === null && $colRepeat > 100) {
-                            break;
                         }
 
                         for ($ci = 0; $ci < $colRepeat; $ci++) {
@@ -693,7 +711,14 @@ class OdsReader implements ReaderInterface
             if ($value === null || $value === '') {
                 return null;
             }
-            $duration = Spread::parseIsoDuration($value);
+            // Malformed durations keep the raw lexical value, mirroring how
+            // invalid dates fall back via parseIsoDate() above rather than
+            // aborting the read of an external document.
+            try {
+                $duration = Spread::parseIsoDuration($value);
+            } catch (\InvalidArgumentException) {
+                return $value;
+            }
             // A duration style marks an elapsed duration regardless of magnitude;
             // a negative value can never be a time of day. Otherwise a time-style
             // (or an unknown style) only carries a duration past a single day.
