@@ -367,10 +367,9 @@ class CsvWriter implements WriterInterface
 
     private static function isUtf8Encoding(string $encoding): bool
     {
-        return in_array(
-            strtoupper(str_replace(['_', '-'], '', $encoding)),
-            ['UTF8'],
-            true,
-        );
+        return match (strtolower($encoding)) {
+            'utf-8', 'utf8', 'utf_8' => true,
+            default => false,
+        };
     }
 }
