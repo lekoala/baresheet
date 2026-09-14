@@ -2,11 +2,10 @@
 
 declare(strict_types=1);
 
-namespace LeKoala\Baresheet\Tests\Internal;
+namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Internal\CsvSupport;
-use LeKoala\Baresheet\Tests\TestCase;
 
 class CsvSupportTest extends TestCase
 {
