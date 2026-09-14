@@ -57,7 +57,7 @@ class CsvSupportTest extends TestCase
         $this->assertEquals('stream', get_resource_type($stream));
 
         fwrite($stream, 'default_output');
-        $output = (string)ob_get_clean();
+        $output = (string) ob_get_clean();
 
         // Ensure that something is printed to the output buffer
         // Note: php://output sends to the current output buffer
