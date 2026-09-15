@@ -753,6 +753,70 @@ class RobustnessTest extends TestCase
         }
     }
 
+    public function testOdsCoveredTableCellAtRowStart(): void
+    {
+        // A merge anchored on the first column emits covered cells before any
+        // regular cell in the row.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:covered-table-cell/>'
+            . '<table:covered-table-cell/>'
+            . '<table:table-cell office:value-type="string"><text:p>c</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $rows = iterator_to_array((new OdsReader())->readFile($file));
+            self::assertSame([[null, null, 'c']], $rows);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testOdsCoveredTableCellRepeatBeyondMaxColumnsRejected(): void
+    {
+        // Covered cells occupy real column positions: a huge repeat hits the
+        // same MAX_COLUMNS guard as regular cells.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:covered-table-cell table:number-columns-repeated="20000"/>'
+            . '</table:table-row>',
+        ));
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('maximum number of columns');
+
+        try {
+            iterator_to_array((new OdsReader())->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testOdsCoveredTableCellUnderColumnSelection(): void
+    {
+        // Covered placeholders keep positional alignment, so `columns` still
+        // selects the right cell after a merged region.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell>'
+            . '<table:covered-table-cell table:number-columns-repeated="2"/>'
+            . '<table:table-cell office:value-type="string"><text:p>d</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $reader = new OdsReader(new Options(
+                headers: ['a', 'b', 'c', 'd'],
+                columns: ['d'],
+            ));
+            $rows = iterator_to_array($reader->readFile($file));
+            self::assertSame([['d']], $rows);
+        } finally {
+            unlink($file);
+        }
+    }
+
     // -- 13. A large run of empty cells must not swallow trailing cells --
 
     public function testOdsLargeNullRepeatDoesNotSwallowTrailingCells(): void
@@ -1033,6 +1097,32 @@ class RobustnessTest extends TestCase
                     unlink($f);
                 }
             }
+        }
+    }
+
+    public function testOdsHeaderOffsetCountsRepeatedRows(): void
+    {
+        // A non-empty row repeated N times emits N logical records, so it
+        // consumes N of the offset — the metadata row below covers both
+        // skipped records on its own.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row table:number-rows-repeated="2">'
+            . '<table:table-cell office:value-type="string"><text:p>meta</text:p></table:table-cell>'
+            . '</table:table-row>'
+            . '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>h1</text:p></table:table-cell>'
+            . '</table:table-row>'
+            . '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>v1</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $reader = new OdsReader(new Options(assoc: true, headerOffset: 2));
+            $rows = iterator_to_array($reader->readFile($file));
+            self::assertSame([['h1' => 'v1']], $rows);
+        } finally {
+            unlink($file);
         }
     }
 }
