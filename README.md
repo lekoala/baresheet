@@ -151,6 +151,10 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `boldHeaders`         | bool                                       | `false`     | Write (XLSX, ODS)         |
 | `sharedStrings`       | bool                                       | `false`     | Write (XLSX)              |
 | `autoWidth`           | bool                                       | `false`     | Write (XLSX)              |
+| `columnWidths`        | array                                      | `[]`        | Write (XLSX)              |
+| `minColumnWidth`      | ?float                                     | `null`      | Write (XLSX)              |
+| `maxColumnWidth`      | ?float                                     | `null`      | Write (XLSX)              |
+| `printTitleRows`      | ?string                                    | `null`      | Write (XLSX)              |
 | `maxWorksheetSize`    | ?int                                       | `500000000` | Read (XLSX, ODS)          |
 
 ## Exceptions

@@ -1093,4 +1093,95 @@ class XlsxTest extends TestCase
         $dataLarge = iterator_to_array($readerLarge->readFile($fixture));
         self::assertCount(1, $dataLarge);
     }
+
+    private function getSheetXml(string $tempFile, string $entry = 'xl/worksheets/sheet1.xml'): string
+    {
+        $zip = new \ZipArchive();
+        $zip->open($tempFile);
+        $xml = $zip->getFromName($entry);
+        $zip->close();
+        self::assertIsString($xml);
+        return $xml;
+    }
+
+    public function testColumnWidthsEmittedWithoutAutoWidth(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(
+            columnWidths: ['A' => 20, 2 => 30.5],
+        ));
+        $writer->writeFile([['a', 'b', 'c']], $tempFile);
+
+        $sheet = $this->getSheetXml($tempFile);
+        self::assertStringContainsString('<col min="1" max="1" width="20" customWidth="true"/>', $sheet);
+        self::assertStringContainsString('<col min="3" max="3" width="30.5" customWidth="true"/>', $sheet);
+        unlink($tempFile);
+    }
+
+    public function testColumnWidthsOverrideAutoWidthMeasurement(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(
+            autoWidth: true,
+            columnWidths: [0 => 42],
+        ));
+        $writer->writeFile([
+            ['short', str_repeat('x', 50)],
+        ], $tempFile);
+
+        $sheet = $this->getSheetXml($tempFile);
+        // Column A keeps the explicit width instead of the measured one.
+        self::assertStringContainsString('<col min="1" max="1" width="42" customWidth="true"/>', $sheet);
+        // Column B is still measured (50 chars -> 62.0).
+        self::assertStringContainsString('<col min="2" max="2" width="62" customWidth="true"/>', $sheet);
+        unlink($tempFile);
+    }
+
+    public function testAutoWidthHonoursMinAndMaxBounds(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(
+            autoWidth: true,
+            minColumnWidth: 15,
+            maxColumnWidth: 40,
+        ));
+        $writer->writeFile([
+            ['x', str_repeat('y', 100)],
+        ], $tempFile);
+
+        $sheet = $this->getSheetXml($tempFile);
+        // 'x' would measure ~9.2 -> clamped up to the 15 floor.
+        self::assertStringContainsString('<col min="1" max="1" width="15" customWidth="true"/>', $sheet);
+        // 100 chars would measure ~122 -> clamped down to the 40 cap.
+        self::assertStringContainsString('<col min="2" max="2" width="40" customWidth="true"/>', $sheet);
+        unlink($tempFile);
+    }
+
+    public function testPrintTitleRowsEmittedInWorkbook(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(
+            sheet: 'My Report',
+            printTitleRows: '1:2',
+        ));
+        $writer->writeFile([['h'], ['v']], $tempFile);
+
+        $wb = $this->getSheetXml($tempFile, 'xl/workbook.xml');
+        self::assertStringContainsString(
+            '<definedName name="_xlnm.Print_Titles" localSheetId="0">\'My Report\'!$1:$2</definedName>',
+            $wb,
+        );
+        unlink($tempFile);
+    }
+
+    public function testPrintTitleRowsSingleRow(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(printTitleRows: '2'));
+        $writer->writeFile([['h'], ['v']], $tempFile);
+
+        $wb = $this->getSheetXml($tempFile, 'xl/workbook.xml');
+        self::assertStringContainsString("'Sheet1'!\$2:\$2", $wb);
+        unlink($tempFile);
+    }
 }

@@ -139,6 +139,24 @@ class Options
         public bool $sharedStrings = false,
         /** @var bool If true, enables auto column width for XLSX files (faster writing when false). */
         public bool $autoWidth = false,
+        /**
+         * @var array<int|string, int|float> Explicit XLSX column widths, keyed by 0-based
+         *      column index or Excel letter ('A', 'C'…). They override autoWidth for
+         *      those columns and are emitted even when autoWidth is off. XLSX only.
+         */
+        public array $columnWidths = [],
+        /**
+         * @var ?float Lower bound for autoWidth-measured XLSX column widths.
+         *             Replaces the built-in floor of 8 when set. XLSX only.
+         */
+        public ?float $minColumnWidth = null,
+        /** @var ?float Upper bound for autoWidth-measured XLSX column widths. XLSX only. */
+        public ?float $maxColumnWidth = null,
+        /**
+         * @var ?string Rows repeated at the top of each printed page, given as a row
+         *              number or range like '1' or '1:2'. XLSX writer only.
+         */
+        public ?string $printTitleRows = null,
         /** @var ?int Maximum allowed size for the streamed worksheet or content XML file in bytes. */
         public ?int $maxWorksheetSize = 500_000_000,
     ) {
@@ -179,6 +197,46 @@ class Options
             throw new \InvalidArgumentException(
                 'Escape must be a single character or empty, got "' . $this->escape . '"',
             );
+        }
+        if ($this->minColumnWidth !== null && $this->minColumnWidth <= 0) {
+            throw new \InvalidArgumentException(
+                'minColumnWidth must be > 0, got ' . $this->minColumnWidth,
+            );
+        }
+        if ($this->maxColumnWidth !== null && $this->maxColumnWidth <= 0) {
+            throw new \InvalidArgumentException(
+                'maxColumnWidth must be > 0, got ' . $this->maxColumnWidth,
+            );
+        }
+        if (
+            $this->minColumnWidth !== null
+            && $this->maxColumnWidth !== null
+            && $this->minColumnWidth > $this->maxColumnWidth
+        ) {
+            throw new \InvalidArgumentException('minColumnWidth must be <= maxColumnWidth');
+        }
+        if (
+            $this->printTitleRows !== null
+            && (preg_match('/^(\d+)(?::(\d+))?$/', $this->printTitleRows, $m) !== 1
+            || (isset($m[2])
+            && (int) $m[1] > (int) $m[2]))
+        ) {
+            throw new \InvalidArgumentException(
+                'printTitleRows must be a row number or ascending range like "1" or "1:2", got '
+                    . var_export($this->printTitleRows, true),
+            );
+        }
+        foreach ($this->columnWidths as $key => $width) {
+            if (!is_int($key) && preg_match('/^[A-Za-z]+$/', (string) $key) !== 1) {
+                throw new \InvalidArgumentException(
+                    'columnWidths keys must be 0-based column indexes or Excel letters, got ' . var_export($key, true),
+                );
+            }
+            if ($width <= 0) {
+                throw new \InvalidArgumentException(
+                    'columnWidths values must be positive numbers, got ' . var_export($width, true),
+                );
+            }
         }
     }
 

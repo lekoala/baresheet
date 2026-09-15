@@ -196,6 +196,10 @@ class OptionsTest extends TestCase
             public ?string $tempPath = null;
             public bool $sharedStrings = false;
             public bool $autoWidth = false;
+            public array $columnWidths = [];
+            public ?float $minColumnWidth = null;
+            public ?float $maxColumnWidth = null;
+            public ?string $printTitleRows = null;
             public array $requiredColumns = [];
             public array $columns = [];
             public array $aliases = [];
@@ -306,6 +310,60 @@ class OptionsTest extends TestCase
         $opts = new Options(offset: 100, limit: 0, separator: '|', enclosure: '"', escape: '\\');
         self::assertSame(100, $opts->offset);
         self::assertSame(0, $opts->limit);
+    }
+
+    public function testColumnWidthsValidation(): void
+    {
+        foreach ([['x' => -5], ['A' => 0], [0 => -2], ['2A' => 10]] as $bad) {
+            try {
+                new Options(columnWidths: $bad);
+                self::fail('columnWidths ' . var_export($bad, true) . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+        }
+
+        $opts = new Options(columnWidths: ['A' => 20, 3 => 12.5]);
+        self::assertSame(['A' => 20, 3 => 12.5], $opts->columnWidths);
+    }
+
+    public function testColumnWidthBoundsValidation(): void
+    {
+        foreach ([0.0, -1.5] as $bad) {
+            try {
+                new Options(minColumnWidth: $bad);
+                self::fail('minColumnWidth ' . $bad . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+            try {
+                new Options(maxColumnWidth: $bad);
+                self::fail('maxColumnWidth ' . $bad . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+        }
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('minColumnWidth must be <= maxColumnWidth');
+        new Options(minColumnWidth: 50, maxColumnWidth: 10);
+    }
+
+    public function testPrintTitleRowsValidation(): void
+    {
+        foreach (['x', '1:', ':3', 'a:b', '3:1', ''] as $bad) {
+            try {
+                new Options(printTitleRows: $bad);
+                self::fail('printTitleRows ' . var_export($bad, true) . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+        }
+
+        $opts = new Options(printTitleRows: '1:2');
+        self::assertSame('1:2', $opts->printTitleRows);
+        $opts = new Options(printTitleRows: '2');
+        self::assertSame('2', $opts->printTitleRows);
     }
 
     public function testApplyToMockObjectSkippingMissingProperties(): void

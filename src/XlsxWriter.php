@@ -39,6 +39,18 @@ class XlsxWriter implements WriterInterface
     public bool $stream = true;
     public bool $sharedStrings = false;
     public bool $autoWidth = false;
+    /**
+     * @var array<int|string, int|float> Explicit column widths keyed by 0-based column
+     *      index or Excel letter ('A', 'C'…). Overrides autoWidth for those columns
+     *      and is emitted even when autoWidth is off.
+     */
+    public array $columnWidths = [];
+    /** @var ?float Lower bound applied to autoWidth-measured column widths (replaces the built-in 8). */
+    public ?float $minColumnWidth = null;
+    /** @var ?float Upper bound applied to autoWidth-measured column widths. */
+    public ?float $maxColumnWidth = null;
+    /** @var ?string Rows repeated at the top of each printed page, e.g. '1' or '1:2'. */
+    public ?string $printTitleRows = null;
     public ?string $tempPath = null;
     /**
      * @var string[]
@@ -278,7 +290,9 @@ class XlsxWriter implements WriterInterface
         array &$sharedStringKeys,
     ): void {
         if (!$this->autoWidth) {
-            $write($this->buildWorksheetPrefix(false, []) . '<sheetData>');
+            // Explicit columnWidths alone still emit a <cols> block, without
+            // paying the two-pass measurement.
+            $write($this->buildWorksheetPrefix($this->columnWidths !== [], []) . '<sheetData>');
             $colWidths = [];
             $this->streamRows($data, $write, $sharedStrings, $sharedStringKeys, false, $colWidths);
             $write('</sheetData>' . $this->buildWorksheetSuffix());
@@ -707,15 +721,34 @@ class XlsxWriter implements WriterInterface
      */
     private function genColsXml(array $colWidths): string
     {
-        if (empty($colWidths)) {
+        // Measured lengths are converted then bounded by min/max; explicit
+        // columnWidths override the measurement for their column and are used
+        // verbatim — the caller asked for exactly that width.
+        $widths = [];
+        foreach ($colWidths as $i => $len) {
+            $w = max($this->minColumnWidth ?? 8, round(($len * 1.2) + 2, 2));
+            if ($this->maxColumnWidth !== null) {
+                $w = min($this->maxColumnWidth, $w);
+            }
+            $widths[$i] = $w;
+        }
+        foreach ($this->columnWidths as $key => $width) {
+            if ($width <= 0) {
+                throw new WriteException('Column width must be > 0, got ' . var_export($width, true));
+            }
+            $i = is_int($key) ? $key : Spread::columnIndex((string) $key) - 1;
+            $widths[$i] = (float) $width;
+        }
+
+        if ($widths === []) {
             return '<cols><col collapsed="false" hidden="false" max="1024" min="1" style="0" customWidth="false" width="11.5"/></cols>';
         }
 
+        ksort($widths);
         $xml = '<cols>';
-        foreach ($colWidths as $i => $len) {
+        foreach ($widths as $i => $w) {
             $colNum = $i + 1;
-            $width = max(8, round(($len * 1.2) + 2, 2));
-            $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $width . '" customWidth="true"/>';
+            $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $w . '" customWidth="true"/>';
         }
         $xml .= '</cols>';
         return $xml;
@@ -843,6 +876,27 @@ class XlsxWriter implements WriterInterface
     {
         $sheetVal = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $name = Spread::escapeXmlAttr(Spread::validateSheetName($sheetVal));
+
+        // Print titles: rows repeated at the top of each printed page. In the
+        // formula the sheet name is single-quoted with '' doubling for literal
+        // quotes, exactly as Excel writes it.
+        $definedNames = '';
+        if ($this->printTitleRows !== null) {
+            if (preg_match('/^(\d+)(?::(\d+))?$/', $this->printTitleRows, $m) !== 1) {
+                throw new WriteException(
+                    'printTitleRows must be a row number or range like "1" or "1:2", got '
+                        . var_export($this->printTitleRows, true),
+                );
+            }
+            $from = (int) $m[1];
+            $to = isset($m[2]) ? (int) $m[2] : $from;
+            $range = "'" . str_replace("'", "''", $sheetVal) . "'!\${$from}:\${$to}";
+            $definedNames =
+                '<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'
+                . Spread::escapeXml($range)
+                . '</definedName></definedNames>';
+        }
+
         return <<<XML
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -851,6 +905,7 @@ class XlsxWriter implements WriterInterface
                 <sheets>
                     <sheet name="{$name}" sheetId="1" state="visible" r:id="rId1"/>
                 </sheets>
+                {$definedNames}
             </workbook>
             XML;
     }
