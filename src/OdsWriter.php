@@ -152,18 +152,25 @@ class OdsWriter implements WriterInterface
             throw new WriteException("Directory '{$destinationDir}' is not writable");
         }
 
-        // Build in tempPath first when the destination filesystem is unsuitable
-        // for direct writes, then copy the completed archive into place.
+        // The archive is staged in a temporary file and only moved over the
+        // destination once complete, so a mid-build failure (e.g. the data
+        // generator throwing) preserves any existing file. Without tempPath the
+        // stage sits next to the destination and rename() swaps it in place;
+        // with tempPath it is built on another filesystem then copied, which
+        // keeps heavy I/O off the destination but is not atomic. Either way,
+        // the replacement is a new file: inode and permissions of a previous
+        // destination are not preserved.
         if ($this->tempPath) {
             $baseName = tempnam($this->tempPath, 'ods_direct');
-            if (!$baseName) {
-                throw new WriteException('Failed to create temp file in ' . $this->tempPath);
-            }
         } else {
-            $baseName = $filename;
+            $baseName = tempnam($destinationDir, 'ods_');
+        }
+        if (!$baseName) {
+            throw new WriteException('Failed to create a staging file for ' . $filename);
         }
 
         $stream = false;
+        $renamed = false;
         try {
             $stream = @fopen($baseName, 'w+b');
             if ($stream === false) {
@@ -172,19 +179,28 @@ class OdsWriter implements WriterInterface
 
             $this->buildDirectZip($data, $stream);
 
-            // Copy from temp location to final destination when using tempPath
+            // The stream must be closed before rename(): Windows refuses to
+            // move a file that is still open.
+            fclose($stream);
+            $stream = false;
+
             if ($this->tempPath) {
                 if (!copy($baseName, $filename)) {
                     throw new WriteException("Failed to copy '{$baseName}' to '{$filename}'");
                 }
+            } else {
+                if (!rename($baseName, $filename)) {
+                    throw new WriteException("Failed to move '{$baseName}' to '{$filename}'");
+                }
+                $renamed = true;
             }
         } finally {
             if (is_resource($stream)) {
                 fclose($stream);
             }
-            // Never touch the caller's destination on failure; only clean up the
-            // temporary built by this operation when tempPath is in use.
-            if ($this->tempPath && is_file($baseName)) {
+            // Once renamed, the staging path is gone: only remove it while it
+            // still holds the partial build.
+            if (!$renamed && is_file($baseName)) {
                 unlink($baseName);
             }
         }

@@ -16,7 +16,9 @@ class Options
          */
         public bool $assoc = false,
         /**
-         * @var bool If true, readers enforce strict row width matching the header count.
+         * @var bool Reader option: enforce strict row width matching the header count.
+         *           CsvWriter additionally honours it to reject ragged list rows;
+         *           XLSX/ODS writers ignore it.
          */
         public bool $strict = false,
         /**
@@ -42,10 +44,13 @@ class Options
         public int $headerRows = 1,
         /**
          * @var int|string|null Number of logical records to skip before the header block starts.
+         *                    A logical record is a row the reader would otherwise emit:
+         *                    rows dropped by skipEmptyLines never count, and an ODS
+         *                    row repeated N times counts N — identically across
+         *                    CSV, XLSX and ODS readers.
          *                    null  = BC behaviour (no header offset).
          *                    int   = records to skip before header (e.g. 2 = skip 2 rows, header starts on 3rd).
          *                    'auto' = automatically detect header position (requires requiredColumns).
-         *                    This applies to CSV/XLSX/ODS readers.
          */
         public int|string|null $headerOffset = null,
         /**
@@ -154,11 +159,12 @@ class Options
         if (
             $this->headerOffset !== null
             && $this->headerOffset !== 'auto'
-            && (!is_int($this->headerOffset) || $this->headerOffset < 0)
+            && (!is_int($this->headerOffset)
+            || $this->headerOffset < 0)
         ) {
             throw new \InvalidArgumentException(
                 'headerOffset must be null, a non-negative integer, or "auto", got '
-                . var_export($this->headerOffset, true),
+                    . var_export($this->headerOffset, true),
             );
         }
         if ($this->separator !== 'auto' && strlen($this->separator) !== 1) {

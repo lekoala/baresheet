@@ -269,6 +269,7 @@ class XlsxReader implements ReaderInterface
             : null;
         $rowCount = 0;
         $yieldCount = 0;
+        $headerOffsetCount = 0;
         $startRow = $this->assoc ? 1 : 0;
         $totalColumns = $schema !== null ? $schema->columnCount() : null;
         // Seeded from injected headers so a too-short/too-long first data row is
@@ -485,13 +486,16 @@ class XlsxReader implements ReaderInterface
                 continue;
             }
 
-            // Skip rows before the header block (explicit int offset)
+            // Skip rows before the header block (explicit int offset). The
+            // offset counts logical rows the reader would otherwise consider —
+            // i.e. after skipEmptyLines — matching CsvReader and OdsReader.
             if (
                 !$autoScanning
                 && $this->headerOffset !== null
                 && $this->headerOffset !== 'auto'
-                && $rowCount <= $this->headerOffset
+                && $headerOffsetCount < $this->headerOffset
             ) {
+                $headerOffsetCount++;
                 continue;
             }
 

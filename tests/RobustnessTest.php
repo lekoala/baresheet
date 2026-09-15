@@ -900,4 +900,139 @@ class RobustnessTest extends TestCase
         $this->expectExceptionMessage('Unsupported CSV cell type');
         $writer->writeString([[new \DateTimeImmutable()]]);
     }
+
+    // -- 20. writeFile stages then renames: an existing destination survives failure --
+
+    public function testXlsxWriteFilePreservesDestinationOnGeneratorFailure(): void
+    {
+        $dir = sys_get_temp_dir() . '/baresheet_atomic_' . bin2hex(random_bytes(6));
+        mkdir($dir);
+        $dest = $dir . '/report.xlsx';
+        file_put_contents($dest, 'PRE-EXISTING');
+
+        $data = (static function () {
+            yield ['a', 'b'];
+            throw new \RuntimeException('generator blew up');
+        })();
+
+        try {
+            (new XlsxWriter())->writeFile($data, $dest);
+            self::fail('Expected the generator exception to propagate');
+        } catch (\RuntimeException $e) {
+            self::assertSame('generator blew up', $e->getMessage());
+        } finally {
+            self::assertSame('PRE-EXISTING', file_get_contents($dest));
+            // Only the destination remains — no orphaned staging file.
+            $leftovers = array_map('basename', glob($dir . '/*') ?? []);
+            self::assertSame(['report.xlsx'], $leftovers);
+            unlink($dest);
+            rmdir($dir);
+        }
+    }
+
+    public function testOdsWriteFilePreservesDestinationOnGeneratorFailure(): void
+    {
+        $dir = sys_get_temp_dir() . '/baresheet_atomic_' . bin2hex(random_bytes(6));
+        mkdir($dir);
+        $dest = $dir . '/report.ods';
+        file_put_contents($dest, 'PRE-EXISTING');
+
+        $data = (static function () {
+            yield ['a', 'b'];
+            throw new \RuntimeException('generator blew up');
+        })();
+
+        try {
+            (new OdsWriter())->writeFile($data, $dest);
+            self::fail('Expected the generator exception to propagate');
+        } catch (\RuntimeException $e) {
+            self::assertSame('generator blew up', $e->getMessage());
+        } finally {
+            self::assertSame('PRE-EXISTING', file_get_contents($dest));
+            $leftovers = array_map('basename', glob($dir . '/*') ?? []);
+            self::assertSame(['report.ods'], $leftovers);
+            unlink($dest);
+            rmdir($dir);
+        }
+    }
+
+    public function testWriteFileReplacesExistingDestination(): void
+    {
+        $dest = $this->tempFile('xlsx');
+        file_put_contents($dest, 'OLD-CONTENT');
+
+        try {
+            (new XlsxWriter())->writeFile([['h1'], ['v1']], $dest);
+            $reader = new XlsxReader(new Options(assoc: true));
+            self::assertSame([['h1' => 'v1']], iterator_to_array($reader->readFile($dest)));
+        } finally {
+            if (is_file($dest)) {
+                unlink($dest);
+            }
+        }
+    }
+
+    // -- 21. headerOffset counts logical rows identically across formats --
+
+    public function testHeaderOffsetCountsLogicalRowsAcrossFormats(): void
+    {
+        $options = new Options(assoc: true, skipEmptyLines: true, headerOffset: 2);
+        $expected = [['h1' => 'v1', 'h2' => 'v2']];
+
+        // Same logical document in the three formats:
+        //   empty row / metadata A / metadata B / header / data.
+        // headerOffset=2 skips the two metadata rows; the empty row must not
+        // count toward the offset in any format.
+        $csv = $this->tempFile('csv');
+        file_put_contents($csv, "\nmetaA1,metaA2\nmetaB1,metaB2\nh1,h2\nv1,v2\n");
+
+        $cell = static fn(string $ref, string $v): string => (
+            '<c r="' . $ref . '" t="inlineStr"><is><t>' . $v . '</t></is></c>'
+        );
+        $xlsx = $this->writeMinimalXlsx(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"/>'
+            . '<row r="2">'
+            . $cell('A2', 'metaA1')
+            . $cell('B2', 'metaA2')
+            . '</row>'
+            . '<row r="3">'
+            . $cell('A3', 'metaB1')
+            . $cell('B3', 'metaB2')
+            . '</row>'
+            . '<row r="4">'
+            . $cell('A4', 'h1')
+            . $cell('B4', 'h2')
+            . '</row>'
+            . '<row r="5">'
+            . $cell('A5', 'v1')
+            . $cell('B5', 'v2')
+            . '</row>'
+            . '</sheetData></worksheet>',
+        );
+
+        $odsCell = static fn(string $v): string => (
+            '<table:table-cell office:value-type="string"><text:p>' . $v . '</text:p></table:table-cell>'
+        );
+        $odsRow = static fn(string ...$cells): string => (
+            '<table:table-row>' . implode('', array_map($odsCell, $cells)) . '</table:table-row>'
+        );
+        $ods = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row/>' . $odsRow('metaA1', 'metaA2') . $odsRow('metaB1', 'metaB2') . $odsRow('h1', 'h2')
+                . $odsRow('v1', 'v2'),
+        ));
+
+        try {
+            self::assertSame($expected, iterator_to_array((new CsvReader($options))->readFile($csv)));
+            self::assertSame($expected, iterator_to_array((new XlsxReader($options))->readFile($xlsx)));
+            self::assertSame($expected, iterator_to_array((new OdsReader($options))->readFile($ods)));
+        } finally {
+            foreach ([$csv, $xlsx, $ods] as $f) {
+                if (is_file($f)) {
+                    unlink($f);
+                }
+            }
+        }
+    }
 }
