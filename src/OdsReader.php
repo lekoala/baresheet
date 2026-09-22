@@ -89,19 +89,9 @@ class OdsReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
-        $contentTemp = null;
         try {
-            $idx = $zip->locateName('content.xml');
-            if ($idx === false) {
+            if ($zip->locateName('content.xml') === false) {
                 throw new InvalidDocumentException('No content.xml found in ODS file');
-            }
-
-            // Fast-path declared-size check; zipStageEntry() below enforces actual bytes.
-            $stat = $zip->statIndex($idx);
-            if ($this->maxWorksheetSize !== null && $stat !== false && $stat['size'] > $this->maxWorksheetSize) {
-                throw new InvalidDocumentException(
-                    'ZIP entry \'content.xml\' exceeds maximum allowed size (' . $this->maxWorksheetSize . ' bytes).',
-                );
             }
 
             // Data (number) styles live in styles.xml for many external writers.
@@ -114,7 +104,7 @@ class OdsReader implements ReaderInterface
 
         try {
             $reader = new \XMLReader();
-            if (empty($contentTemp) || !$reader->open($contentTemp, null, LIBXML_NONET)) {
+            if (!$reader->open($contentTemp, null, LIBXML_NONET)) {
                 throw new InvalidDocumentException("Failed to open content.xml in '{$filename}'");
             }
 
@@ -197,9 +187,7 @@ class OdsReader implements ReaderInterface
                 $reader->close();
             }
         } finally {
-            if (!empty($contentTemp) && is_file($contentTemp)) {
-                unlink($contentTemp);
-            }
+            unlink($contentTemp);
         }
     }
 

@@ -18,10 +18,11 @@ use ZipArchive;
  */
 class XlsxReader implements ReaderInterface
 {
-    // The shared strings table is streamed via XMLReader below (not loaded in full),
-    // so it gets a permissive sanity guard instead of a tight in-memory cap. This only
-    // protects against absurd/malformed declarations, not against legitimate large files.
-    private const MAX_STREAMED_ENTRY_SIZE = 1_000_000_000;
+    // The shared strings table is workbook-wide and unrelated to the worksheet
+    // size cap, so it keeps its own permissive sanity guard instead of a tight
+    // in-memory cap. This only protects against absurd/malformed declarations,
+    // not against legitimate large files.
+    private const MAX_SHARED_STRINGS_SIZE = 1_000_000_000;
     // Excel's real column limit (XFD), so a bogus cell reference can't force
     // allocation of an absurd number of null placeholder columns.
     private const MAX_COLUMNS = 16_384;
@@ -83,71 +84,54 @@ class XlsxReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
-        $wsTemp = null;
-        $ssTemp = null;
         try {
-            try {
-                // Declared sizes below are a fast-path only: real enforcement
-                // happens in zipStageEntry(), which counts actual bytes.
-                $hasSharedStrings = $zip->locateName('xl/sharedStrings.xml') !== false;
+            $hasSharedStrings = $zip->locateName('xl/sharedStrings.xml') !== false;
 
-                // Styles
-                $cellFormats = [];
-                $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
-                if ($stylesData) {
-                    $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
-                }
-
-                // Check 1904 date system
-                $is1904 = false;
-                $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
-                if ($wbData) {
-                    $wbXml = Spread::safeXml($wbData);
-                    if (isset($wbXml->workbookPr)) {
-                        $date1904 = (string) $wbXml->workbookPr['date1904'];
-                        $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
-                    }
-                }
-
-                // Resolve worksheet path from sheet name/index
-                $wsPath = $this->resolveSheetPath($zip);
-                $wsIdx = $zip->locateName($wsPath);
-                if ($wsIdx === false) {
-                    throw new InvalidDocumentException('No data');
-                }
-
-                // Fast-path declared-size check; zipStageEntry() below enforces actual bytes.
-                $wsStat = $zip->statIndex($wsIdx);
-                if (
-                    $this->maxWorksheetSize !== null
-                    && $wsStat !== false
-                    && $wsStat['size'] > $this->maxWorksheetSize
-                ) {
-                    throw new InvalidDocumentException(
-                        "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
-                    );
-                }
-
-                $wsTemp = Spread::zipStageEntry($zip, $wsPath, $this->maxWorksheetSize);
-                if ($hasSharedStrings) {
-                    // Workbook-wide table with its own independent cap, mirroring
-                    // the pre-staging behavior.
-                    $ssTemp = Spread::zipStageEntry($zip, 'xl/sharedStrings.xml', self::MAX_STREAMED_ENTRY_SIZE);
-                }
-            } finally {
-                $zip->close();
+            // Styles
+            $cellFormats = [];
+            $stylesData = Spread::zipGetData($zip, 'xl/styles.xml');
+            if ($stylesData) {
+                $cellFormats = self::parseCellFormats($stylesData, $cellFormats);
             }
 
+            // Check 1904 date system
+            $is1904 = false;
+            $wbData = Spread::zipGetData($zip, 'xl/workbook.xml');
+            if ($wbData) {
+                $wbXml = Spread::safeXml($wbData);
+                if (isset($wbXml->workbookPr)) {
+                    $date1904 = (string) $wbXml->workbookPr['date1904'];
+                    $is1904 = $date1904 === '1' || strtolower($date1904) === 'true';
+                }
+            }
+
+            // Resolve worksheet path from sheet name/index
+            $wsPath = $this->resolveSheetPath($zip);
+            if ($zip->locateName($wsPath) === false) {
+                throw new InvalidDocumentException('No data');
+            }
+
+            $worksheetTemp = Spread::zipStageEntry($zip, $wsPath, $this->maxWorksheetSize);
+            $sharedStringsTemp = $hasSharedStrings
+                ? Spread::zipStageEntry($zip, 'xl/sharedStrings.xml', self::MAX_SHARED_STRINGS_SIZE)
+                : null;
+        } finally {
+            $zip->close();
+        }
+
+        try {
             $colFormats = [];
             $isDateCache = [];
 
             // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
             // Streamed via XMLReader to avoid holding the full XML string and SimpleXML DOM
             // in memory simultaneously.
-            $sharedStrings = !empty($ssTemp) ? self::readSharedStrings($ssTemp) : [];
+            $sharedStrings = $sharedStringsTemp !== null
+                ? self::readSharedStrings($sharedStringsTemp)
+                : [];
 
             $reader = new \XMLReader();
-            if (empty($wsTemp) || !$reader->open($wsTemp, null, LIBXML_NONET)) {
+            if (!$reader->open($worksheetTemp, null, LIBXML_NONET)) {
                 throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
             }
 
@@ -164,11 +148,9 @@ class XlsxReader implements ReaderInterface
                 $reader->close();
             }
         } finally {
-            if (!empty($wsTemp) && is_file($wsTemp)) {
-                unlink($wsTemp);
-            }
-            if (!empty($ssTemp) && is_file($ssTemp)) {
-                unlink($ssTemp);
+            unlink($worksheetTemp);
+            if ($sharedStringsTemp !== null) {
+                unlink($sharedStringsTemp);
             }
         }
     }
