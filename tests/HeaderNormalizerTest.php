@@ -60,29 +60,6 @@ class HeaderNormalizerTest extends TestCase
         HeaderSchema::fromFlatHeaders(['Name', 'name'], self::normalizeHeader(...));
     }
 
-    public function testDetectHeaderOffsetAppliesNormalizer(): void
-    {
-        $window = [['Title']];
-        $queue = [
-            [' First Name ', 'Email'],
-            ['John',         'john@example.com'],
-        ];
-        $readNext = static function () use (&$queue) {
-            return $queue === [] ? false : array_shift($queue);
-        };
-
-        $offset = HeaderSchema::detectHeaderOffset(
-            ['first name'],
-            1,
-            $window,
-            $readNext,
-            50,
-            self::normalizeHeader(...),
-        );
-
-        self::assertSame(1, $offset);
-    }
-
     // ─── CSV end-to-end ───────────────────────────────────────
 
     public function testCsvNormalizerRunsBeforeSchemaColumnsAliases(): void

@@ -8,11 +8,9 @@ use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
-use Generator;
 use InvalidArgumentException;
 use LeKoala\Baresheet\Exception\BaresheetException;
 use LeKoala\Baresheet\Exception\InvalidDocumentException;
-use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\CsvSupport;
 use LeKoala\Baresheet\Value\TimeValue;
@@ -98,31 +96,6 @@ class Spread
         return CsvSupport::getInputStream($filename);
     }
 
-    /**
-     * Resolve a filename for use inside a zip:// stream URI.
-     *
-     * '#' is the wrapper's archive/entry separator, so a path containing it
-     * cannot be addressed directly: the file is copied to a safe temporary
-     * name and that name is returned instead. Callers must delete the second
-     * return value once streaming is done.
-     *
-     * @return array{0: string, 1: ?string} [streamable filename, temp copy to clean up]
-     * @throws InvalidDocumentException
-     */
-    public static function zipStreamableFilename(string $filename): array
-    {
-        if (!str_contains($filename, '#')) {
-            return [$filename, null];
-        }
-
-        $tempFilename = self::getTempFilename();
-        if (!@copy($filename, $tempFilename)) {
-            unlink($tempFilename);
-            throw new InvalidDocumentException("Failed to stage '{$filename}' for streaming");
-        }
-        return [$tempFilename, $tempFilename];
-    }
-
     public static function ensureExtension(string $filename, string $ext): string
     {
         return CsvSupport::ensureExtension($filename, $ext);
@@ -131,20 +104,6 @@ class Spread
     public static function outputHeaders(string $contentType, string $filename, ?int $size = null): void
     {
         CsvSupport::outputHeaders($contentType, $filename, $size);
-    }
-
-    /**
-     * @param string $lower
-     * @param string $upper
-     * @return Generator<string>
-     */
-    public static function columnRange(string $lower = 'A', string $upper = 'ZZ'): Generator
-    {
-        $start = self::columnIndex($lower);
-        $end = self::columnIndex($upper);
-        for ($i = $start; $i <= $end; $i++) {
-            yield self::columnLetter($i);
-        }
     }
 
     /**
@@ -1045,45 +1004,6 @@ class Spread
     }
 
     /**
-     * Reject headers containing the same name more than once. Duplicate headers can't
-     * be represented by array_combine() (one of the columns silently disappears) and
-     * would make column selection ambiguous.
-     *
-     * Historical API, kept for external callers: the readers validate through
-     * HeaderSchema instead.
-     *
-     * @param string[] $headers
-     * @throws InvalidDocumentException
-     */
-    public static function checkNoDuplicateHeaders(array $headers): void
-    {
-        $duplicates = array_keys(array_filter(array_count_values($headers), static fn(int $count) => $count > 1));
-        if (!empty($duplicates)) {
-            throw new InvalidDocumentException('Duplicate header(s) found: ' . implode(', ', $duplicates));
-        }
-    }
-
-    /**
-     * Validate that all required columns are present in the headers.
-     *
-     * Historical API, kept for external callers: the readers validate through
-     * HeaderSchema::checkRequiredColumns() instead.
-     *
-     * @param string[] $requiredColumns
-     * @param string[] $headers
-     * @throws MissingColumnException
-     */
-    public static function checkRequiredColumns(array $requiredColumns, array $headers): void
-    {
-        if (!empty($requiredColumns)) {
-            $missing = array_diff($requiredColumns, $headers);
-            if (!empty($missing)) {
-                throw new MissingColumnException(array_values($missing));
-            }
-        }
-    }
-
-    /**
      * Decide whether a value should be written as a numeric cell.
      *
      * Native int/float values are always numeric. Strings are classified as numeric
@@ -1512,81 +1432,5 @@ class Spread
             'seconds' => $seconds,
             'microsecond' => $microsecond,
         ];
-    }
-
-    /**
-     * Build map of column names to indices.
-     *
-     * Historical API, kept for external callers: the readers select through
-     * HeaderSchema::select() instead.
-     *
-     * @param string[] $columns Columns to select
-     * @param string[] $headers Available headers (file or explicit)
-     * @return array{0: array<string, int>, 1: array<int, true>} [$columnMap, $selectedIndices]
-     * @throws MissingColumnException If any column not found in headers
-     */
-    public static function buildColumnSelection(array $columns, array $headers): array
-    {
-        $columnMap = [];
-        $selectedIndices = [];
-
-        if (!empty($columns)) {
-            $missing = [];
-
-            // To preserve array_search behavior of finding the FIRST matching index when there are duplicate headers,
-            // we reverse the array before flipping it. Since headers are usually unique, the overhead is minimal,
-            // while providing an O(1) lookup map that is perfectly compatible with the previous behavior.
-            $headerMap = array_flip(array_reverse($headers, true));
-
-            foreach ($columns as $colName) {
-                if (!isset($headerMap[$colName])) {
-                    $missing[] = $colName;
-                } else {
-                    /** @var int $idx */
-                    $idx = $headerMap[$colName];
-                    $columnMap[$colName] = $idx;
-                    $selectedIndices[$idx] = true;
-                }
-            }
-
-            if (!empty($missing)) {
-                throw new MissingColumnException($missing);
-            }
-        }
-
-        return [$columnMap, $selectedIndices];
-    }
-
-    /**
-     * Apply column selection to a row of data.
-     *
-     * Historical API, kept for external callers: the readers map through
-     * HeaderSchema::mapRow() instead.
-     *
-     * @param array<mixed> $row The input row data
-     * @param array<string, int> $columnMap Map of column names to indices
-     * @param string[] $columns Column names in desired order
-     * @param bool $assoc Whether to return associative array
-     * @return array<mixed> The filtered/reordered row
-     */
-    public static function applyColumnSelection(array $row, array $columnMap, array $columns, bool $assoc): array
-    {
-        if (empty($columnMap)) {
-            return $row;
-        }
-
-        $selected = [];
-        foreach ($columns as $colName) {
-            if ($assoc) {
-                // In assoc mode, row is keyed by column name (after array_combine)
-                $selected[$colName] = $row[$colName] ?? null;
-            } else {
-                // In non-assoc mode, row is keyed by numeric index
-                $idx = $columnMap[$colName] ?? null;
-                $selected[] = $idx !== null ? $row[$idx] ?? null : null;
-            }
-        }
-
-        return $selected;
     }
 }

@@ -558,89 +558,6 @@ class SpreadTest extends TestCase
         Spread::validateSheetName('HISTORY');
     }
 
-    public function testBuildColumnSelectionBasic(): void
-    {
-        [$map, $indices] = Spread::buildColumnSelection(['name', 'age'], ['id', 'name', 'age', 'city']);
-        self::assertSame(['name' => 1, 'age' => 2], $map);
-        self::assertSame([1 => true, 2 => true], $indices);
-    }
-
-    public function testBuildColumnSelectionEmpty(): void
-    {
-        [$map, $indices] = Spread::buildColumnSelection([], ['a', 'b']);
-        self::assertSame([], $map);
-        self::assertSame([], $indices);
-    }
-
-    public function testBuildColumnSelectionMissing(): void
-    {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Missing required columns: missing');
-        Spread::buildColumnSelection(['name', 'missing'], ['name', 'age']);
-    }
-
-    public function testBuildColumnSelectionDuplicateHeaders(): void
-    {
-        [$map, $indices] = Spread::buildColumnSelection(['a'], ['a', 'b', 'a']);
-        self::assertSame(['a' => 0], $map);
-    }
-
-    public function testApplyColumnSelectionEmptyMap(): void
-    {
-        $row = ['a', 'b', 'c'];
-        $result = Spread::applyColumnSelection($row, [], ['name'], false);
-        self::assertSame($row, $result);
-    }
-
-    public function testApplyColumnSelectionAssoc(): void
-    {
-        $row = ['id' => 1, 'name' => 'John', 'age' => 30];
-        $columnMap = ['name' => 1, 'age' => 2];
-        $columns = ['name', 'age'];
-
-        $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
-
-        // Result should be keyed by column name, maintaining the requested order in $columns
-        self::assertSame(['name' => 'John', 'age' => 30], $result);
-    }
-
-    public function testApplyColumnSelectionAssocMissingKey(): void
-    {
-        $row = ['id' => 1, 'name' => 'John']; // missing age
-        $columnMap = ['name' => 1, 'age' => 2];
-        $columns = ['name', 'age', 'city']; // missing city in columnMap doesn't matter for assoc mode, it just looks up $row
-
-        $result = Spread::applyColumnSelection($row, $columnMap, $columns, true);
-
-        self::assertSame(['name' => 'John', 'age' => null, 'city' => null], $result);
-    }
-
-    public function testApplyColumnSelectionIndexed(): void
-    {
-        $row = [1, 'John', 30];
-        $columnMap = ['name' => 1, 'age' => 2];
-        $columns = ['name', 'age'];
-
-        $result = Spread::applyColumnSelection($row, $columnMap, $columns, false);
-
-        // Result should be numerically indexed based on the requested $columns order
-        self::assertSame(['John', 30], $result);
-    }
-
-    public function testApplyColumnSelectionIndexedMissingValues(): void
-    {
-        $row = [1, 'John']; // missing index 2 (age)
-        $columnMap = ['name' => 1, 'age' => 2, 'city' => 3];
-        $columns = ['name', 'age', 'city', 'country']; // country not in columnMap
-
-        $result = Spread::applyColumnSelection($row, $columnMap, $columns, false);
-
-        // missing index 2 -> null
-        // city index 3 -> null
-        // country -> index not in map -> null
-        self::assertSame(['John', null, null, null], $result);
-    }
-
     public function testGetOutputStream(): void
     {
         $tempFile = $this->tempFile('txt');
@@ -673,12 +590,6 @@ class SpreadTest extends TestCase
         Spread::getInputStream(__DIR__ . '/data/non_existent_file_12345.csv');
     }
 
-    public function testColumnRange(): void
-    {
-        $result = iterator_to_array(Spread::columnRange('A', 'C'));
-        self::assertSame(['A', 'B', 'C'], $result);
-    }
-
     public function testSafeXml(): void
     {
         $xml = Spread::safeXml('<root><child>value</child></root>');
@@ -705,19 +616,6 @@ class SpreadTest extends TestCase
         // Should not throw
         Spread::isSafePath('php://output');
         Spread::isSafePath('php://temp');
-        $this->addToAssertionCount(1);
-    }
-
-    public function testCheckNoDuplicateHeadersThrows(): void
-    {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Duplicate header(s) found: name');
-        Spread::checkNoDuplicateHeaders(['id', 'name', 'name']);
-    }
-
-    public function testCheckNoDuplicateHeadersPassesForUniqueHeaders(): void
-    {
-        Spread::checkNoDuplicateHeaders(['id', 'name', 'email']);
         $this->addToAssertionCount(1);
     }
 
