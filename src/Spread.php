@@ -815,22 +815,80 @@ class Spread
 
     public static function zipGetData(ZipArchive $zip, string $name, int $maxSize = 50_000_000): ?string
     {
-        $idx = $zip->locateName($name);
-        if ($idx === false) {
+        if ($zip->locateName($name) === false) {
             return null;
         }
-
-        $stat = $zip->statIndex($idx);
-        if ($stat === false) {
+        // Bounded stream read: the cap applies to actual decompressed bytes,
+        // not the declared entry size.
+        $stream = $zip->getStream($name);
+        if ($stream === false) {
             return null;
         }
-
-        if ($stat['size'] > $maxSize) {
-            throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+        $result = '';
+        try {
+            while (!feof($stream)) {
+                $chunk = fread($stream, 65_536);
+                if ($chunk === false) {
+                    throw new InvalidDocumentException("Failed to read ZIP entry '{$name}'");
+                }
+                $result .= $chunk;
+                if (strlen($result) > $maxSize) {
+                    throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+                }
+            }
+        } finally {
+            fclose($stream);
         }
+        return $result;
+    }
 
-        $result = $zip->getFromIndex($idx);
-        return $result !== false ? $result : null;
+    /**
+     * Stage a ZIP entry to a temp file, counting actual decompressed bytes.
+     *
+     * @param ?int $maxSize Null = unlimited.
+     * @return string Temp filename. Caller must unlink it.
+     * @throws InvalidDocumentException
+     */
+    public static function zipStageEntry(ZipArchive $zip, string $name, ?int $maxSize): string
+    {
+        $stream = $zip->getStream($name);
+        if ($stream === false) {
+            throw new InvalidDocumentException("Failed to open ZIP entry '{$name}'");
+        }
+        $temp = self::getTempFilename();
+        $out = @fopen($temp, 'wb');
+        if ($out === false) {
+            fclose($stream);
+            @unlink($temp);
+            throw new InvalidDocumentException("Failed to stage ZIP entry '{$name}'");
+        }
+        try {
+            $total = 0;
+            while (!feof($stream)) {
+                $chunk = fread($stream, 65_536);
+                if ($chunk === false) {
+                    throw new InvalidDocumentException("Failed to read ZIP entry '{$name}'");
+                }
+                if ($chunk === '') {
+                    continue;
+                }
+                $total += strlen($chunk);
+                if ($maxSize !== null && $total > $maxSize) {
+                    throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+                }
+                if (fwrite($out, $chunk) !== strlen($chunk)) {
+                    throw new InvalidDocumentException("Failed to stage ZIP entry '{$name}'");
+                }
+            }
+        } catch (\Throwable $e) {
+            fclose($stream);
+            fclose($out);
+            @unlink($temp);
+            throw $e;
+        }
+        fclose($stream);
+        fclose($out);
+        return $temp;
     }
 
     /**

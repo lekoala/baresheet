@@ -89,14 +89,14 @@ class OdsReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
+        $contentTemp = null;
         try {
             $idx = $zip->locateName('content.xml');
             if ($idx === false) {
                 throw new InvalidDocumentException('No content.xml found in ODS file');
             }
 
-            // content.xml is streamed directly via zip:// below (not loaded into PHP
-            // memory); the maximum size is configurable via maxWorksheetSize.
+            // Fast-path declared-size check; zipStageEntry() below enforces actual bytes.
             $stat = $zip->statIndex($idx);
             if ($this->maxWorksheetSize !== null && $stat !== false && $stat['size'] > $this->maxWorksheetSize) {
                 throw new InvalidDocumentException(
@@ -106,19 +106,16 @@ class OdsReader implements ReaderInterface
 
             // Data (number) styles live in styles.xml for many external writers.
             $stylesXml = Spread::zipGetData($zip, 'styles.xml');
+
+            $contentTemp = Spread::zipStageEntry($zip, 'content.xml', $this->maxWorksheetSize);
         } finally {
             $zip->close();
         }
 
-        // Open content.xml as a zip:// stream directly — avoids writing a temp file first,
-        // saving a full disk write+read cycle (~40ms on typical hardware). A '#' in the
-        // path is the wrapper's fragment separator, so such files are staged to a temp copy.
-        [$streamFilename, $streamTemp] = Spread::zipStreamableFilename($filename);
-
         try {
             $reader = new \XMLReader();
-            if (!$reader->open('zip://' . $streamFilename . '#content.xml', null, LIBXML_NONET)) {
-                throw new InvalidDocumentException("Failed to open zip://{$filename}#content.xml");
+            if (empty($contentTemp) || !$reader->open($contentTemp, null, LIBXML_NONET)) {
+                throw new InvalidDocumentException("Failed to open content.xml in '{$filename}'");
             }
 
             try {
@@ -200,8 +197,8 @@ class OdsReader implements ReaderInterface
                 $reader->close();
             }
         } finally {
-            if ($streamTemp !== null && is_file($streamTemp)) {
-                unlink($streamTemp);
+            if (!empty($contentTemp) && is_file($contentTemp)) {
+                unlink($contentTemp);
             }
         }
     }

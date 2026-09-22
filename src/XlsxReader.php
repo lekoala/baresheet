@@ -83,27 +83,13 @@ class XlsxReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
         }
 
-        // Entries are streamed below via zip:// URIs. A '#' in the path is the
-        // wrapper's fragment separator, so such files are staged to a temp copy.
-        [$streamFilename, $streamTemp] = Spread::zipStreamableFilename($filename);
-
+        $wsTemp = null;
+        $ssTemp = null;
         try {
             try {
-                // Locate shared strings without loading them: they are streamed below via zip://
-                // after the archive is closed, exactly like the worksheet.
-                $sharedStringsUri = null;
-                $ssIdx = $zip->locateName('xl/sharedStrings.xml');
-                if ($ssIdx !== false) {
-                    $ssStat = $zip->statIndex($ssIdx);
-                    if ($ssStat !== false && $ssStat['size'] > self::MAX_STREAMED_ENTRY_SIZE) {
-                        throw new InvalidDocumentException(
-                            'ZIP entry \'xl/sharedStrings.xml\' exceeds maximum allowed size ('
-                            . self::MAX_STREAMED_ENTRY_SIZE
-                            . ' bytes).',
-                        );
-                    }
-                    $sharedStringsUri = 'zip://' . $streamFilename . '#xl/sharedStrings.xml';
-                }
+                // Declared sizes below are a fast-path only: real enforcement
+                // happens in zipStageEntry(), which counts actual bytes.
+                $hasSharedStrings = $zip->locateName('xl/sharedStrings.xml') !== false;
 
                 // Styles
                 $cellFormats = [];
@@ -130,8 +116,7 @@ class XlsxReader implements ReaderInterface
                     throw new InvalidDocumentException('No data');
                 }
 
-                // The worksheet is streamed directly via zip:// below (not loaded into PHP
-                // memory); the maximum size is configurable via maxWorksheetSize.
+                // Fast-path declared-size check; zipStageEntry() below enforces actual bytes.
                 $wsStat = $zip->statIndex($wsIdx);
                 if (
                     $this->maxWorksheetSize !== null
@@ -141,6 +126,13 @@ class XlsxReader implements ReaderInterface
                     throw new InvalidDocumentException(
                         "ZIP entry '{$wsPath}' exceeds maximum allowed size (" . $this->maxWorksheetSize . ' bytes).',
                     );
+                }
+
+                $wsTemp = Spread::zipStageEntry($zip, $wsPath, $this->maxWorksheetSize);
+                if ($hasSharedStrings) {
+                    // Workbook-wide table with its own independent cap, mirroring
+                    // the pre-staging behavior.
+                    $ssTemp = Spread::zipStageEntry($zip, 'xl/sharedStrings.xml', self::MAX_STREAMED_ENTRY_SIZE);
                 }
             } finally {
                 $zip->close();
@@ -152,12 +144,10 @@ class XlsxReader implements ReaderInterface
             // Flatten shared strings into a plain array for O(1) index lookup during row parsing.
             // Streamed via XMLReader to avoid holding the full XML string and SimpleXML DOM
             // in memory simultaneously.
-            $sharedStrings = $sharedStringsUri !== null ? self::readSharedStrings($sharedStringsUri) : [];
+            $sharedStrings = !empty($ssTemp) ? self::readSharedStrings($ssTemp) : [];
 
-            // Open the worksheet XML as a zip:// stream directly — avoids writing a temp file first,
-            // saving a full disk write+read cycle (~40ms on typical hardware).
             $reader = new \XMLReader();
-            if (!$reader->open('zip://' . $streamFilename . '#' . $wsPath, null, LIBXML_NONET)) {
+            if (empty($wsTemp) || !$reader->open($wsTemp, null, LIBXML_NONET)) {
                 throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
             }
 
@@ -174,25 +164,28 @@ class XlsxReader implements ReaderInterface
                 $reader->close();
             }
         } finally {
-            if ($streamTemp !== null && is_file($streamTemp)) {
-                unlink($streamTemp);
+            if (!empty($wsTemp) && is_file($wsTemp)) {
+                unlink($wsTemp);
+            }
+            if (!empty($ssTemp) && is_file($ssTemp)) {
+                unlink($ssTemp);
             }
         }
     }
 
     /**
-     * Stream shared strings from the zip:// entry, building a plain array for O(1)
+     * Stream shared strings from a staged entry file, building a plain array for O(1)
      * index lookup during row parsing. Avoids holding the full XML string and the
      * SimpleXML DOM in memory at the same time.
      *
      * @return string[]
      */
-    private static function readSharedStrings(string $uri): array
+    private static function readSharedStrings(string $filename): array
     {
         $sharedStrings = [];
         $reader = new \XMLReader();
-        if (!$reader->open($uri, null, LIBXML_NONET)) {
-            return $sharedStrings;
+        if (!$reader->open($filename, null, LIBXML_NONET)) {
+            throw new InvalidDocumentException('Failed to open shared strings table');
         }
 
         try {

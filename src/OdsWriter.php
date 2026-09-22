@@ -76,6 +76,7 @@ class OdsWriter implements WriterInterface
      */
     public function writeFile(iterable $data, string $filename): bool
     {
+        Spread::isSafePath($filename);
         $filename = Spread::ensureExtension($filename, 'ods');
         return $this->buildFile($data, $filename);
     }

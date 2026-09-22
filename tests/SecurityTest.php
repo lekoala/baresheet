@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace LeKoala\Baresheet\Tests;
 
 use Exception;
+use LeKoala\Baresheet\OdsReader;
+use LeKoala\Baresheet\OdsWriter;
+use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class SecurityTest extends TestCase
 {
@@ -148,5 +152,84 @@ class SecurityTest extends TestCase
 
         $zip->close();
         unlink($tempZip);
+    }
+
+    public static function falsifiedSizeProvider(): array
+    {
+        return [
+            'xlsx' => [XlsxWriter::class, XlsxReader::class, 'xlsx', 'xl/worksheets/sheet1.xml'],
+            'ods' => [OdsWriter::class, OdsReader::class, 'ods', 'content.xml'],
+        ];
+    }
+
+    /**
+     * A falsified declared entry size must not bypass maxWorksheetSize: the cap
+     * applies to actual decompressed bytes, not statIndex()['size'].
+     */
+    #[DataProvider('falsifiedSizeProvider')]
+    public function testFalsifiedZipEntrySizeRejected(
+        string $writerClass,
+        string $readerClass,
+        string $ext,
+        string $entry,
+    ): void {
+        $rows = [];
+        for ($i = 0; $i < 1000; $i++) {
+            $rows[] = ['alpha-' . $i, 'beta-' . $i, 'gamma-' . $i, 'delta-' . $i, 'epsilon-' . $i];
+        }
+
+        $file = $this->tempFile($ext);
+        $writer = new $writerClass();
+        $writer->writeFile($rows, $file);
+
+        $patched = $this->falsifyDeclaredEntrySize($file, $entry, 1024);
+
+        // Sanity check: the declared size is really what the old guard trusted.
+        $zip = new \ZipArchive();
+        $zip->open($patched);
+        $stat = $zip->statName($entry);
+        $zip->close();
+        $this->assertSame(1024, $stat['size']);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('exceeds maximum allowed size');
+
+        try {
+            $reader = new $readerClass(new Options(maxWorksheetSize: 2048));
+            iterator_to_array($reader->readFile($patched));
+        } finally {
+            unlink($file);
+            unlink($patched);
+        }
+    }
+
+    /**
+     * Rewrite a file with the central directory's uncompressed-size field of
+     * one entry set to a fake value. Compressed data is left untouched.
+     */
+    private function falsifyDeclaredEntrySize(string $file, string $entry, int $fakeSize): string
+    {
+        $data = file_get_contents($file);
+        $this->assertIsString($data);
+
+        $eocd = strrpos($data, "PK\x05\x06");
+        $this->assertNotFalse($eocd, 'End of central directory not found');
+        $cdOffset = unpack('V', substr($data, $eocd + 16, 4))[1];
+
+        $pos = $cdOffset;
+        while (substr($data, $pos, 4) === "PK\x01\x02") {
+            $fileNameLen = unpack('v', substr($data, $pos + 28, 2))[1];
+            $extraLen = unpack('v', substr($data, $pos + 30, 2))[1];
+            $commentLen = unpack('v', substr($data, $pos + 32, 2))[1];
+            if (substr($data, $pos + 46, $fileNameLen) === $entry) {
+                $data = substr_replace($data, pack('V', $fakeSize), $pos + 24, 4);
+                $out = $this->tempFile(pathinfo($file, PATHINFO_EXTENSION));
+                file_put_contents($out, $data);
+                return $out;
+            }
+            $pos += 46 + $fileNameLen + $extraLen + $commentLen;
+        }
+
+        $this->fail("Entry {$entry} not found in central directory");
     }
 }
