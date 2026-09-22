@@ -395,7 +395,12 @@ class XlsxReader implements ReaderInterface
 
                         if ($t === 's') {
                             $idx = (int) $v;
-                            $v = $sharedStrings[$idx] ?? '';
+                            if (!isset($sharedStrings[$idx])) {
+                                throw new InvalidDocumentException(
+                                    "Missing shared string at index {$idx}",
+                                );
+                            }
+                            $v = $sharedStrings[$idx];
                         }
 
                         $excelFormat = null;

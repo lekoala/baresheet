@@ -505,14 +505,14 @@ class SpreadTest extends TestCase
 
     public function testValidateSheetNameEmptyThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Sheet name must not be empty');
         Spread::validateSheetName('');
     }
 
     public function testValidateSheetNameTooLongThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Invalid XLSX sheet name/');
         Spread::validateSheetName(str_repeat('a', 32));
     }
@@ -523,8 +523,8 @@ class SpreadTest extends TestCase
         foreach ($invalidNames as $name) {
             try {
                 Spread::validateSheetName($name);
-                self::fail("Expected WriteException for sheet name: {$name}");
-            } catch (WriteException $e) {
+                self::fail("Expected InvalidArgumentException for sheet name: {$name}");
+            } catch (\InvalidArgumentException $e) {
                 self::assertStringContainsString('Invalid XLSX sheet name', $e->getMessage());
             }
         }
@@ -532,28 +532,28 @@ class SpreadTest extends TestCase
 
     public function testValidateSheetNameLeadingApostropheThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Invalid XLSX sheet name/');
         Spread::validateSheetName("'Sheet1");
     }
 
     public function testValidateSheetNameTrailingApostropheThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Invalid XLSX sheet name/');
         Spread::validateSheetName("Sheet1'");
     }
 
     public function testValidateSheetNameHistoryThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Invalid XLSX sheet name/');
         Spread::validateSheetName('History');
     }
 
     public function testValidateSheetNameHistoryCaseInsensitiveThrows(): void
     {
-        $this->expectException(WriteException::class);
+        $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessageMatches('/Invalid XLSX sheet name/');
         Spread::validateSheetName('HISTORY');
     }

@@ -1184,4 +1184,24 @@ class XlsxTest extends TestCase
         self::assertStringContainsString("'Sheet1'!\$2:\$2", $wb);
         unlink($tempFile);
     }
+
+    public function testWriterColumnWidthsZeroThrowsInvalidArgument(): void
+    {
+        $writer = new XlsxWriter();
+        $writer->columnWidths = ['A' => 0];
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Column width must be > 0');
+        $writer->writeString([['a']]);
+    }
+
+    public function testWriterPrintTitleRowsSyntaxThrowsInvalidArgument(): void
+    {
+        $writer = new XlsxWriter();
+        $writer->printTitleRows = 'bogus';
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('printTitleRows must be a row number or range');
+        $writer->writeString([['a']]);
+    }
 }

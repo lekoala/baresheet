@@ -1100,6 +1100,29 @@ class RobustnessTest extends TestCase
         }
     }
 
+    public function testXlsxMissingSharedStringIndexThrows(): void
+    {
+        // No xl/sharedStrings.xml in the archive: any t="s" reference is dangling
+        // and must fail loudly instead of degrading to an empty value.
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>42</v></c></row>'
+            . '</sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $reader = new XlsxReader();
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('Missing shared string at index 0');
+
+        try {
+            iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function testOdsHeaderOffsetCountsRepeatedRows(): void
     {
         // A non-empty row repeated N times emits N logical records, so it

@@ -670,7 +670,7 @@ class XlsxWriter implements WriterInterface
         }
         foreach ($this->columnWidths as $key => $width) {
             if ($width <= 0) {
-                throw new WriteException('Column width must be > 0, got ' . var_export($width, true));
+                throw new \InvalidArgumentException('Column width must be > 0, got ' . var_export($width, true));
             }
             $i = is_int($key) ? $key : Spread::columnIndex((string) $key) - 1;
             $widths[$i] = (float) $width;
@@ -819,7 +819,7 @@ class XlsxWriter implements WriterInterface
         $definedNames = '';
         if ($this->printTitleRows !== null) {
             if (preg_match('/^(\d+)(?::(\d+))?$/', $this->printTitleRows, $m) !== 1) {
-                throw new WriteException(
+                throw new \InvalidArgumentException(
                     'printTitleRows must be a row number or range like "1" or "1:2", got '
                         . var_export($this->printTitleRows, true),
                 );

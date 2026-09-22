@@ -977,27 +977,27 @@ class Spread
     /**
      * Validate a sheet name against Excel restrictions.
      *
-     * @throws WriteException
+     * @throws InvalidArgumentException
      */
     public static function validateSheetName(string $name): string
     {
         if ($name === '') {
-            throw new WriteException('Sheet name must not be empty');
+            throw new InvalidArgumentException('Sheet name must not be empty');
         }
         if (mb_strlen($name) > 31) {
-            throw new WriteException("Invalid XLSX sheet name: {$name}");
+            throw new InvalidArgumentException("Invalid XLSX sheet name: {$name}");
         }
         if (preg_match('~[\\\\/*?:\[\]]~u', $name)) {
-            throw new WriteException("Invalid XLSX sheet name: {$name}");
+            throw new InvalidArgumentException("Invalid XLSX sheet name: {$name}");
         }
         if (str_starts_with($name, "'")) {
-            throw new WriteException("Invalid XLSX sheet name: {$name}");
+            throw new InvalidArgumentException("Invalid XLSX sheet name: {$name}");
         }
         if (str_ends_with($name, "'")) {
-            throw new WriteException("Invalid XLSX sheet name: {$name}");
+            throw new InvalidArgumentException("Invalid XLSX sheet name: {$name}");
         }
         if (strcasecmp($name, 'History') === 0) {
-            throw new WriteException("Invalid XLSX sheet name: {$name}");
+            throw new InvalidArgumentException("Invalid XLSX sheet name: {$name}");
         }
 
         return $name;
