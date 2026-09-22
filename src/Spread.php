@@ -792,7 +792,9 @@ class Spread
                 }
                 $result .= $chunk;
                 if (strlen($result) > $maxSize) {
-                    throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+                    throw new InvalidDocumentException(
+                        "ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).",
+                    );
                 }
             }
         } finally {
@@ -836,7 +838,9 @@ class Spread
                 throw new InvalidDocumentException("Failed to stage ZIP entry '{$name}'");
             }
             if ($maxSize !== null && $copied > $maxSize) {
-                throw new InvalidDocumentException("ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).");
+                throw new InvalidDocumentException(
+                    "ZIP entry '{$name}' exceeds maximum allowed size ({$maxSize} bytes).",
+                );
             }
             $staged = true;
             return $temp;
