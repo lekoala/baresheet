@@ -258,18 +258,12 @@ class XlsxReader implements ReaderInterface
 
         // Pre-build column map and validate required columns from injected headers
         if ($schema !== null) {
-            if (!empty($this->requiredColumns)) {
-                $schema->checkRequiredColumns($this->requiredColumns);
-            }
-            if (!empty($this->columns)) {
-                $selectionSchema = $schema->select($this->columns);
-            }
-            if (!empty($this->aliases)) {
-                if ($selectionSchema !== null) {
-                    $selectionSchema = $selectionSchema->rename($this->aliases);
-                }
-                $schema = $schema->rename($this->aliases);
-            }
+            [$schema, $selectionSchema] = HeaderSchema::prepare(
+                $schema,
+                $this->requiredColumns,
+                $this->columns,
+                $this->aliases,
+            );
         }
         $selectedIndices = $selectionSchema !== null ? array_fill_keys($selectionSchema->indices(), true) : [];
 
@@ -486,19 +480,15 @@ class XlsxReader implements ReaderInterface
                 if (count($autoWindow) >= $this->headerRows) {
                     try {
                         $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
-                        $candidate->checkRequiredColumns($this->requiredColumns);
-                        $schema = $candidate;
+                        // The flag flips only on success: a throw keeps scanning.
+                        [$schema, $selectionSchema] = HeaderSchema::prepare(
+                            $candidate,
+                            $this->requiredColumns,
+                            $this->columns,
+                            $this->aliases,
+                        );
                         $autoScanning = false;
                         $totalColumns = $schema->columnCount();
-                        if (!empty($this->columns)) {
-                            $selectionSchema = $schema->select($this->columns);
-                        }
-                        if (!empty($this->aliases)) {
-                            $schema = $schema->rename($this->aliases);
-                            if ($selectionSchema !== null) {
-                                $selectionSchema = $selectionSchema->rename($this->aliases);
-                            }
-                        }
                         $selectedIndices = $selectionSchema !== null
                             ? array_fill_keys($selectionSchema->indices(), true)
                             : [];
@@ -532,23 +522,14 @@ class XlsxReader implements ReaderInterface
                         continue;
                     }
 
-                    $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
+                    $candidate = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
+                    [$schema, $selectionSchema] = HeaderSchema::prepare(
+                        $candidate,
+                        $this->requiredColumns,
+                        $this->columns,
+                        $this->aliases,
+                    );
                     $totalColumns = $schema->columnCount();
-                    // Validate required columns
-                    if (!empty($this->requiredColumns)) {
-                        $schema->checkRequiredColumns($this->requiredColumns);
-                    }
-                    // Build column selection
-                    if (!empty($this->columns)) {
-                        $selectionSchema = $schema->select($this->columns);
-                    }
-                    // Apply column aliases
-                    if (!empty($this->aliases)) {
-                        if ($selectionSchema !== null) {
-                            $selectionSchema = $selectionSchema->rename($this->aliases);
-                        }
-                        $schema = $schema->rename($this->aliases);
-                    }
                     $selectedIndices = $selectionSchema !== null
                         ? array_fill_keys($selectionSchema->indices(), true)
                         : [];

@@ -178,6 +178,34 @@ final class HeaderSchema
         }
     }
 
+    /**
+     * Validate required columns, select a subset and apply aliases in one step.
+     *
+     * Validation and selection always run on pre-rename names; aliases only
+     * relabel the resulting schemas.
+     *
+     * @param array<string|int, string|array<array-key, mixed>> $requiredColumns
+     * @param array<string|int, string|array<array-key, mixed>> $columns
+     * @param array<string|int, string|array<array-key, mixed>> $aliases
+     * @return array{0: self, 1: ?self} [full schema, selection schema or null when no columns selected]
+     */
+    public static function prepare(
+        self $schema,
+        array $requiredColumns,
+        array $columns,
+        array $aliases,
+    ): array {
+        $schema->checkRequiredColumns($requiredColumns);
+        $selectionSchema = empty($columns) ? null : $schema->select($columns);
+        if (!empty($aliases)) {
+            if ($selectionSchema !== null) {
+                $selectionSchema = $selectionSchema->rename($aliases);
+            }
+            $schema = $schema->rename($aliases);
+        }
+        return [$schema, $selectionSchema];
+    }
+
     // ─── Transformations ───────────────────────────────────────
 
     /**
@@ -291,7 +319,8 @@ final class HeaderSchema
      */
     public function flattenRow(array $nestedRow): array
     {
-        if ($this->physIndices === null && array_keys($nestedRow) === range(0, count($nestedRow) - 1)) {
+        $isList = array_is_list($nestedRow);
+        if ($this->physIndices === null && $isList) {
             $n = count($nestedRow);
             $total = $this->columnCount();
             if ($n < $total) {
@@ -306,7 +335,6 @@ final class HeaderSchema
             return $nestedRow;
         }
 
-        // After early null-return above, physIndices is known non-null
         $physIdxList = $this->physIndices;
         if ($physIdxList !== null && count($physIdxList) > 0) {
             $maxPhysIdx = max($physIdxList);
@@ -318,7 +346,7 @@ final class HeaderSchema
             $physIdx = $this->physIndices !== null ? $this->physIndices[$i] : $i;
             $value = $nestedRow;
             // Handle already-flat rows with non-sequential physIndices
-            if (array_keys($nestedRow) === range(0, count($nestedRow) - 1)) {
+            if ($isList) {
                 $value = $nestedRow[$physIdx] ?? null;
             } else {
                 foreach ($path as $seg) {
@@ -383,6 +411,9 @@ final class HeaderSchema
 
     /**
      * Stream-friendly header detection using a rolling window.
+     *
+     * Standalone helper, kept for external callers: the readers run their own
+     * inline detection loops instead.
      *
      * @param array<string|int, string|array<array-key, mixed>> $requiredColumns
      * @param int $headerRows
@@ -489,6 +520,11 @@ final class HeaderSchema
         if (!empty($duplicates)) {
             $dup = array_map(static fn(string $s) => implode('.', explode("\0", $s)), $duplicates);
             throw new InvalidDocumentException('Duplicate header path(s) found: ' . implode(', ', $dup));
+        }
+
+        // Flat headers are single-segment paths: none can strictly prefix another.
+        if ($this->isFlat) {
+            return;
         }
 
         // No path is a strict prefix of another (e.g. ['Domaine'] and ['Domaine', 'Date'])

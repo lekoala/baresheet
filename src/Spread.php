@@ -1049,6 +1049,9 @@ class Spread
      * be represented by array_combine() (one of the columns silently disappears) and
      * would make column selection ambiguous.
      *
+     * Historical API, kept for external callers: the readers validate through
+     * HeaderSchema instead.
+     *
      * @param string[] $headers
      * @throws InvalidDocumentException
      */
@@ -1062,6 +1065,9 @@ class Spread
 
     /**
      * Validate that all required columns are present in the headers.
+     *
+     * Historical API, kept for external callers: the readers validate through
+     * HeaderSchema::checkRequiredColumns() instead.
      *
      * @param string[] $requiredColumns
      * @param string[] $headers
@@ -1511,6 +1517,9 @@ class Spread
     /**
      * Build map of column names to indices.
      *
+     * Historical API, kept for external callers: the readers select through
+     * HeaderSchema::select() instead.
+     *
      * @param string[] $columns Columns to select
      * @param string[] $headers Available headers (file or explicit)
      * @return array{0: array<string, int>, 1: array<int, true>} [$columnMap, $selectedIndices]
@@ -1550,6 +1559,9 @@ class Spread
 
     /**
      * Apply column selection to a row of data.
+     *
+     * Historical API, kept for external callers: the readers map through
+     * HeaderSchema::mapRow() instead.
      *
      * @param array<mixed> $row The input row data
      * @param array<string, int> $columnMap Map of column names to indices

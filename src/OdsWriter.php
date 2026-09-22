@@ -7,6 +7,7 @@ namespace LeKoala\Baresheet;
 use DateTimeInterface;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\Internal\DirectZipWriter;
+use LeKoala\Baresheet\Internal\RowWrapper;
 use LeKoala\Baresheet\Value\DurationValue;
 use LeKoala\Baresheet\Value\TimeValue;
 
@@ -303,7 +304,8 @@ class OdsWriter implements WriterInterface
                 }
             }
         }
-        $wrappedData = $this->wrapRows($data, $headerSchema);
+        $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
+        $wrappedData = RowWrapper::wrapRows($data, $headerSchema, $sheetName);
 
         $boldHeadersOpt = $this->boldHeaders;
         $bufferSizeOpt = self::BUFFER_SIZE;
@@ -473,73 +475,6 @@ class OdsWriter implements WriterInterface
         }
 
         $write('</table:table></office:spreadsheet></office:body></office:document-content>');
-    }
-
-    /**
-     * Wrap data with header rows (flat or hierarchical) according to the schema.
-     *
-     * @param iterable<WritableRow> $data
-     * @return iterable<array<int|string, mixed>>
-     */
-    private function wrapRows(iterable $data, ?HeaderSchema $schema): iterable
-    {
-        if ($schema !== null) {
-            yield from $schema->headerRows();
-            foreach ($data as $row) {
-                yield $schema->flattenRow((array) $row);
-            }
-            return;
-        }
-
-        $firstSeen = false;
-        $columnKeys = null;
-        $columnKeysMap = null;
-        foreach ($data as $row) {
-            $isList = array_is_list($row);
-            if (!$firstSeen) {
-                $firstSeen = true;
-                if (!$isList) {
-                    // The first associative row defines the columns: its keys become
-                    // the header and every following associative row is aligned on them.
-                    $columnKeys = array_keys($row);
-                    $columnKeysMap = array_flip($columnKeys);
-                    yield $columnKeys;
-                }
-            }
-
-            if ($isList || $columnKeys === null) {
-                // Positional rows are written as-is. Once the first row is a list no
-                // header is invented mid-stream, so later associative rows keep their
-                // array order too (matching positional semantics).
-                yield array_values($row);
-                continue;
-            }
-
-            if (array_keys($row) === $columnKeys) {
-                yield array_values($row);
-                continue;
-            }
-
-            $rowByKey = [];
-            foreach ($row as $key => $value) {
-                $rowByKey[$key] = $value;
-            }
-            // Unknown keys would be silently dropped by alignment, so they are
-            // rejected instead of losing data.
-            foreach ($rowByKey as $key => $_rowValue) {
-                if (!isset($columnKeysMap[$key])) {
-                    $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
-                    throw new WriteException(
-                        "Row contains column key '{$key}' absent from the header (sheet '{$sheetName}')",
-                    );
-                }
-            }
-            $aligned = [];
-            foreach ($columnKeys as $key) {
-                $aligned[] = array_key_exists($key, $rowByKey) ? $rowByKey[$key] : null;
-            }
-            yield $aligned;
-        }
     }
 
     private function genManifest(): string

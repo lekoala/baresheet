@@ -214,18 +214,12 @@ class CsvReader implements ReaderInterface
 
         // Pre-build schema: requiredColumns → columns → aliases
         if ($schema !== null) {
-            if (!empty($this->requiredColumns)) {
-                $schema->checkRequiredColumns($this->requiredColumns);
-            }
-            if (!empty($this->columns)) {
-                $selectionSchema = $schema->select($this->columns);
-            }
-            if (!empty($this->aliases)) {
-                $schema = $schema->rename($this->aliases);
-                if ($selectionSchema !== null) {
-                    $selectionSchema = $selectionSchema->rename($this->aliases);
-                }
-            }
+            [$schema, $selectionSchema] = HeaderSchema::prepare(
+                $schema,
+                $this->requiredColumns,
+                $this->columns,
+                $this->aliases,
+            );
         }
 
         if ($this->limit === 0) {
@@ -289,20 +283,15 @@ class CsvReader implements ReaderInterface
                         try {
                             /** @var array<int, array<int, ?string>> $autoWindow */
                             $candidate = HeaderSchema::fromRows($autoWindow, $this->headerNormalizer);
-                            $candidate->checkRequiredColumns($this->requiredColumns);
-                            // Window rows ARE the header — build schema from them
-                            $schema = $candidate;
+                            // Window rows ARE the header — build schema from them.
+                            // The flag flips only on success: a throw keeps scanning.
+                            [$schema, $selectionSchema] = HeaderSchema::prepare(
+                                $candidate,
+                                $this->requiredColumns,
+                                $this->columns,
+                                $this->aliases,
+                            );
                             $autoScanning = false;
-                            // Apply columns and aliases
-                            if (!empty($this->columns)) {
-                                $selectionSchema = $schema->select($this->columns);
-                            }
-                            if (!empty($this->aliases)) {
-                                $schema = $schema->rename($this->aliases);
-                                if ($selectionSchema !== null) {
-                                    $selectionSchema = $selectionSchema->rename($this->aliases);
-                                }
-                            }
                             $expectedCols = $schema->columnCount();
                         } catch (InvalidDocumentException|MissingColumnException) {
                             // Not matched — keep scanning
@@ -367,20 +356,14 @@ class CsvReader implements ReaderInterface
                             /** @var array<int, array<int, ?string>> $headerRowsBuffer */
                             $schema = HeaderSchema::fromRows($headerRowsBuffer, $this->headerNormalizer);
                         }
-                        $expectedCols = $schema->columnCount();
                         // requiredColumns → columns → aliases
-                        if (!empty($this->requiredColumns)) {
-                            $schema->checkRequiredColumns($this->requiredColumns);
-                        }
-                        if (!empty($this->columns)) {
-                            $selectionSchema = $schema->select($this->columns);
-                        }
-                        if (!empty($this->aliases)) {
-                            $schema = $schema->rename($this->aliases);
-                            if ($selectionSchema !== null) {
-                                $selectionSchema = $selectionSchema->rename($this->aliases);
-                            }
-                        }
+                        [$schema, $selectionSchema] = HeaderSchema::prepare(
+                            $schema,
+                            $this->requiredColumns,
+                            $this->columns,
+                            $this->aliases,
+                        );
+                        $expectedCols = $schema->columnCount();
                         continue;
                     }
                     $expected = $schema->columnCount();
