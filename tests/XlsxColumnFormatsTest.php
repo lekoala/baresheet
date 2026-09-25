@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use DateTimeImmutable;
 use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\Value\DurationValue;
+use LeKoala\Baresheet\Value\TimeValue;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
 
@@ -60,6 +63,41 @@ class XlsxColumnFormatsTest extends TestCase
             $data = iterator_to_array($reader->readFile($tempFile));
             self::assertSame('12345', (string) $data[0][0]);
             self::assertSame('67890', (string) $data[1][0]);
+        } finally {
+            if (is_file($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
+
+    public function testTextFormatForcesNativeValuesToText(): void
+    {
+        $tempFile = $this->tempFile('xlsx');
+        $writer = new XlsxWriter(new Options(columnFormats: [0 => '@']));
+        $writer->writeFile([
+            [true],
+            [false],
+            [new DateTimeImmutable('2026-09-25 14:30:15')],
+            [new TimeValue(9, 30, 5)],
+            [new DurationValue(36, 15)],
+        ], $tempFile);
+
+        try {
+            $zip = new \ZipArchive();
+            $zip->open($tempFile);
+            $sheet = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+            $zip->close();
+
+            self::assertStringNotContainsString('t="b"', $sheet);
+            self::assertStringNotContainsString('t="n"', $sheet);
+            self::assertSame(5, substr_count($sheet, 't="inlineStr"'));
+
+            $reader = new XlsxReader();
+            $data = iterator_to_array($reader->readFile($tempFile));
+            self::assertSame(
+                ['1', '0', '2026-09-25 14:30:15', '09:30:05', '36:15:00'],
+                array_column($data, 0),
+            );
         } finally {
             if (is_file($tempFile)) {
                 unlink($tempFile);

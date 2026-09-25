@@ -419,7 +419,23 @@ class XlsxWriter implements WriterInterface
                 }
                 $forceText = $fmt !== null && $fmt['isText'];
 
-                if ($value instanceof \Time\Duration) {
+                if ($forceText && $value !== null && $value !== '') {
+                    if (is_float($value) && !is_finite($value)) {
+                        throw new WriteException('Cannot write a non-finite numeric value');
+                    }
+                    $strValue = is_float($value) ? Spread::serializeFloat($value) : Spread::stringifyValue($value);
+                    [$textXml, $vl] = $this->buildTextCell(
+                        $strValue,
+                        $cn,
+                        $cellStyle,
+                        $sheetName,
+                        $sharedStrings,
+                        $sharedStringKeys,
+                        $sharedStringsOpt,
+                        $autoWidth,
+                    );
+                    $buffer .= $textXml;
+                } elseif ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
                     $styleAttr = $fmt !== null ? $cellStyle : ' s="4"';
                     $buffer .= sprintf(
@@ -481,40 +497,12 @@ class XlsxWriter implements WriterInterface
                         throw new WriteException('Cannot write a non-finite numeric value');
                     }
                     $strValue = is_float($value) ? Spread::serializeFloat($value) : (string) $value;
-                    if ($forceText) {
-                        [$textXml, $vl] = $this->buildTextCell(
-                            $strValue,
-                            $cn,
-                            $cellStyle,
-                            $sheetName,
-                            $sharedStrings,
-                            $sharedStringKeys,
-                            $sharedStringsOpt,
-                            $autoWidth,
-                        );
-                        $buffer .= $textXml;
-                    } else {
-                        $vl = strlen($strValue);
-                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
-                    }
+                    $vl = strlen($strValue);
+                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                 } elseif ($this->inferNumericStrings && Spread::isNumericCellValue($value)) {
                     $strValue = (string) $value;
-                    if ($forceText) {
-                        [$textXml, $vl] = $this->buildTextCell(
-                            $strValue,
-                            $cn,
-                            $cellStyle,
-                            $sheetName,
-                            $sharedStrings,
-                            $sharedStringKeys,
-                            $sharedStringsOpt,
-                            $autoWidth,
-                        );
-                        $buffer .= $textXml;
-                    } else {
-                        $vl = strlen($strValue);
-                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
-                    }
+                    $vl = strlen($strValue);
+                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
                 } else {
                     $strValue = (string) $value;
 
@@ -587,8 +575,8 @@ class XlsxWriter implements WriterInterface
     /**
      * Build a text cell (shared string or inlineStr) with its measured length.
      *
-     * Used for regular strings and for '@'-formatted columns where numeric
-     * values must stay text to preserve leading '+'/'0'.
+     * Used for regular strings and for '@'-formatted columns where every
+     * non-empty native value must be stored as text.
      *
      * @param array<string> $sharedStrings
      * @param array<string, int> $sharedStringKeys
