@@ -41,6 +41,8 @@ class OdsWriter implements WriterInterface
      *           for the 1.0 release together with Options::$inferNumericStrings.
      */
     public bool $inferNumericStrings = true;
+    /** @var bool If true, every non-empty value is stored as spreadsheet text. */
+    public bool $forceText = false;
 
     public function __construct(?Options $options = null)
     {
@@ -321,7 +323,21 @@ class OdsWriter implements WriterInterface
             $i = 0;
 
             foreach ($row as $value) {
-                if ($value instanceof \Time\Duration) {
+                if ($this->forceText && $value !== null && $value !== '') {
+                    if (is_float($value) && !is_finite($value)) {
+                        throw new WriteException('Cannot write a non-finite numeric value');
+                    }
+                    $strValue = is_float($value) ? Spread::serializeFloat($value) : Spread::stringifyValue($value);
+                    $escaped = Spread::escapeXml($strValue, $cellContext($r, $i));
+                    $buffer .=
+                        '<table:table-cell'
+                        . $rowCellStyle
+                        . ' office:value-type="string">'
+                        . '<text:p>'
+                        . $escaped
+                        . '</text:p>'
+                        . '</table:table-cell>';
+                } elseif ($value instanceof \Time\Duration) {
                     $iso = Spread::formatIsoDuration($value);
                     $display = Spread::stringifyDuration($value);
                     $buffer .=

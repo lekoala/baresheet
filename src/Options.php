@@ -89,6 +89,11 @@ class Options
          *           for the 1.0 release, together with Options::$stringifyValues.
          */
         public bool $inferNumericStrings = true,
+        /**
+         * @var bool If true, XLSX/ODS writers store every non-empty value as
+         *           spreadsheet text. Null and empty strings remain empty cells.
+         */
+        public bool $forceText = false,
         // ─── CSV ──────────────────────────────────
         /** @var string The delimiter used for CSV fields ("auto" attempts to guess). */
         public string $separator = 'auto',

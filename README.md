@@ -133,6 +133,7 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `aliases`             | array<string\|int,string\|array>           | `[]`        | Read (All)                |
 | `stringifyValues`     | bool                                       | `true`      | Read (XLSX, ODS)          |
 | `inferNumericStrings` | bool                                       | `true`      | Write (XLSX, ODS)         |
+| `forceText`           | bool                                       | `false`     | Write (XLSX, ODS)         |
 | `separator`           | string                                     | `"auto"`    | Read (CSV)                |
 | `enclosure`           | string                                     | `"`         | Read (CSV)                |
 | `escape`              | string                                     | `""`        | Read (CSV)                |
@@ -182,6 +183,12 @@ is special: it writes the cell as text even when `inferNumericStrings` would
 otherwise make it numeric, which is what preserves a leading `+` or `0` (a
 number format alone would not). `boldHeaders` combines with the column format,
 so a header stays bold while adopting the column's format.
+
+To store every non-empty value as spreadsheet text, use
+`new Options(forceText: true)`. This applies to numbers, booleans, dates, times,
+and durations in XLSX and ODS output; `null` and `''` remain empty cells. It is
+useful for identifier-heavy exports where spreadsheet type inference is not
+desirable. CSV output is already textual and therefore ignores this option.
 
 ## Exceptions
 

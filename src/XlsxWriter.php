@@ -71,6 +71,8 @@ class XlsxWriter implements WriterInterface
      *           for the 1.0 release together with Options::$inferNumericStrings.
      */
     public bool $inferNumericStrings = true;
+    /** @var bool If true, every non-empty value is stored as spreadsheet text. */
+    public bool $forceText = false;
 
     public function __construct(?Options $options = null)
     {
@@ -417,7 +419,7 @@ class XlsxWriter implements WriterInterface
                 } else {
                     $cellStyle = $isHeaderRow ? $boldStyle : '';
                 }
-                $forceText = $fmt !== null && $fmt['isText'];
+                $forceText = $this->forceText || ($fmt !== null && $fmt['isText']);
 
                 if ($forceText && $value !== null && $value !== '') {
                     if (is_float($value) && !is_finite($value)) {
