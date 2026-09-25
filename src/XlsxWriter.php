@@ -300,7 +300,10 @@ class XlsxWriter implements WriterInterface
         if (!$this->autoWidth) {
             // Explicit columnWidths/columnFormats alone still emit a <cols>
             // block, without paying the two-pass measurement.
-            $write($this->buildWorksheetPrefix($this->columnWidths !== [] || $this->columnFormats !== [], []) . '<sheetData>');
+            $write(
+                $this->buildWorksheetPrefix($this->columnWidths !== [] || $this->columnFormats !== [], [])
+                    . '<sheetData>',
+            );
             $colWidths = [];
             $this->streamRows($data, $write, $sharedStrings, $sharedStringKeys, false, $colWidths);
             $write('</sheetData>' . $this->buildWorksheetSuffix());
@@ -455,7 +458,12 @@ class XlsxWriter implements WriterInterface
                 } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
                     $styleAttr = $fmt !== null ? $cellStyle : ' s="1"';
-                    $buffer .= sprintf('<c r="%s" t="n"%s><v>%s</v></c>', $cn, $styleAttr, Spread::serializeFloat($excelDate));
+                    $buffer .= sprintf(
+                        '<c r="%s" t="n"%s><v>%s</v></c>',
+                        $cn,
+                        $styleAttr,
+                        Spread::serializeFloat($excelDate),
+                    );
                     $vl = 16;
                 } elseif (is_bool($value)) {
                     $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
@@ -619,8 +627,14 @@ class XlsxWriter implements WriterInterface
             }
             $xml = '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
         } else {
-            $xml = '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t xml:space="preserve">'
-                . $escaped . '</t></is></c>';
+            $xml =
+                '<c r="'
+                . $cn
+                . '" t="inlineStr"'
+                . $cellStyle
+                . '><is><t xml:space="preserve">'
+                . $escaped
+                . '</t></is></c>';
         }
 
         return [$xml, $vl];
@@ -787,8 +801,16 @@ class XlsxWriter implements WriterInterface
             $colNum = $i + 1;
             $styleAttr = isset($styleMap[$i]) ? ' style="' . $styleMap[$i]['normal'] . '"' : '';
             if (isset($widths[$i])) {
-                $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $widths[$i]
-                    . '" customWidth="true"' . $styleAttr . '/>';
+                $xml .=
+                    '<col min="'
+                    . $colNum
+                    . '" max="'
+                    . $colNum
+                    . '" width="'
+                    . $widths[$i]
+                    . '" customWidth="true"'
+                    . $styleAttr
+                    . '/>';
             } else {
                 $xml .= '<col min="' . $colNum . '" max="' . $colNum . '"' . $styleAttr . ' customWidth="false"/>';
             }
@@ -926,7 +948,7 @@ class XlsxWriter implements WriterInterface
         }
         $codeToXf = [];
         foreach ($codes as $k => $code) {
-            $codeToXf[$code] = ['normal' => 5 + 2 * $k, 'bold' => 5 + 2 * $k + 1];
+            $codeToXf[$code] = ['normal' => 5 + (2 * $k), 'bold' => 5 + (2 * $k) + 1];
         }
         $map = [];
         foreach ($normalized as $i => $code) {
@@ -946,39 +968,39 @@ class XlsxWriter implements WriterInterface
         $codes = $this->distinctColumnFormatCodes();
         if ($codes === []) {
             return <<<'XML'
-            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-            <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-            <numFmts count="3">
-                <numFmt numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
-                <numFmt numFmtId="165" formatCode="hh:mm:ss" />
-                <numFmt numFmtId="166" formatCode="[h]:mm:ss" />
-            </numFmts>
-            <fonts count="2">
-                <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
-                <font><b/><name val="Arial"/><family val="2"/><sz val="10"/></font>
-            </fonts>
-            <fills count="2">
-                <fill><patternFill patternType="none" /></fill>
-                <fill><patternFill patternType="gray125" /></fill>
-            </fills>
-            <borders count="1">
-            <border><left/><right/><top/><bottom/><diagonal/></border>
-            </borders>
-            <cellStyleXfs count="1">
-                <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
-            </cellStyleXfs>
-            <cellXfs count="5">
-                <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
-                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />
-                <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />
-                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0" />
-                <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="166" xfId="0" />
-            </cellXfs>
-            <cellStyles count="1">
-                <cellStyle name="Normal" xfId="0" builtinId="0"/>
-            </cellStyles>
-            </styleSheet>
-            XML;
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                <numFmts count="3">
+                    <numFmt numFmtId="164" formatCode="yyyy\-mm\-dd\ hh:mm:ss" />
+                    <numFmt numFmtId="165" formatCode="hh:mm:ss" />
+                    <numFmt numFmtId="166" formatCode="[h]:mm:ss" />
+                </numFmts>
+                <fonts count="2">
+                    <font><name val="Arial"/><family val="2"/><sz val="10"/></font>
+                    <font><b/><name val="Arial"/><family val="2"/><sz val="10"/></font>
+                </fonts>
+                <fills count="2">
+                    <fill><patternFill patternType="none" /></fill>
+                    <fill><patternFill patternType="gray125" /></fill>
+                </fills>
+                <borders count="1">
+                <border><left/><right/><top/><bottom/><diagonal/></border>
+                </borders>
+                <cellStyleXfs count="1">
+                    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
+                </cellStyleXfs>
+                <cellXfs count="5">
+                    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
+                    <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />
+                    <xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />
+                    <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0" />
+                    <xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="166" xfId="0" />
+                </cellXfs>
+                <cellStyles count="1">
+                    <cellStyle name="Normal" xfId="0" builtinId="0"/>
+                </cellStyles>
+                </styleSheet>
+                XML;
         }
 
         $numFmtIds = $this->columnFormatNumFmtIds();
@@ -987,25 +1009,36 @@ class XlsxWriter implements WriterInterface
             if ($code === '@') {
                 continue;
             }
-            $customNumFmts .= '<numFmt numFmtId="' . $numFmtIds[$code] . '" formatCode="'
-                . htmlspecialchars($code, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '"/>';
+            $customNumFmts .=
+                '<numFmt numFmtId="'
+                . $numFmtIds[$code]
+                . '" formatCode="'
+                . htmlspecialchars($code, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+                . '"/>';
         }
-        $customCount = count(array_filter($codes, static fn (string $c): bool => $c !== '@'));
+        $customCount = count(array_filter($codes, static fn(string $c): bool => $c !== '@'));
         $numFmtsCount = 3 + $customCount;
-        $cellXfsCount = 5 + 2 * count($codes);
+        $cellXfsCount = 5 + (2 * count($codes));
 
         $cellXfsExtra = '';
         foreach ($codes as $code) {
             $numFmtId = $numFmtIds[$code];
-            $cellXfsExtra .= '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="'
-                . $numFmtId . '" xfId="0"/>';
-            $cellXfsExtra .= '<xf applyFont="true" applyNumberFormat="true" borderId="0" fillId="0" fontId="1" numFmtId="'
-                . $numFmtId . '" xfId="0"/>';
+            $cellXfsExtra .=
+                '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="'
+                . $numFmtId
+                . '" xfId="0"/>';
+            $cellXfsExtra .=
+                '<xf applyFont="true" applyNumberFormat="true" borderId="0" fillId="0" fontId="1" numFmtId="'
+                . $numFmtId
+                . '" xfId="0"/>';
         }
 
-        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        return (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            . '<numFmts count="' . $numFmtsCount . '">'
+            . '<numFmts count="'
+            . $numFmtsCount
+            . '">'
             . '<numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd\\ hh:mm:ss" />'
             . '<numFmt numFmtId="165" formatCode="hh:mm:ss" />'
             . '<numFmt numFmtId="166" formatCode="[h]:mm:ss" />'
@@ -1025,7 +1058,9 @@ class XlsxWriter implements WriterInterface
             . '<cellStyleXfs count="1">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" />'
             . '</cellStyleXfs>'
-            . '<cellXfs count="' . $cellXfsCount . '">'
+            . '<cellXfs count="'
+            . $cellXfsCount
+            . '">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />'
             . '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />'
             . '<xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />'
@@ -1036,7 +1071,8 @@ class XlsxWriter implements WriterInterface
             . '<cellStyles count="1">'
             . '<cellStyle name="Normal" xfId="0" builtinId="0"/>'
             . '</cellStyles>'
-            . '</styleSheet>';
+            . '</styleSheet>'
+        );
     }
 
     private function genWorkbook(): string
