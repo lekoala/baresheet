@@ -316,17 +316,15 @@ class OptionsTest extends TestCase
 
     public function testColumnWidthsValidation(): void
     {
-        foreach (
-            [
-                ['x' => -5],
-                ['A' => 0],
-                [0 => -2],
-                ['2A' => 10],
-                ['XFE' => 10],
-                [16_384 => 10],
-                [-1 => 10],
-            ] as $bad
-        ) {
+        foreach ([
+            ['x' => -5],
+            ['A' => 0],
+            [0 => -2],
+            ['2A' => 10],
+            ['XFE' => 10],
+            [16_384 => 10],
+            [-1 => 10],
+        ] as $bad) {
             try {
                 new Options(columnWidths: $bad);
                 self::fail('columnWidths ' . var_export($bad, true) . ' should throw');
