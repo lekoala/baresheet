@@ -128,6 +128,59 @@ class Spread
     }
 
     /**
+     * Resolve a 0-based column index from an int index or an Excel letter.
+     *
+     * Shared by per-column options (columnWidths, columnFormats) so Options
+     * and writers validate keys identically: ints must be 0..16383, letters
+     * must resolve to A..XFD.
+     *
+     * @param string $context Option name used in exception messages.
+     */
+    public static function columnIndex0(int|string $column, string $context = 'column'): int
+    {
+        if (is_int($column)) {
+            if ($column < 0 || $column > 16_383) {
+                throw new \InvalidArgumentException(
+                    $context . ' keys must be 0-based column indexes (0..16383) or Excel letters (A..XFD), got '
+                        . var_export($column, true),
+                );
+            }
+            return $column;
+        }
+        if (preg_match('/^[A-Za-z]{1,3}$/', $column) !== 1) {
+            throw new \InvalidArgumentException(
+                $context . ' keys must be 0-based column indexes or Excel letters, got ' . var_export($column, true),
+            );
+        }
+        $index = self::columnIndex(strtoupper($column));
+        if ($index < 1 || $index > 16_384) {
+            throw new \InvalidArgumentException(
+                $context . ' column out of range (A..XFD), got ' . var_export($column, true),
+            );
+        }
+        return $index - 1;
+    }
+
+    /**
+     * Validate an Excel number format code from a per-column option.
+     *
+     * Takes mixed because it guards public mutable properties: callers can
+     * assign a non-string at runtime even though the documented type is string.
+     *
+     * @param string $context Option name used in exception messages.
+     */
+    public static function validateNumberFormat(mixed $format, string $context = 'columnFormats'): string
+    {
+        if (!is_string($format) || $format === '' || strlen($format) > 255) {
+            throw new \InvalidArgumentException(
+                $context . ' values must be non-empty Excel number format codes (max 255 chars), got '
+                    . var_export($format, true),
+            );
+        }
+        return $format;
+    }
+
+    /**
      * Convert Excel serial date to a formatted string.
      *
      * Handles the 1900 date system including the Lotus 1-2-3 leap year bug.

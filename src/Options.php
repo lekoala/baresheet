@@ -146,6 +146,14 @@ class Options
          */
         public array $columnWidths = [],
         /**
+         * @var array<int|string, string> Explicit XLSX number formats, keyed by 0-based
+         *      column index or Excel letter ('A', 'C'…). The format is applied to every
+         *      cell of the column regardless of the PHP value type. '@' forces text
+         *      cells (preserves leading '+'/'0'); other codes (e.g. '0.00') style
+         *      numeric cells. XLSX only.
+         */
+        public array $columnFormats = [],
+        /**
          * @var ?float Lower bound for autoWidth-measured XLSX column widths.
          *             Replaces the built-in floor of 8 when set. XLSX only.
          */
@@ -227,16 +235,16 @@ class Options
             );
         }
         foreach ($this->columnWidths as $key => $width) {
-            if (!is_int($key) && preg_match('/^[A-Za-z]+$/', (string) $key) !== 1) {
-                throw new \InvalidArgumentException(
-                    'columnWidths keys must be 0-based column indexes or Excel letters, got ' . var_export($key, true),
-                );
-            }
+            Spread::columnIndex0($key, 'columnWidths');
             if ($width <= 0) {
                 throw new \InvalidArgumentException(
                     'columnWidths values must be positive numbers, got ' . var_export($width, true),
                 );
             }
+        }
+        foreach ($this->columnFormats as $key => $format) {
+            Spread::columnIndex0($key, 'columnFormats');
+            Spread::validateNumberFormat($format, 'columnFormats');
         }
     }
 

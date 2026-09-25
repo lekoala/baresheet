@@ -46,6 +46,12 @@ class XlsxWriter implements WriterInterface
      *      and is emitted even when autoWidth is off.
      */
     public array $columnWidths = [];
+    /**
+     * @var array<int|string, string> Explicit column number formats keyed by 0-based
+     *      column index or Excel letter ('A', 'C'…). Applied to every cell of the
+     *      column regardless of value type. '@' forces text cells.
+     */
+    public array $columnFormats = [];
     /** @var ?float Lower bound applied to autoWidth-measured column widths (replaces the built-in 8). */
     public ?float $minColumnWidth = null;
     /** @var ?float Upper bound applied to autoWidth-measured column widths. */
@@ -292,9 +298,9 @@ class XlsxWriter implements WriterInterface
         array &$sharedStringKeys,
     ): void {
         if (!$this->autoWidth) {
-            // Explicit columnWidths alone still emit a <cols> block, without
-            // paying the two-pass measurement.
-            $write($this->buildWorksheetPrefix($this->columnWidths !== [], []) . '<sheetData>');
+            // Explicit columnWidths/columnFormats alone still emit a <cols>
+            // block, without paying the two-pass measurement.
+            $write($this->buildWorksheetPrefix($this->columnWidths !== [] || $this->columnFormats !== [], []) . '<sheetData>');
             $colWidths = [];
             $this->streamRows($data, $write, $sharedStrings, $sharedStringKeys, false, $colWidths);
             $write('</sheetData>' . $this->buildWorksheetSuffix());
@@ -362,6 +368,7 @@ class XlsxWriter implements WriterInterface
         $sharedStringsOpt = $this->sharedStrings;
         $bufferSizeOpt = self::BUFFER_SIZE;
         $buffer = '';
+        $formatStyles = $this->columnFormatStyleMap();
 
         $headerSchema = !empty($this->headers) ? HeaderSchema::fromDefinition($this->headers) : null;
         if ($headerSchema !== null) {
@@ -389,7 +396,7 @@ class XlsxWriter implements WriterInterface
                 throw new WriteException("Row {$r} exceeds the maximum of " . self::MAX_ROWS . ' rows');
             }
             $i = 0;
-            $cellStyle = $headerRowsRemaining > 0 ? $boldStyle : '';
+            $isHeaderRow = $headerRowsRemaining > 0;
             $buffer .= "<row r=\"{$r}\">";
             foreach ($dataRow as $value) {
                 if ($i >= self::MAX_COLUMNS) {
@@ -401,12 +408,21 @@ class XlsxWriter implements WriterInterface
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
                 $cn = $colCache[$i] . $r;
+                $fmt = $formatStyles[$i] ?? null;
+                if ($fmt !== null) {
+                    $cellStyle = ' s="' . ($isHeaderRow && $this->boldHeaders ? $fmt['bold'] : $fmt['normal']) . '"';
+                } else {
+                    $cellStyle = $isHeaderRow ? $boldStyle : '';
+                }
+                $forceText = $fmt !== null && $fmt['isText'];
 
                 if ($value instanceof \Time\Duration) {
                     $excelSerial = Spread::durationToSerial($value);
+                    $styleAttr = $fmt !== null ? $cellStyle : ' s="4"';
                     $buffer .= sprintf(
-                        '<c r="%s" t="n" s="4"><v>%s</v></c>',
+                        '<c r="%s" t="n"%s><v>%s</v></c>',
                         $cn,
+                        $styleAttr,
                         Spread::serializeFloat($excelSerial),
                     );
                     $vl = 16;
@@ -418,23 +434,28 @@ class XlsxWriter implements WriterInterface
                         $value->seconds,
                         $value->microsecond,
                     );
+                    $styleAttr = $fmt !== null ? $cellStyle : ' s="4"';
                     $buffer .= sprintf(
-                        '<c r="%s" t="n" s="4"><v>%s</v></c>',
+                        '<c r="%s" t="n"%s><v>%s</v></c>',
                         $cn,
+                        $styleAttr,
                         Spread::serializeFloat($excelSerial),
                     );
                     $vl = 16;
                 } elseif ($value instanceof TimeValue) {
                     $excelSerial = Spread::timeToExcel($value);
+                    $styleAttr = $fmt !== null ? $cellStyle : ' s="3"';
                     $buffer .= sprintf(
-                        '<c r="%s" t="n" s="3"><v>%s</v></c>',
+                        '<c r="%s" t="n"%s><v>%s</v></c>',
                         $cn,
+                        $styleAttr,
                         Spread::serializeFloat($excelSerial),
                     );
                     $vl = 8;
                 } elseif ($value instanceof DateTimeInterface) {
                     $excelDate = Spread::dateToExcel($value);
-                    $buffer .= sprintf('<c r="%s" t="n" s="1"><v>%s</v></c>', $cn, Spread::serializeFloat($excelDate));
+                    $styleAttr = $fmt !== null ? $cellStyle : ' s="1"';
+                    $buffer .= sprintf('<c r="%s" t="n"%s><v>%s</v></c>', $cn, $styleAttr, Spread::serializeFloat($excelDate));
                     $vl = 16;
                 } elseif (is_bool($value)) {
                     $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
@@ -452,12 +473,40 @@ class XlsxWriter implements WriterInterface
                         throw new WriteException('Cannot write a non-finite numeric value');
                     }
                     $strValue = is_float($value) ? Spread::serializeFloat($value) : (string) $value;
-                    $vl = strlen($strValue);
-                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    if ($forceText) {
+                        [$textXml, $vl] = $this->buildTextCell(
+                            $strValue,
+                            $cn,
+                            $cellStyle,
+                            $sheetName,
+                            $sharedStrings,
+                            $sharedStringKeys,
+                            $sharedStringsOpt,
+                            $autoWidth,
+                        );
+                        $buffer .= $textXml;
+                    } else {
+                        $vl = strlen($strValue);
+                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    }
                 } elseif ($this->inferNumericStrings && Spread::isNumericCellValue($value)) {
                     $strValue = (string) $value;
-                    $vl = strlen($strValue);
-                    $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    if ($forceText) {
+                        [$textXml, $vl] = $this->buildTextCell(
+                            $strValue,
+                            $cn,
+                            $cellStyle,
+                            $sheetName,
+                            $sharedStrings,
+                            $sharedStringKeys,
+                            $sharedStringsOpt,
+                            $autoWidth,
+                        );
+                        $buffer .= $textXml;
+                    } else {
+                        $vl = strlen($strValue);
+                        $buffer .= '<c r="' . $cn . '" t="n"' . $cellStyle . '><v>' . $strValue . '</v></c>';
+                    }
                 } else {
                     $strValue = (string) $value;
 
@@ -525,6 +574,56 @@ class XlsxWriter implements WriterInterface
         if ($buffer !== '') {
             $write($buffer);
         }
+    }
+
+    /**
+     * Build a text cell (shared string or inlineStr) with its measured length.
+     *
+     * Used for regular strings and for '@'-formatted columns where numeric
+     * values must stay text to preserve leading '+'/'0'.
+     *
+     * @param array<string> $sharedStrings
+     * @param array<string, int> $sharedStringKeys
+     * @return array{0: string, 1: int}
+     */
+    private function buildTextCell(
+        string $strValue,
+        string $cn,
+        string $cellStyle,
+        string $sheetName,
+        array &$sharedStrings,
+        array &$sharedStringKeys,
+        bool $sharedStringsOpt,
+        bool $autoWidth,
+    ): array {
+        if (strlen($strValue) > self::MAX_CELL_LENGTH) {
+            if (mb_strlen($strValue) > self::MAX_CELL_LENGTH) {
+                throw new WriteException(
+                    "Cell {$cn} exceeds the maximum of " . self::MAX_CELL_LENGTH . ' characters',
+                );
+            }
+        }
+
+        $vl = $autoWidth ? mb_strlen($strValue) : strlen($strValue);
+        $escaped = Spread::escapeXml($strValue, "sheet '{$sheetName}', cell {$cn}");
+        $strByteLen = $autoWidth ? strlen($strValue) : $vl;
+
+        if ($sharedStringsOpt && $strByteLen <= 160) {
+            $skey = '~' . $escaped;
+            if (isset($sharedStringKeys[$skey])) {
+                $ssIdx = $sharedStringKeys[$skey];
+            } else {
+                $sharedStrings[] = $escaped;
+                $ssIdx = count($sharedStrings) - 1;
+                $sharedStringKeys[$skey] = $ssIdx;
+            }
+            $xml = '<c r="' . $cn . '" t="s"' . $cellStyle . '><v>' . $ssIdx . '</v></c>';
+        } else {
+            $xml = '<c r="' . $cn . '" t="inlineStr"' . $cellStyle . '><is><t xml:space="preserve">'
+                . $escaped . '</t></is></c>';
+        }
+
+        return [$xml, $vl];
     }
 
     /**
@@ -672,19 +771,27 @@ class XlsxWriter implements WriterInterface
             if ($width <= 0) {
                 throw new \InvalidArgumentException('Column width must be > 0, got ' . var_export($width, true));
             }
-            $i = is_int($key) ? $key : Spread::columnIndex((string) $key) - 1;
-            $widths[$i] = (float) $width;
+            $widths[Spread::columnIndex0($key, 'columnWidths')] = (float) $width;
         }
 
-        if ($widths === []) {
+        $styleMap = $this->columnFormatStyleMap();
+
+        if ($widths === [] && $styleMap === []) {
             return '<cols><col collapsed="false" hidden="false" max="1024" min="1" style="0" customWidth="false" width="11.5"/></cols>';
         }
 
-        ksort($widths);
+        $indexes = array_unique(array_merge(array_keys($widths), array_keys($styleMap)));
+        sort($indexes);
         $xml = '<cols>';
-        foreach ($widths as $i => $w) {
+        foreach ($indexes as $i) {
             $colNum = $i + 1;
-            $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $w . '" customWidth="true"/>';
+            $styleAttr = isset($styleMap[$i]) ? ' style="' . $styleMap[$i]['normal'] . '"' : '';
+            if (isset($widths[$i])) {
+                $xml .= '<col min="' . $colNum . '" max="' . $colNum . '" width="' . $widths[$i]
+                    . '" customWidth="true"' . $styleAttr . '/>';
+            } else {
+                $xml .= '<col min="' . $colNum . '" max="' . $colNum . '"' . $styleAttr . ' customWidth="false"/>';
+            }
         }
         $xml .= '</cols>';
         return $xml;
@@ -768,11 +875,77 @@ class XlsxWriter implements WriterInterface
             XML;
     }
 
+    /**
+     * @return array<int, string> 0-based column index mapped to Excel number format code.
+     */
+    private function normalizedColumnFormats(): array
+    {
+        $map = [];
+        foreach ($this->columnFormats as $key => $format) {
+            $map[Spread::columnIndex0($key, 'columnFormats')] = Spread::validateNumberFormat($format);
+        }
+        ksort($map);
+        return $map;
+    }
+
+    /**
+     * @return list<string> Distinct format codes in first-appearance (column) order.
+     */
+    private function distinctColumnFormatCodes(): array
+    {
+        return array_values(array_unique(array_values($this->normalizedColumnFormats())));
+    }
+
+    /**
+     * @return array<string, int> Format code mapped to Excel numFmtId ('@' reuses builtin 49).
+     */
+    private function columnFormatNumFmtIds(): array
+    {
+        $ids = [];
+        $next = 167;
+        foreach ($this->distinctColumnFormatCodes() as $code) {
+            $ids[$code] = $code === '@' ? 49 : $next++;
+        }
+        return $ids;
+    }
+
+    /**
+     * @return array<int, array{normal: int, bold: int, isText: bool}> Style indexes per column.
+     */
+    private function columnFormatStyleMap(): array
+    {
+        $normalized = $this->normalizedColumnFormats();
+        if ($normalized === []) {
+            return [];
+        }
+        $codes = array_values(array_unique(array_values($normalized)));
+        $numFmtIds = [];
+        $next = 167;
+        foreach ($codes as $code) {
+            $numFmtIds[$code] = $code === '@' ? 49 : $next++;
+        }
+        $codeToXf = [];
+        foreach ($codes as $k => $code) {
+            $codeToXf[$code] = ['normal' => 5 + 2 * $k, 'bold' => 5 + 2 * $k + 1];
+        }
+        $map = [];
+        foreach ($normalized as $i => $code) {
+            $map[$i] = [
+                'normal' => $codeToXf[$code]['normal'],
+                'bold' => $codeToXf[$code]['bold'],
+                'isText' => $code === '@',
+            ];
+        }
+        return $map;
+    }
+
     private function genStyles(): string
     {
         // fontId 0 = normal, fontId 1 = bold (for boldHeaders)
         // cellXfs: 0 = default, 1 = date (s="1"), 2 = bold (s="2")
-        return <<<'XML'
+        $codes = $this->distinctColumnFormatCodes();
+        if ($codes === []) {
+            return <<<'XML'
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
             <numFmts count="3">
@@ -806,6 +979,64 @@ class XlsxWriter implements WriterInterface
             </cellStyles>
             </styleSheet>
             XML;
+        }
+
+        $numFmtIds = $this->columnFormatNumFmtIds();
+        $customNumFmts = '';
+        foreach ($codes as $code) {
+            if ($code === '@') {
+                continue;
+            }
+            $customNumFmts .= '<numFmt numFmtId="' . $numFmtIds[$code] . '" formatCode="'
+                . htmlspecialchars($code, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '"/>';
+        }
+        $customCount = count(array_filter($codes, static fn (string $c): bool => $c !== '@'));
+        $numFmtsCount = 3 + $customCount;
+        $cellXfsCount = 5 + 2 * count($codes);
+
+        $cellXfsExtra = '';
+        foreach ($codes as $code) {
+            $numFmtId = $numFmtIds[$code];
+            $cellXfsExtra .= '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="'
+                . $numFmtId . '" xfId="0"/>';
+            $cellXfsExtra .= '<xf applyFont="true" applyNumberFormat="true" borderId="0" fillId="0" fontId="1" numFmtId="'
+                . $numFmtId . '" xfId="0"/>';
+        }
+
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<numFmts count="' . $numFmtsCount . '">'
+            . '<numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd\\ hh:mm:ss" />'
+            . '<numFmt numFmtId="165" formatCode="hh:mm:ss" />'
+            . '<numFmt numFmtId="166" formatCode="[h]:mm:ss" />'
+            . $customNumFmts
+            . '</numFmts>'
+            . '<fonts count="2">'
+            . '<font><name val="Arial"/><family val="2"/><sz val="10"/></font>'
+            . '<font><b/><name val="Arial"/><family val="2"/><sz val="10"/></font>'
+            . '</fonts>'
+            . '<fills count="2">'
+            . '<fill><patternFill patternType="none" /></fill>'
+            . '<fill><patternFill patternType="gray125" /></fill>'
+            . '</fills>'
+            . '<borders count="1">'
+            . '<border><left/><right/><top/><bottom/><diagonal/></border>'
+            . '</borders>'
+            . '<cellStyleXfs count="1">'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" />'
+            . '</cellStyleXfs>'
+            . '<cellXfs count="' . $cellXfsCount . '">'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />'
+            . '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="164" xfId="0" />'
+            . '<xf applyFont="true" borderId="0" fillId="0" fontId="1" numFmtId="0" xfId="0" />'
+            . '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0" />'
+            . '<xf applyNumberFormat="true" borderId="0" fillId="0" fontId="0" numFmtId="166" xfId="0" />'
+            . $cellXfsExtra
+            . '</cellXfs>'
+            . '<cellStyles count="1">'
+            . '<cellStyle name="Normal" xfId="0" builtinId="0"/>'
+            . '</cellStyles>'
+            . '</styleSheet>';
     }
 
     private function genWorkbook(): string

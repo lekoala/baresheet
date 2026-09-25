@@ -152,10 +152,36 @@ $opts->applyTo($reader); // full IDE autocomplete, reconfigures an existing inst
 | `sharedStrings`       | bool                                       | `false`     | Write (XLSX)              |
 | `autoWidth`           | bool                                       | `false`     | Write (XLSX)              |
 | `columnWidths`        | array                                      | `[]`        | Write (XLSX)              |
+| `columnFormats`       | array                                      | `[]`        | Write (XLSX)              |
 | `minColumnWidth`      | ?float                                     | `null`      | Write (XLSX)              |
 | `maxColumnWidth`      | ?float                                     | `null`      | Write (XLSX)              |
 | `printTitleRows`      | ?string                                    | `null`      | Write (XLSX)              |
 | `maxWorksheetSize`    | ?int                                       | `500000000` | Read (XLSX, ODS)          |
+
+### Per-column geometry and formats (XLSX)
+
+`columnWidths` and `columnFormats` are keyed by 0-based column index or Excel letter (`A`, `C`…, up to `XFD`). Explicit widths override `autoWidth` for their column.
+
+```php
+use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\XlsxWriter;
+
+$writer = new XlsxWriter(new Options(
+    boldHeaders: true,
+    autoWidth: true,
+    columnFormats: [
+        'A' => '@',      // force text: keeps +972… and leading zeros
+        'C' => '0.00',   // two-decimal number
+    ],
+    columnWidths: ['A' => 20],
+));
+```
+
+The format applies to every cell of the column regardless of its PHP type. `'@'`
+is special: it writes the cell as text even when `inferNumericStrings` would
+otherwise make it numeric, which is what preserves a leading `+` or `0` (a
+number format alone would not). `boldHeaders` combines with the column format,
+so a header stays bold while adopting the column's format.
 
 ## Exceptions
 

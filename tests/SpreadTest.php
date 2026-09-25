@@ -321,6 +321,25 @@ class SpreadTest extends TestCase
         }
     }
 
+    public function testColumnIndex0(): void
+    {
+        self::assertSame(0, Spread::columnIndex0(0));
+        self::assertSame(0, Spread::columnIndex0('A'));
+        self::assertSame(0, Spread::columnIndex0('a'));
+        self::assertSame(25, Spread::columnIndex0('Z'));
+        self::assertSame(26, Spread::columnIndex0('AA'));
+        self::assertSame(16_383, Spread::columnIndex0('XFD'));
+
+        foreach ([-1, 16_384, 'XFE', '2A', 'AAAA', ''] as $bad) {
+            try {
+                Spread::columnIndex0($bad);
+                self::fail('columnIndex0 ' . var_export($bad, true) . ' should throw');
+            } catch (\InvalidArgumentException) {
+                // expected
+            }
+        }
+    }
+
     public function testGetSheetNamesInvalidZip(): void
     {
         $invalidFile = __DIR__ . '/data/auto.csv';
