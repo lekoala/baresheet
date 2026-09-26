@@ -9,6 +9,7 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
+use LeKoala\Baresheet\Internal\XlsxRichValues;
 use ZipArchive;
 
 /**
@@ -111,6 +112,8 @@ class XlsxReader implements ReaderInterface
                 throw new InvalidDocumentException('No data');
             }
 
+            $richValues = XlsxRichValues::load($zip, self::workbookPartsByType($zip));
+
             $worksheetTemp = Spread::zipStageEntry($zip, $wsPath, $this->maxWorksheetSize);
             $sharedStringsTemp = $hasSharedStrings
                 ? Spread::zipStageEntry($zip, 'xl/sharedStrings.xml', self::MAX_SHARED_STRINGS_SIZE)
@@ -143,6 +146,7 @@ class XlsxReader implements ReaderInterface
                     $colFormats,
                     $isDateCache,
                     $is1904,
+                    $richValues,
                 );
             } finally {
                 $reader->close();
@@ -229,6 +233,7 @@ class XlsxReader implements ReaderInterface
      * @param array<int, ?string> $cellFormats
      * @param array<int, ?string> $colFormats
      * @param array<string, string> $isDateCache
+     * @param array<int, array{string, string}> $richValues `vm` index => [cell type, raw value]
      * @return Generator<int, Row>
      */
     private function parseWorksheet(
@@ -238,6 +243,7 @@ class XlsxReader implements ReaderInterface
         array $colFormats,
         array $isDateCache,
         bool $is1904,
+        array $richValues,
     ): Generator {
         $schema = !empty($this->headers)
             ? HeaderSchema::fromHeaders($this->headers, $this->headerRows, $this->headerNormalizer)
@@ -342,6 +348,7 @@ class XlsxReader implements ReaderInterface
 
                         $t = $reader->getAttribute('t') ?? '';
                         $s = $reader->getAttribute('s') ?? '';
+                        $vm = $richValues !== [] ? $reader->getAttribute('vm') : null;
 
                         $v = '';
                         $cDepth = $reader->depth;
@@ -384,6 +391,11 @@ class XlsxReader implements ReaderInterface
                                     }
                                 }
                             }
+                        }
+
+                        // A rich value cell caches "#VALUE!"; substitute its resolved fallback.
+                        if ($vm !== null && isset($richValues[(int) $vm])) {
+                            [$t, $v] = $richValues[(int) $vm];
                         }
 
                         $format = null;
@@ -742,6 +754,30 @@ class XlsxReader implements ReaderInterface
         }
 
         throw new InvalidDocumentException("Relationship '{$target}' not found in workbook relationships");
+    }
+
+    /**
+     * Internal workbook parts keyed by relationship type (first target wins).
+     *
+     * @return array<string, string>
+     */
+    private static function workbookPartsByType(ZipArchive $zip): array
+    {
+        $relsData = Spread::zipGetData($zip, 'xl/_rels/workbook.xml.rels');
+        if ($relsData === null || $relsData === '') {
+            return [];
+        }
+
+        $parts = [];
+        foreach (Spread::safeXml($relsData)->Relationship as $rel) {
+            $target = (string) $rel['Target'];
+            if ($target === '' || (string) $rel['TargetMode'] === 'External') {
+                continue;
+            }
+            $path = $target[0] === '/' ? $target : 'xl/' . $target;
+            $parts[(string) $rel['Type']] ??= self::normalizePartPath($path);
+        }
+        return $parts;
     }
 
     /**

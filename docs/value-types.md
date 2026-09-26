@@ -15,6 +15,15 @@ Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natu
 
 `int\|float` is a convenient PHP representation of a spreadsheet Number; the distinction itself is not guaranteed to survive a round-trip (`12.0` reads back as `12`).
 
+### Rich values (XLSX)
+
+Excel stores data types such as Geography or Stocks as *rich values*: the cell itself only caches `#VALUE!` and points (`vm`) to separate parts under `xl/richData/`. The XLSX reader resolves such a cell to the value Excel shows in it:
+
+1. the rich value's `fb` fallback, typed like an ordinary cell (number, text, boolean, error);
+2. otherwise its `_DisplayString` (the entity name, e.g. `Belgique` for a Geography cell).
+
+The entity's properties (population, capital...) are not exposed. A cell that cannot be resolved (missing parts, no fallback, no display string) keeps its cached text `#VALUE!`. Only the rich value parts declared in the workbook relationships are read; `rdrichvalue.xml` is streamed and decodes only the values referenced by cells.
+
 ### Numeric precision
 
 When writing numbers, Baresheet serializes floats with 17 significant digits so the `double` value round-trips exactly, regardless of PHP's `precision` ini setting or the active `LC_NUMERIC` locale.
