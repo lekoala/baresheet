@@ -36,6 +36,9 @@ Two downstream limits apply:
 | `TimeValue`         | time (explicit marker)     |
 | `DurationValue`     | duration (explicit marker) |
 | `Time\Duration`     | duration (when available)  |
+| other `Stringable`  | text                       |
+
+Any other value (a raw PHP array, a resource, a non-`Stringable` object) throws a `WriteException` in every writer, including with `forceText` or a text column format. A nested array is never silently written as an empty cell: arrays already carry structural meaning for rows and hierarchical headers.
 
 ```php
 use LeKoala\Baresheet\Value\TimeValue;

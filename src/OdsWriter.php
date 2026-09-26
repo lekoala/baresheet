@@ -323,6 +323,9 @@ class OdsWriter implements WriterInterface
             $i = 0;
 
             foreach ($row as $value) {
+                if ($value !== null && !is_scalar($value)) {
+                    Spread::assertWritableCell($value, 'ODS', $cellContext($r, $i));
+                }
                 if ($this->forceText && $value !== null && $value !== '') {
                     if (is_float($value) && !is_finite($value)) {
                         throw new WriteException('Cannot write a non-finite numeric value');
@@ -438,12 +441,7 @@ class OdsWriter implements WriterInterface
                         . $strValue
                         . '</text:p>'
                         . '</table:table-cell>';
-                } elseif (
-                    $this->inferNumericStrings
-                    && Spread::isNumericCellValue($value)
-                    && (is_scalar($value)
-                    || $value instanceof \Stringable)
-                ) {
+                } elseif ($this->inferNumericStrings && Spread::isNumericCellValue($value)) {
                     $strValue = (string) $value;
                     $buffer .=
                         '<table:table-cell'
@@ -457,13 +455,7 @@ class OdsWriter implements WriterInterface
                         . '</text:p>'
                         . '</table:table-cell>';
                 } else {
-                    if ($value instanceof \Stringable) {
-                        $strValue = $value->__toString();
-                    } elseif (is_scalar($value)) {
-                        $strValue = (string) $value;
-                    } else {
-                        $strValue = '';
-                    }
+                    $strValue = (string) $value;
                     $escaped = Spread::escapeXml($strValue, $cellContext($r, $i));
                     $buffer .=
                         '<table:table-cell'

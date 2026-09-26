@@ -1061,6 +1061,26 @@ class Spread
     }
 
     /**
+     * Reject a cell value outside the XLSX/ODS writer contract (arrays, resources, plain objects).
+     *
+     * @phpstan-assert scalar|\Stringable|DateTimeInterface|\Time\Duration|null $value
+     * @throws WriteException
+     */
+    public static function assertWritableCell(mixed $value, string $format, string $context): void
+    {
+        if (
+            $value === null
+            || is_scalar($value)
+            || $value instanceof \Stringable
+            || $value instanceof DateTimeInterface
+            || $value instanceof \Time\Duration
+        ) {
+            return;
+        }
+        throw new WriteException("Unsupported {$format} cell type: " . get_debug_type($value) . " in {$context}");
+    }
+
+    /**
      * Decide whether a value should be written as a numeric cell.
      *
      * Native int/float values are always numeric. Strings are classified as numeric

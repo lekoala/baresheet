@@ -413,6 +413,9 @@ class XlsxWriter implements WriterInterface
                     $colCache[$i] = Spread::columnLetter($i + 1);
                 }
                 $cn = $colCache[$i] . $r;
+                if ($value !== null && !is_scalar($value)) {
+                    Spread::assertWritableCell($value, 'XLSX', "sheet '{$sheetName}', cell {$cn}");
+                }
                 $fmt = $formatStyles[$i] ?? null;
                 if ($fmt !== null) {
                     $cellStyle = ' s="' . ($isHeaderRow && $this->boldHeaders ? $fmt['bold'] : $fmt['normal']) . '"';
@@ -486,12 +489,7 @@ class XlsxWriter implements WriterInterface
                 } elseif (is_bool($value)) {
                     $buffer .= '<c r="' . $cn . '" t="b"' . $cellStyle . '><v>' . (int) $value . '</v></c>';
                     $vl = 1;
-                } elseif (
-                    $value === null
-                    || $value === ''
-                    || (!is_scalar($value)
-                    && !$value instanceof \Stringable)
-                ) {
+                } elseif ($value === null || $value === '') {
                     $buffer .= '<c r="' . $cn . '"' . $cellStyle . '/>';
                     $vl = 0;
                 } elseif (is_int($value) || is_float($value)) {
