@@ -962,7 +962,7 @@ class RobustnessTest extends TestCase
         $writer = new CsvWriter();
         $this->expectException(WriteException::class);
         $this->expectExceptionMessage('Unsupported CSV cell type');
-        $writer->writeString([[new \DateTimeImmutable()]]);
+        $writer->writeString([[new \stdClass()]]);
     }
 
     // -- 20. writeFile stages then renames: an existing destination survives failure --

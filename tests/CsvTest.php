@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\CsvWriter;
 use LeKoala\Baresheet\Exception\WriteException;
@@ -547,5 +548,22 @@ class CsvTest extends TestCase
         $this->expectException(WriteException::class);
         $this->expectExceptionMessage('Cannot write a non-finite numeric value');
         $writer->writeString([[INF]]);
+    }
+
+    public function testWriteTemporalValuesAsForceTextStrings(): void
+    {
+        $row = [
+            new \DateTimeImmutable('2026-09-25'),
+            new \DateTime('2026-09-25 14:30:15'),
+            \Time\Duration::fromMicroseconds(131_415_000_000),
+            \Time\Duration::fromMicroseconds(5_400_000_000)->negate(),
+        ];
+        $csv = (new CsvWriter())->writeString([$row]);
+        self::assertStringContainsString('2026-09-25,"2026-09-25 14:30:15",36:30:15,-1:30:00', $csv);
+
+        $xlsx = Baresheet::writeString([$row], 'xlsx', new Options(forceText: true));
+        $xlsxRow = iterator_to_array(Baresheet::readString($xlsx, 'xlsx'))[0];
+        $csvRow = iterator_to_array(Baresheet::readString($csv, 'csv'))[0];
+        self::assertSame($xlsxRow, $csvRow);
     }
 }

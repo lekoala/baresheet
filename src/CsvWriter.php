@@ -244,8 +244,8 @@ class CsvWriter implements WriterInterface
     }
 
     /**
-     * Single flat pass that prepares a row for fputcsv: converts Stringable cells
-     * to text, applies formula escaping (opt-in), serializes numbers (bool ->
+     * Single flat pass that prepares a row for fputcsv: converts Stringable,
+     * DateTimeInterface and Time\Duration cells to text, applies formula escaping (opt-in), serializes numbers (bool ->
      * "1"/"0", float via {@see CsvSupport::serializeFloat()}, non-finite floats are
      * rejected like the XLSX/ODS writers, null -> empty) and, when the whole
      * stream is transcoded, validates each text cell so invalid UTF-8 or an
@@ -270,6 +270,10 @@ class CsvWriter implements WriterInterface
         foreach ($row as $key => $cell) {
             if ($cell instanceof \Stringable) {
                 $cell = (string) $cell;
+                $row[$key] = $cell;
+            } elseif ($cell instanceof \DateTimeInterface || $cell instanceof \Time\Duration) {
+                // Same text as the XLSX/ODS forceText path.
+                $cell = Spread::stringifyValue($cell);
                 $row[$key] = $cell;
             }
             if (is_string($cell) || $cell === null || is_int($cell)) {
