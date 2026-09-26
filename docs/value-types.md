@@ -62,6 +62,8 @@ Spreadsheet dates are **timezone-free civil values**: an offset present in the s
 
 Temporal values are **stored at microsecond precision**. XLSX serials preserve the full microsecond value even though the default number formats display `hh:mm:ss` / `[h]:mm:ss`.
 
+The text form of a date (CSV cells, `forceText`, text column formats) is `Y-m-d` or `Y-m-d H:i:s` and drops sub-second digits, so `new DateTimeImmutable()` does not leak its microseconds into text output. If you need them, format the value yourself (`$date->format('Y-m-d H:i:s.u')`) and write the string.
+
 A `Time\Duration` carrying sub-microsecond precision is truncated toward zero (`999` nanoseconds → `0` microseconds). On PHP < 8.6, install `symfony/polyfill-time` if you want to write `Time\Duration` values.
 
 ## 32-bit PHP
