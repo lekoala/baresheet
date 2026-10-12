@@ -345,7 +345,6 @@ class CsvReader implements ReaderInterface
                             $schema = HeaderSchema::fromFlatHeaders($headerNames, $this->headerNormalizer);
                         } else {
                             $headerRowsBuffer = [$line];
-                            $skippedForHeader = $headerRowsBuffer;
                             // Collect remaining header rows
                             while (
                                 count($headerRowsBuffer) < $this->headerRows
@@ -353,7 +352,6 @@ class CsvReader implements ReaderInterface
                                     !== false
                             ) {
                                 if ($this->skipEmptyLines && $line === [null]) {
-                                    $skippedForHeader[] = $line;
                                     continue;
                                 }
                                 if ($doEncode) {

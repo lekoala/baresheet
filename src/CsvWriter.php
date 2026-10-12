@@ -174,13 +174,9 @@ class CsvWriter implements WriterInterface
                 }
             }
 
-            if ($outputEncoding !== null) {
-                if (self::isUtf8Encoding($outputEncoding)) {
-                    $outputEncoding = null;
-                } else {
-                    $streamFilter = self::appendTranscodeFilter($stream, $outputEncoding, 'outputEncoding');
-                    $transcodeEncoding = $outputEncoding;
-                }
+            if ($outputEncoding !== null && !self::isUtf8Encoding($outputEncoding)) {
+                $streamFilter = self::appendTranscodeFilter($stream, $outputEncoding, 'outputEncoding');
+                $transcodeEncoding = $outputEncoding;
             }
 
             $separator = $this->separator;

@@ -254,7 +254,6 @@ class XlsxReader implements ReaderInterface
         $rowCount = 0;
         $yieldCount = 0;
         $headerOffsetCount = 0;
-        $startRow = $this->assoc ? 1 : 0;
         $totalColumns = $schema !== null ? $schema->columnCount() : null;
         // Seeded from injected headers so a too-short/too-long first data row is
         // caught immediately instead of silently becoming the new expected width.
@@ -400,8 +399,6 @@ class XlsxReader implements ReaderInterface
                         if ($vm !== null && isset($richValues[(int) $vm])) {
                             [$t, $v] = $richValues[(int) $vm];
                         }
-
-                        $format = null;
 
                         while ($cellIndex > $col) {
                             $rowData[] = null;

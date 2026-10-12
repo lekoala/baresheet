@@ -32,7 +32,7 @@
         "ext-iconv": "*",
         "league/csv": "^9.28",
         "openspout/openspout": "^4.24 || ^5.0",
-        "phpstan/phpstan": "^2.2.6",
+        "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^10|^11",
         "shuchkin/simplexlsx": "^1.1",
         "shuchkin/simplexlsxgen": "^1.5",

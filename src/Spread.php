@@ -567,7 +567,7 @@ class Spread
 
         if ($fraction === 0.0) {
             // Fast path: midnight date-only cells avoid the full clock math.
-            $clock = ['hour' => 0, 'minute' => 0, 'second' => 0, 'microsecond' => 0, 'carryDay' => false];
+            $clock = ['hour' => 0, 'minute' => 0, 'second' => 0, 'microsecond' => 0];
         } else {
             $clock = self::clockFromSecondsFloat($fraction * 86_400);
             if ($clock['carryDay']) {

@@ -367,7 +367,6 @@ class XlsxWriter implements WriterInterface
     ): void {
         $r = 0;
         $colCache = [];
-        $sheetName = is_string($this->sheet) ? $this->sheet : 'Sheet1';
         $boldStyle = $this->boldHeaders ? ' s="2"' : '';
         $autoWidth = $trackWidths;
         $sharedStringsOpt = $this->sharedStrings;
@@ -929,11 +928,6 @@ class XlsxWriter implements WriterInterface
             return [];
         }
         $codes = array_values(array_unique(array_values($normalized)));
-        $numFmtIds = [];
-        $next = 167;
-        foreach ($codes as $code) {
-            $numFmtIds[$code] = $code === '@' ? 49 : $next++;
-        }
         $codeToXf = [];
         foreach ($codes as $k => $code) {
             $codeToXf[$code] = ['normal' => 5 + (2 * $k), 'bold' => 5 + (2 * $k) + 1];
