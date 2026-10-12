@@ -649,7 +649,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError($result));
+                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError((int) $result));
             }
 
             $props = self::zipGetData($zip, 'docProps/core.xml');
@@ -679,7 +679,7 @@ class Spread
             $zip = new ZipArchive();
             $result = $zip->open($filename);
             if ($result !== true) {
-                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError($result));
+                throw new InvalidDocumentException('Failed to open zip archive, code: ' . self::zipError((int) $result));
             }
 
             $meta = self::zipGetData($zip, 'meta.xml');

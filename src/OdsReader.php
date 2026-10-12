@@ -87,7 +87,7 @@ class OdsReader implements ReaderInterface
         $zip = new ZipArchive();
         $result = $zip->open($filename);
         if ($result !== true) {
-            throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError($result));
+            throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
         try {
