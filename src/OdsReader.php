@@ -372,8 +372,10 @@ class OdsReader implements ReaderInterface
                     if (
                         $reader->nodeType === \XMLReader::ELEMENT
                         && $reader->namespaceURI === self::NS_TABLE
-                        && ($reader->localName === 'table-cell'
-                        || $reader->localName === 'covered-table-cell')
+                        && (
+                            $reader->localName === 'table-cell'
+                            || $reader->localName === 'covered-table-cell'
+                        )
                     ) {
                         $colRepeat = (int) ($reader->getAttributeNs('number-columns-repeated', self::NS_TABLE) ?? '1');
                         $colIndex = count($rowTemplate);

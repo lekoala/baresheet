@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -22,7 +22,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.json') }}
@@ -31,15 +31,16 @@ jobs:
       - name: Composer install
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
-      - name: Setup Mago
-        run: curl -sL https://github.com/carthage-software/mago/releases/download/1.29.0/mago-1.29.0-x86_64-unknown-linux-musl.tar.gz | tar xz && sudo mv mago-*/mago /usr/local/bin/mago
-
       - name: Mago Format Check
-        run: mago format --check
+        run: vendor/bin/mago format --check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Mago Lint
         if: success() || failure()
-        run: mago lint
+        run: vendor/bin/mago lint
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: PHP Code Sniffer
         if: success() || failure()
@@ -59,7 +60,7 @@ jobs:
         php: ["8.1", "8.2", "8.3", "8.4", "8.5"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -73,7 +74,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.json') }}

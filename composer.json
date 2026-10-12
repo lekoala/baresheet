@@ -30,6 +30,7 @@
     },
     "require-dev": {
         "ext-iconv": "*",
+        "carthage-software/mago": "1.55",
         "league/csv": "^9.28",
         "openspout/openspout": "^4.24 || ^5.0",
         "phpstan/phpstan": "^2.3",
@@ -64,8 +65,8 @@
             "@phpcs",
             "@phpstan"
         ],
-        "mago": "mago lint",
-        "mago-fmt": "mago format",
+        "mago": "vendor/bin/mago lint",
+        "mago-fmt": "vendor/bin/mago format",
         "phpunit": "phpunit",
         "phpunit:issues": "phpunit --display-warnings --display-deprecations --display-phpunit-deprecations --display-skipped",
         "phpcs": "phpcs",

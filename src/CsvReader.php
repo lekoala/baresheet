@@ -210,8 +210,10 @@ class CsvReader implements ReaderInterface
 
         if (
             $inputBOM === null
-            && ($inputEncoding === null
-            || $inputEncoding === 'auto')
+            && (
+                $inputEncoding === null
+                || $inputEncoding === 'auto'
+            )
             && $this->outputEncoding !== null
         ) {
             // Fallback detection if we need to convert but have no BOM. The

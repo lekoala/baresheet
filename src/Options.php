@@ -190,8 +190,10 @@ class Options
         if (
             $this->headerOffset !== null
             && $this->headerOffset !== 'auto'
-            && (!is_int($this->headerOffset)
-            || $this->headerOffset < 0)
+            && (
+                !is_int($this->headerOffset)
+                || $this->headerOffset < 0
+            )
         ) {
             throw new \InvalidArgumentException(
                 'headerOffset must be null, a non-negative integer, or "auto", got '
@@ -230,9 +232,13 @@ class Options
         }
         if (
             $this->printTitleRows !== null
-            && (preg_match('/^(\d+)(?::(\d+))?$/', $this->printTitleRows, $m) !== 1
-            || (isset($m[2])
-            && (int) $m[1] > (int) $m[2]))
+            && (
+                preg_match('/^(\d+)(?::(\d+))?$/', $this->printTitleRows, $m) !== 1
+                || (
+                    isset($m[2])
+                    && (int) $m[1] > (int) $m[2]
+                )
+            )
         ) {
             throw new \InvalidArgumentException(
                 'printTitleRows must be a row number or ascending range like "1" or "1:2", got '
