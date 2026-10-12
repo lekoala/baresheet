@@ -9,6 +9,7 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
+use LeKoala\Baresheet\Internal\StrictXmlReader;
 use LeKoala\Baresheet\Internal\XlsxRichValues;
 use ZipArchive;
 
@@ -133,10 +134,11 @@ class XlsxReader implements ReaderInterface
                 ? self::readSharedStrings($sharedStringsTemp)
                 : [];
 
-            $reader = new \XMLReader();
-            if (!$reader->open($worksheetTemp, null, LIBXML_NONET)) {
-                throw new InvalidDocumentException("Failed to open worksheet '{$wsPath}'");
-            }
+            $reader = StrictXmlReader::openFile(
+                $worksheetTemp,
+                "Failed to parse worksheet '{$wsPath}' (truncated or corrupt XML)",
+                "Failed to open worksheet '{$wsPath}'",
+            );
 
             try {
                 yield from $this->parseWorksheet(
@@ -169,10 +171,11 @@ class XlsxReader implements ReaderInterface
     private static function readSharedStrings(string $filename): array
     {
         $sharedStrings = [];
-        $reader = new \XMLReader();
-        if (!$reader->open($filename, null, LIBXML_NONET)) {
-            throw new InvalidDocumentException('Failed to open shared strings table');
-        }
+        $reader = StrictXmlReader::openFile(
+            $filename,
+            'Failed to parse shared strings table (truncated or corrupt XML)',
+            'Failed to open shared strings table',
+        );
 
         try {
             while ($reader->read()) {

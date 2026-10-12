@@ -316,8 +316,7 @@ class OptionsTest extends TestCase
 
     public function testColumnWidthsValidation(): void
     {
-        foreach (
-            [
+        foreach ([
             ['x' => -5],
             ['A' => 0],
             [0 => -2],
@@ -325,8 +324,7 @@ class OptionsTest extends TestCase
             ['XFE' => 10],
             [16_384 => 10],
             [-1 => 10],
-            ] as $bad
-        ) {
+        ] as $bad) {
             try {
                 new Options(columnWidths: $bad);
                 self::fail('columnWidths ' . var_export($bad, true) . ' should throw');

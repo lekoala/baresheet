@@ -156,10 +156,11 @@ final class XlsxRichValues
      */
     private static function readRichValues(string $filename, array $wanted, array $displayKeys): array
     {
-        $reader = new \XMLReader();
-        if (!$reader->open($filename, null, LIBXML_NONET)) {
-            throw new InvalidDocumentException('Failed to open rich value data');
-        }
+        $reader = StrictXmlReader::openFile(
+            $filename,
+            'Failed to parse rich value data (truncated or corrupt XML)',
+            'Failed to open rich value data',
+        );
 
         $values = [];
         $index = -1;

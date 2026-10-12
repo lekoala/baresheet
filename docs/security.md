@@ -53,3 +53,15 @@ Baresheet::write($data, 'protected.xlsx', new Options(sheetProtection: 'change-m
 Sheet protection is not encryption and does not secure the workbook's contents. It is intentionally limited to Excel's legacy sheet-protection verifier: adding a stronger password hash would give a false impression of security because the protection can still be removed from the XLSX archive. It is intended to prevent ordinary edits, not to protect sensitive data.
 
 To prevent the workbook from being read, encrypt the completed file with a separate encryption process before delivering or storing it.
+
+## ODS Repeat Amplification
+
+A tiny ODS file can declare huge `table:number-rows-repeated` / `table:number-columns-repeated` values (up to 16,384 each per row) and expand into over a billion logical cells. Baresheet streams the XML so PHP memory stays flat, but the consuming application still iterates every emitted row.
+
+Per-row caps reject absurd declarations, but there is deliberately no global cell cap — a legitimate large export must keep working. When reading untrusted ODS files, bound the work with `limit`:
+
+```php
+$reader = new OdsReader(new Options(limit: 100_000));
+```
+
+Corrupt or truncated archives are a separate case: XML parsing errors encountered during reading throw `InvalidDocumentException`. Rows already yielded remain available to the caller.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace LeKoala\Baresheet\Tests;
 
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\WriteException;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Spread;
@@ -310,6 +311,38 @@ class SpreadTest extends TestCase
         self::assertEquals(16_384, Spread::columnIndex('XFD'));
         // Test case sensitivity
         self::assertEquals(1, Spread::columnIndex('a'));
+    }
+
+    public function testColumnIndexRejectsOversizedReference(): void
+    {
+        // A 15-letter reference used to overflow to float and die with a
+        // TypeError; it must surface as InvalidDocumentException instead. The
+        // Excel grid limit (XFD) is enforced by the callers, not here, so
+        // AAAA and other in-range references still compute.
+        self::assertSame(18_279, Spread::columnIndex('AAAA'));
+        // Long but in-range references compute; only true integer overflow throws.
+        self::assertGreaterThan(16_384, Spread::columnIndex('ZZZZZZZZ'));
+        foreach (['ZZZZZZZZZZZZZZZ'] as $bad) {
+            try {
+                Spread::columnIndex($bad);
+                self::fail("columnIndex '{$bad}' should throw");
+            } catch (InvalidDocumentException $e) {
+                self::assertStringContainsString('exceeds the integer range', $e->getMessage());
+            }
+        }
+
+        // References past XFD still compute: the readers enforce
+        // the range with their own column check.
+        self::assertSame(16_385, Spread::columnIndex('XFE'));
+
+        foreach (['', 'A1', 'A-1'] as $bad) {
+            try {
+                Spread::columnIndex($bad);
+                self::fail('columnIndex ' . var_export($bad, true) . ' should throw');
+            } catch (InvalidDocumentException $e) {
+                self::assertStringContainsString('Invalid column reference', $e->getMessage());
+            }
+        }
     }
 
     public function testColumnIndexAndLetterConsistency(): void

@@ -124,6 +124,7 @@ class CsvReader implements ReaderInterface
         }
 
         $sample = '';
+        $encodingProbe = '';
         $inputBOM = null;
         // Read filter appended below for non-UTF-8 BOMs. Tracked here so it is
         // detached in the finally: the stream may belong to the caller
@@ -134,6 +135,25 @@ class CsvReader implements ReaderInterface
             // Auto-detect separator from first ~4KB before consuming the stream
             // Read a sample for detection
             $sample = (string) fread($stream, 4096);
+            // A cut multi-byte tail makes strict detection reject UTF-8 for the
+            // whole file. Complete the encoding sample only (the separator
+            // sample stays at 4096 bytes): up to 3 bytes suffice to finish a
+            // UTF-8 sequence. Otherwise the original sample is kept, so a
+            // genuine single-byte ending still detects as Latin-1.
+            if ($needsEncodingDetection && $sample !== '' && !mb_check_encoding($sample, 'UTF-8')) {
+                $probe = '';
+                for ($i = 0; $i < 3; $i++) {
+                    $byte = fread($stream, 1);
+                    if ($byte === false || $byte === '') {
+                        break;
+                    }
+                    $probe .= $byte;
+                    if (mb_check_encoding($sample . $probe, 'UTF-8')) {
+                        $encodingProbe = $probe;
+                        break;
+                    }
+                }
+            }
             rewind($stream);
             // Check for a BOM in the sample
             $inputBOM = Bom::tryFromSequence($sample);
@@ -194,8 +214,11 @@ class CsvReader implements ReaderInterface
             || $inputEncoding === 'auto')
             && $this->outputEncoding !== null
         ) {
-            // Fallback detection if we need to convert but have no BOM
-            $detected = mb_detect_encoding($sample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
+            // Fallback detection if we need to convert but have no BOM. The
+            // encoding sample above may include up to 3 completion bytes when
+            // the 4096-byte window cut a multi-byte character in two.
+            $detectSample = $encodingProbe !== '' ? $sample . $encodingProbe : $sample;
+            $detected = mb_detect_encoding($detectSample, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
             if ($detected) {
                 // Keep the effective encoding (including 'UTF-8') so the requested
                 // outputEncoding conversion is actually applied to UTF-8 input.

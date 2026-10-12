@@ -1123,6 +1123,116 @@ class RobustnessTest extends TestCase
         }
     }
 
+    // -- 22. Truncated or corrupt XML must throw instead of yielding partial rows --
+
+    public function testTruncatedXlsxWorksheetThrows(): void
+    {
+        $full =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="inlineStr"><is><t>a</t></is></c></row>'
+            . '<row r="2"><c r="A2" t="inlineStr"><is><t>b</t></is></c></row>'
+            . '<row r="3"><c r="A3" t="inlineStr"><is><t>c</t></is></c></row>'
+            . '</sheetData></worksheet>';
+        // Cut mid-way through the third row: previously yielded [["a"],["b"]]
+        // with PHP warnings and no exception.
+        $file = $this->writeMinimalXlsx(substr($full, 0, (int) strpos($full, '<row r="3">') + 20));
+
+        $this->expectException(InvalidDocumentException::class);
+
+        try {
+            iterator_to_array((new XlsxReader())->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testCorruptXlsxWorksheetMidFileThrows(): void
+    {
+        // Mismatched tags after two valid rows: previously dropped even the
+        // valid rows (yielding []) instead of failing loudly.
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="A1" t="inlineStr"><is><t>a</t></is></c></row>'
+            . '<row r="2"><c r="A2" t="inlineStr"><is><t>b</t></is></c></row>'
+            . '<row r="3"><c r="A3" t="inlineStr"><is><t>c</t></is>'
+            . '</row></sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $this->expectException(InvalidDocumentException::class);
+
+        try {
+            iterator_to_array((new XlsxReader())->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testTruncatedOdsContentThrows(): void
+    {
+        $full = $this->odsRowXml(
+            '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell>'
+            . '</table:table-row>'
+            . '<table:table-row>'
+            . '<table:table-cell office:value-type="string"><text:p>b</text:p></table:table-cell>'
+            . '</table:table-row>',
+        );
+        // Previously yielded [["a"]] with PHP warnings and no exception.
+        $file = $this->writeMinimalOds(substr($full, 0, -30));
+
+        $this->expectException(InvalidDocumentException::class);
+
+        try {
+            iterator_to_array((new OdsReader())->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testXlsxGiantColumnReferenceThrowsInvalidDocument(): void
+    {
+        // A 15-letter reference would overflow the int accumulator (previously
+        // a float TypeError); it must surface as InvalidDocumentException instead.
+        $sheetXml =
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            . '<row r="1"><c r="ZZZZZZZZZZZZZZZ1"><v>1</v></c></row>'
+            . '</sheetData></worksheet>';
+        $file = $this->writeMinimalXlsx($sheetXml);
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessageMatches('/exceeds the integer range/');
+
+        try {
+            iterator_to_array((new XlsxReader())->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testAmplifiedOdsCanBeBoundedByLimit(): void
+    {
+        // 16 384 x 16 384 repeats stay within the per-row caps but expand to a
+        // billion logical cells. There is no global cap by design, so limit:
+        // is the documented guard for untrusted files.
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row table:number-rows-repeated="16384">'
+            . '<table:table-cell table:number-columns-repeated="16384" office:value-type="string">'
+            . '<text:p>x</text:p></table:table-cell>'
+            . '</table:table-row>',
+        ));
+
+        try {
+            $rows = iterator_to_array((new OdsReader(new Options(limit: 5)))->readFile($file));
+            self::assertCount(5, $rows);
+            self::assertCount(16_384, $rows[0]);
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function testOdsHeaderOffsetCountsRepeatedRows(): void
     {
         // A non-empty row repeated N times emits N logical records, so it

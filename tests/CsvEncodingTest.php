@@ -210,6 +210,62 @@ class CsvEncodingTest extends TestCase
         $writer->writeString([[$cell]]);
     }
 
+    public function testOutputEncodingDetectionIgnoresTruncatedUtf8Tail(): void
+    {
+        // The 4096-byte sample ends on the first byte of 'é'; strict detection
+        // used to reject UTF-8 for the whole file and double-encode it (Ã©).
+        $csv = str_repeat('x', 4095) . "\xC3\xA9\ntail1,tail2\n";
+
+        $reader = new CsvReader();
+        $reader->outputEncoding = 'UTF-8';
+        $rows = iterator_to_array($reader->readString($csv));
+
+        self::assertSame(str_repeat('x', 4095) . "\xC3\xA9", $rows[0][0]);
+        self::assertSame(['tail1', 'tail2'], $rows[1]);
+    }
+
+    public function testOutputEncodingDetectionIgnoresTruncatedThreeByteTail(): void
+    {
+        // Same boundary with a 3-byte character (€): only the lead byte lands
+        // in the sample, the two continuations follow it in the stream.
+        $csv = str_repeat('y', 4095) . "\xE2\x82\xAC\n";
+
+        $reader = new CsvReader();
+        $reader->outputEncoding = 'UTF-8';
+        $rows = iterator_to_array($reader->readString($csv));
+
+        self::assertSame(str_repeat('y', 4095) . "\xE2\x82\xAC", $rows[0][0]);
+    }
+
+    public function testOutputEncodingDetectionIgnoresTruncatedFourByteTail(): void
+    {
+        // Same boundary with a 4-byte character (😀): only the lead byte lands
+        // in the sample, the three continuations follow it in the stream.
+        $csv = str_repeat('z', 4095) . "\xF0\x9F\x98\x80\ntail1,tail2\n";
+
+        $reader = new CsvReader();
+        $reader->outputEncoding = 'UTF-8';
+        $rows = iterator_to_array($reader->readString($csv));
+
+        self::assertSame(str_repeat('z', 4095) . "\xF0\x9F\x98\x80", $rows[0][0]);
+        self::assertSame(['tail1', 'tail2'], $rows[1]);
+    }
+
+    public function testOutputEncodingDetectionKeepsGenuineLatin1Tail(): void
+    {
+        // A genuine ISO-8859-1 file whose sample ends on 0xE9 must still detect
+        // as single-byte: the following byte (',') proves the trailing byte is
+        // not a truncated UTF-8 sequence.
+        $csv = str_repeat('x', 4095) . "\xE9" . ",\xE8\n";
+
+        $reader = new CsvReader();
+        $reader->outputEncoding = 'UTF-8';
+        $rows = iterator_to_array($reader->readString($csv));
+
+        self::assertSame(str_repeat('x', 4095) . "\xC3\xA9", $rows[0][0]);
+        self::assertSame("\xC3\xA8", $rows[0][1]);
+    }
+
     public function testNonUtf8BomPathValidatesCells(): void
     {
         // The non-UTF-8 BOM filter must still make every cell pass the

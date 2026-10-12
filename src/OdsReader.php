@@ -9,6 +9,7 @@ use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\Exception\InvalidRowException;
 use LeKoala\Baresheet\Exception\MissingColumnException;
 use LeKoala\Baresheet\Exception\SheetNotFoundException;
+use LeKoala\Baresheet\Internal\StrictXmlReader;
 use ZipArchive;
 
 /**
@@ -103,10 +104,11 @@ class OdsReader implements ReaderInterface
         }
 
         try {
-            $reader = new \XMLReader();
-            if (!$reader->open($contentTemp, null, LIBXML_NONET)) {
-                throw new InvalidDocumentException("Failed to open content.xml in '{$filename}'");
-            }
+            $reader = StrictXmlReader::openFile(
+                $contentTemp,
+                'Failed to parse content.xml (truncated or corrupt XML)',
+                "Failed to open content.xml in '{$filename}'",
+            );
 
             try {
                 // Map of table-cell style name => whether it renders an elapsed
@@ -234,11 +236,12 @@ class OdsReader implements ReaderInterface
         array &$cellToDataStyles,
         array &$dataStyleDurations,
     ): void {
-        $reader = new \XMLReader();
         $uri = 'data://text/plain;base64,' . base64_encode($xml);
-        if (!$reader->open($uri, null, LIBXML_NONET)) {
-            return;
-        }
+        $reader = StrictXmlReader::openFile(
+            $uri,
+            'Failed to parse styles (truncated or corrupt XML)',
+            'Failed to open styles data',
+        );
         try {
             while ($reader->read()) {
                 if ($reader->nodeType === \XMLReader::ELEMENT) {

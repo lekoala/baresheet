@@ -31,7 +31,7 @@ class LeagueCsvInteropTest extends InteropTestCase
             ['3',  'Müller',      null],
         ]);
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
         $reader->setHeaderOffset(0);
 
@@ -88,7 +88,7 @@ class LeagueCsvInteropTest extends InteropTestCase
         ]);
         self::assertStringStartsWith("\xEF\xBB\xBF", $csv);
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
         $reader->setHeaderOffset(0);
 
@@ -98,7 +98,7 @@ class LeagueCsvInteropTest extends InteropTestCase
 
     public function testBaresheetReadsLeagueCsvWithBom(): void
     {
-        $writer = LeagueWriter::createFromString();
+        $writer = LeagueWriter::fromString();
         $writer->setDelimiter(',')->setEnclosure('"')->setEscape('');
         $writer->setOutputBOM(ByteSequence::BOM_UTF8);
         $writer->insertAll([
@@ -153,7 +153,7 @@ class LeagueCsvInteropTest extends InteropTestCase
             ['2026-07-30', 'Actif', 'A01'],
         ]);
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
 
         $records = array_values(iterator_to_array($reader->getRecords()));
@@ -172,7 +172,7 @@ class LeagueCsvInteropTest extends InteropTestCase
     {
         $csv = "id,name,email\n1,John\n2,Jane,jane@example.com,extra";
 
-        $league = LeagueReader::createFromString($csv);
+        $league = LeagueReader::fromString($csv);
         $league->setDelimiter(',')->setEnclosure('"')->setEscape('');
         $league->setHeaderOffset(0);
         $leagueRecords = array_values(iterator_to_array($league->getRecords()));
@@ -205,7 +205,7 @@ class LeagueCsvInteropTest extends InteropTestCase
         $writer->bom = false;
         $baresheetCsv = $writer->writeString($data);
 
-        $reader = LeagueReader::createFromString($baresheetCsv);
+        $reader = LeagueReader::fromString($baresheetCsv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
         $reader->setHeaderOffset(0);
         $leagueRecords = array_values(iterator_to_array($reader->getRecords()));
@@ -243,7 +243,7 @@ class LeagueCsvInteropTest extends InteropTestCase
             [false, true, 1.234_567_890_123_456_7, null, 42, -1.5],
         ]);
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
 
         $records = array_values(iterator_to_array($reader->getRecords()));
@@ -267,7 +267,7 @@ class LeagueCsvInteropTest extends InteropTestCase
             ini_set('precision', $old === false ? '14' : $old);
         }
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
 
         $records = array_values(iterator_to_array($reader->getRecords()));
@@ -292,7 +292,7 @@ class LeagueCsvInteropTest extends InteropTestCase
             setlocale(LC_NUMERIC, $original !== false ? $original : null);
         }
 
-        $reader = LeagueReader::createFromString($csv);
+        $reader = LeagueReader::fromString($csv);
         $reader->setDelimiter(',')->setEnclosure('"')->setEscape('');
 
         $records = array_values(iterator_to_array($reader->getRecords()));

@@ -108,6 +108,13 @@ class Spread
 
     /**
      * Column letter to index. A = 1, AA = 27, etc.
+     *
+     * Accepts references of any length (columnLetter() can produce them); the
+     * Excel grid limit (XFD = 16384) is enforced by the callers. Only integer
+     * overflow is rejected here.
+     *
+     * @throws InvalidDocumentException On a malformed reference or one so large
+     *                                  its value would overflow the int range.
      */
     public static function columnIndex(string $letter): int
     {
@@ -117,10 +124,19 @@ class Spread
             return $cache[$letter];
         }
 
-        $length = strlen($letter);
+        if (preg_match('/^[A-Za-z]+$/', $letter) !== 1) {
+            throw new InvalidDocumentException("Invalid column reference '{$letter}'.");
+        }
+
+        $upper = strtoupper($letter);
+        $length = strlen($upper);
         $index = 0;
         for ($i = 0; $i < $length; $i++) {
-            $index = ($index * 26) + (ord(strtoupper($letter[$i])) - 64);
+            $digit = ord($upper[$i]) - 64;
+            if ($index > intdiv(PHP_INT_MAX - $digit, 26)) {
+                throw new InvalidDocumentException('Column reference exceeds the integer range.');
+            }
+            $index = ($index * 26) + $digit;
         }
 
         $cache[$letter] = $index;
@@ -927,6 +943,29 @@ class Spread
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
         }
+    }
+
+    /**
+     * Throw InvalidDocumentException when libxml captured errors while streaming.
+     *
+     * XMLReader::read()/next()/readString() return false on both clean EOF and
+     * parse errors; without this check a truncated or corrupt worksheet is
+     * indistinguishable from a complete one and yields silent partial data.
+     * Always drains the queue, even when there is nothing to report.
+     *
+     * @throws InvalidDocumentException When libxml queued at least one error.
+     */
+    public static function throwOnXmlErrors(string $context): void
+    {
+        $errors = libxml_get_errors();
+        libxml_clear_errors();
+        if ($errors === []) {
+            return;
+        }
+        $detail = trim((string) ($errors[0]->message ?? ''));
+        throw new InvalidDocumentException(
+            $detail !== '' ? "{$context}: {$detail}" : $context,
+        );
     }
 
     /**
