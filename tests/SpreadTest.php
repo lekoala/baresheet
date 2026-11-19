@@ -345,6 +345,19 @@ class SpreadTest extends TestCase
         }
     }
 
+    public function testColumnIndexAtIntegerLimit(): void
+    {
+        $lastValid = PHP_INT_SIZE === 8 ? 'CRPXNLSKVLJFHG' : 'FXSHRXW';
+        $firstOverflow = PHP_INT_SIZE === 8 ? 'CRPXNLSKVLJFHH' : 'FXSHRXX';
+
+        self::assertSame($lastValid, Spread::columnLetter(PHP_INT_MAX));
+        self::assertSame(PHP_INT_MAX, Spread::columnIndex($lastValid));
+
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('Column reference exceeds the integer range.');
+        Spread::columnIndex($firstOverflow);
+    }
+
     public function testColumnIndexAndLetterConsistency(): void
     {
         for ($i = 1; $i <= 2000; $i++) {

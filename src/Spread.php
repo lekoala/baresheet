@@ -130,12 +130,16 @@ class Spread
 
         $upper = strtoupper($letter);
         $length = strlen($upper);
+        $maxReference = self::columnLetter(PHP_INT_MAX);
+        $maxLength = strlen($maxReference);
+        // References of equal length sort in the same order as their indexes.
+        if ($length > $maxLength || ($length === $maxLength && strcmp($upper, $maxReference) > 0)) {
+            throw new InvalidDocumentException('Column reference exceeds the integer range.');
+        }
+
         $index = 0;
         for ($i = 0; $i < $length; $i++) {
             $digit = ord($upper[$i]) - 64;
-            if ($index > intdiv(PHP_INT_MAX - $digit, 26)) {
-                throw new InvalidDocumentException('Column reference exceeds the integer range.');
-            }
             $index = ($index * 26) + $digit;
         }
 
@@ -819,7 +823,7 @@ class Spread
         }
 
         $n = $index - 1;
-        for ($r = ''; $n >= 0; $n = intval($n / 26) - 1) {
+        for ($r = ''; $n >= 0; $n = intdiv($n, 26) - 1) {
             $r = chr(($n % 26) + 0x41) . $r;
         }
 
