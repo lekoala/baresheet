@@ -173,6 +173,13 @@ class OdsReader implements ReaderInterface
                         $timeStyles,
                     );
 
+                    if ($this->limit === null || ($yieldCount - $this->offset) < $this->limit) {
+                        // A complete sheet does not guarantee a complete XML document.
+                        while ($reader->read()) {
+                            // Validate the remaining XML without processing other sheets.
+                        }
+                    }
+
                     return;
                 }
 

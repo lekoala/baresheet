@@ -1217,7 +1217,14 @@ class RobustnessTest extends TestCase
         }
     }
 
-    public function testTruncatedOdsContentThrows(): void
+    public static function truncatedOdsLayouts(): iterable
+    {
+        yield 'single sheet' => [false];
+        yield 'second sheet before the truncated tail' => [true];
+    }
+
+    #[DataProvider('truncatedOdsLayouts')]
+    public function testTruncatedOdsContentThrows(bool $addSecondSheet): void
     {
         $full = $this->odsRowXml(
             '<table:table-row>'
@@ -1227,12 +1234,25 @@ class RobustnessTest extends TestCase
             . '<table:table-cell office:value-type="string"><text:p>b</text:p></table:table-cell>'
             . '</table:table-row>',
         );
-        // Previously yielded [["a"]] with PHP warnings and no exception.
+        if ($addSecondSheet) {
+            // Keep the truncated tail beyond the parser's read-ahead of the selected sheet.
+            $full = str_replace(
+                '</table:table>',
+                '</table:table><table:table table:name="Other">'
+                . str_repeat('<table:table-row/>', 2048)
+                . '</table:table>',
+                $full,
+            );
+        }
         $file = $this->writeMinimalOds(substr($full, 0, -30));
 
-        $this->expectException(InvalidDocumentException::class);
-
         try {
+            if ($addSecondSheet) {
+                $limitedReader = new OdsReader(new Options(limit: 2));
+                self::assertSame([['a'], ['b']], iterator_to_array($limitedReader->readFile($file)));
+            }
+
+            $this->expectException(InvalidDocumentException::class);
             iterator_to_array((new OdsReader())->readFile($file));
         } finally {
             unlink($file);
