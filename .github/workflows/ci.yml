@@ -54,8 +54,6 @@ jobs:
     name: PHPUnit PHP ${{ matrix.php }}
     needs: lint
     runs-on: ubuntu-latest
-    # setup-php still installs a nightly build for PHP 8.6.
-    continue-on-error: ${{ matrix.php == '8.6' }}
     strategy:
       fail-fast: false
       matrix:
