@@ -54,7 +54,7 @@ That's it. The `Baresheet` facade always creates a fresh reader/writer, applies 
 | Hierarchical headers         | ✓   | ✓    | ✓   |
 | Auto width / freeze / filter | —   | ✓    | —   |
 
-- **Streaming by default** — reads and writes (including browser `output()`) are streamed, so PHP memory stays flat regardless of file size.
+- **Streaming by default** — reads and writes (including browser `output()`) process rows incrementally. The XLSX reader keeps the workbook's shared string table in memory, so peak memory also depends on its size.
 - **Low memory** — ~0.15 MB for CSV, ~0.7 MB peak reading or ~1.3 MB writing 50,000 XLSX rows (see [Performance](#performance)).
 - **No runtime Composer dependencies** — only PHP core extensions; XLSX/ODS packaging uses an internal ZIP writer.
 - **Pragmatic headers** — required columns, selection, aliases, injected and hierarchical headers, header discovery, normalization, and strict mode ([docs/headers.md](docs/headers.md)).
@@ -225,6 +225,14 @@ try {
 `InvalidRowException` exposes `$row` and `$column` when available, and `MissingColumnException` exposes the missing `$columns` list, for building precise error messages.
 
 ## Native Values
+
+To preserve the 0.9 XLSX and ODS behavior when the defaults change in 1.0, pass these options explicitly to your readers and writers:
+
+```php
+use LeKoala\Baresheet\Options;
+
+$options = new Options(stringifyValues: true, inferNumericStrings: true);
+```
 
 Baresheet preserves the fundamental spreadsheet value kinds where PHP has a natural representation. In native mode (`stringifyValues: false`), the readers return:
 

@@ -9,9 +9,29 @@ use LeKoala\Baresheet\CsvReader;
 use LeKoala\Baresheet\OdsReader;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxReader;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class ColumnsTest extends TestCase
 {
+    public static function spreadsheetFormats(): iterable
+    {
+        yield 'CSV' => ['csv', ''];
+        yield 'XLSX' => ['xlsx', ''];
+        yield 'ODS' => ['ods', null];
+    }
+
+    #[DataProvider('spreadsheetFormats')]
+    public function testColumnSelectionKeepsRowsWithValuesOutsideTheSelection(string $format, ?string $blank): void
+    {
+        $rows = [['id', 'email'], ['1', null], [], ['2', 'john@example.com']];
+        $contents = Baresheet::writeString($rows, $format);
+        $options = new Options(assoc: true, columns: ['email'], skipEmptyLines: true);
+
+        $data = iterator_to_array(Baresheet::readString($contents, $format, $options));
+
+        self::assertSame([['email' => $blank], ['email' => 'john@example.com']], $data);
+    }
+
     public function testCsvColumnsSelectAssoc(): void
     {
         $tempFile = $this->tempFile('csv');

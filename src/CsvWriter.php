@@ -81,10 +81,58 @@ class CsvWriter implements WriterInterface
     public function writeFile(iterable $data, string $filename): bool
     {
         $filename = CsvSupport::ensureExtension($filename, 'csv');
+        CsvSupport::isSafePath($filename);
 
-        $stream = CsvSupport::getOutputStream($filename);
-        $this->writeInternal($stream, $data);
-        fclose($stream);
+        // Resolve local file:// paths before passing the directory to tempnam().
+        if (strncasecmp($filename, 'file://', 7) === 0) {
+            $filename = preg_replace('~^file://(?:localhost(?=/))?(?=/|[a-z]:[/\\\\])~i', '', $filename) ?? $filename;
+            if (DIRECTORY_SEPARATOR === '\\' && preg_match('~^/[a-z]:~i', $filename)) {
+                $filename = substr($filename, 1);
+            }
+        }
+        if (str_ends_with($filename, '/') || (DIRECTORY_SEPARATOR === '\\' && str_ends_with($filename, '\\'))) {
+            throw new WriteException('Expected a CSV filename: ' . $filename);
+        }
+        $directory = realpath(dirname($filename));
+        if ($directory === false || !is_dir($directory) || !is_writable($directory)) {
+            throw new WriteException('Destination directory is not writable: ' . dirname($filename));
+        }
+        $destination = $directory . DIRECTORY_SEPARATOR . basename($filename);
+        $staging = @tempnam($directory, 'csv_');
+        if ($staging === false) {
+            throw new WriteException('Failed to create a staging file for ' . $filename);
+        }
+
+        $renamed = false;
+        try {
+            // tempnam() can fall back to the system temporary directory.
+            if (realpath(dirname($staging)) !== $directory) {
+                throw new WriteException('Failed to stage the CSV in the destination directory');
+            }
+            $stream = CsvSupport::getOutputStream($staging);
+            try {
+                $this->writeInternal($stream, $data);
+                if (!fflush($stream)) {
+                    throw new WriteException('Failed to flush the staged CSV');
+                }
+            } finally {
+                $closed = fclose($stream);
+            }
+            if (!$closed) {
+                throw new WriteException('Failed to close the staged CSV');
+            }
+
+            // Windows requires a closed file before rename() can replace the destination.
+            if (!@rename($staging, $destination)) {
+                throw new WriteException("Failed to move '{$staging}' to '{$filename}'");
+            }
+            $renamed = true;
+        } finally {
+            if (!$renamed && is_file($staging)) {
+                unlink($staging);
+            }
+        }
+
         return true;
     }
 

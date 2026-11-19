@@ -99,6 +99,45 @@ class CsvTest extends TestCase
         unlink($tempFile);
     }
 
+    public function testFailedCsvExportPreservesExistingFile(): void
+    {
+        $file = $this->tempFile('csv');
+        $writer = new CsvWriter(new Options(bom: false));
+        $writer->writeFile([['previous']], $file);
+
+        try {
+            try {
+                $writer->writeFile([['partial'], [NAN]], $file);
+                self::fail('Expected a non-finite value to fail the export');
+            } catch (WriteException $exception) {
+                self::assertStringContainsString('non-finite', $exception->getMessage());
+            }
+            self::assertSame("previous\r\n", file_get_contents($file));
+
+            self::assertTrue($writer->writeFile([['replacement']], $file));
+            self::assertSame("replacement\r\n", file_get_contents($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testWriteCsvToLocalFileUri(): void
+    {
+        $file = $this->tempFile('csv');
+        $path = str_replace(DIRECTORY_SEPARATOR, '/', $file);
+        $uri = 'file://' . (str_starts_with($path, '/') ? '' : '/') . $path;
+        $writer = new CsvWriter(new Options(bom: false));
+
+        try {
+            self::assertTrue($writer->writeFile([['local']], $uri));
+            self::assertSame("local\r\n", file_get_contents($file));
+        } finally {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+    }
+
     public function testWriteCsvWithBom(): void
     {
         $writer = new CsvWriter();

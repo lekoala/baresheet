@@ -329,8 +329,9 @@ class XlsxReader implements ReaderInterface
                             );
                         }
 
-                        // Optimization: Skip parsing unselected cells entirely
-                        if ($selectionSchema !== null && !isset($selectedIndices[$cellIndex])) {
+                        $selected = $selectionSchema === null || isset($selectedIndices[$cellIndex]);
+                        // Skip unselected cells once they cannot affect whether the source row is kept.
+                        if (!$selected && (!$this->skipEmptyLines || !$isEmpty)) {
                             // Skip the entire <c> subtree without reading value
                             if (!$reader->isEmptyElement) {
                                 $moved = $reader->next();
@@ -454,7 +455,7 @@ class XlsxReader implements ReaderInterface
                             $isEmpty = false;
                         }
 
-                        $rowData[] = $value;
+                        $rowData[] = $selected ? $value : null;
                         $col++;
                     }
                     $moved = $reader->read();
@@ -506,6 +507,7 @@ class XlsxReader implements ReaderInterface
                         );
                         $autoScanning = false;
                         $totalColumns = $schema->columnCount();
+                        $expectedCols = $totalColumns;
                         $selectedIndices = $selectionSchema !== null
                             ? array_fill_keys($selectionSchema->indices(), true)
                             : [];
@@ -547,6 +549,7 @@ class XlsxReader implements ReaderInterface
                         $this->aliases,
                     );
                     $totalColumns = $schema->columnCount();
+                    $expectedCols = $totalColumns;
                     $selectedIndices = $selectionSchema !== null
                         ? array_fill_keys($selectionSchema->indices(), true)
                         : [];

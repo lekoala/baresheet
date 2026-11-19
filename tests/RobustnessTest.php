@@ -17,6 +17,7 @@ use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\Spread;
 use LeKoala\Baresheet\XlsxReader;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ZipArchive;
 
 /**
@@ -110,6 +111,53 @@ class RobustnessTest extends TestCase
 
         try {
             iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public static function xlsxHeaderOffsets(): iterable
+    {
+        yield 'first row' => [null];
+        yield 'auto-detected' => ['auto'];
+    }
+
+    #[DataProvider('xlsxHeaderOffsets')]
+    public function testXlsxStrictChecksFirstDataRowAgainstResolvedHeader(?string $headerOffset): void
+    {
+        $file = $this->tempFile('xlsx');
+        Baresheet::write([['id', 'email'], ['1', 'john@example.com', 'extra']], $file);
+        $reader = new XlsxReader(new Options(
+            assoc: true,
+            strict: true,
+            requiredColumns: ['id', 'email'],
+            columns: ['email'],
+            headerOffset: $headerOffset,
+        ));
+
+        $this->expectException(InvalidRowException::class);
+        $this->expectExceptionMessage('Row 2 has 3 columns, expected 2');
+
+        try {
+            iterator_to_array($reader->readFile($file));
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testOdsPreservesAllCellParagraphsInBothReadingModes(): void
+    {
+        $file = $this->writeMinimalOds($this->odsRowXml(
+            '<table:table-row><table:table-cell office:value-type="string">'
+            . '<text:p>First <text:span>paragraph</text:span></text:p><text:p/><text:p>Last paragraph</text:p>'
+            . '</table:table-cell></table:table-row>',
+        ));
+
+        try {
+            foreach ([true, false] as $stringifyValues) {
+                $reader = new OdsReader(new Options(stringifyValues: $stringifyValues));
+                self::assertSame([["First paragraph\n\nLast paragraph"]], iterator_to_array($reader->readFile($file)));
+            }
         } finally {
             unlink($file);
         }

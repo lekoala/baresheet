@@ -397,7 +397,7 @@ class OdsReader implements ReaderInterface
                             continue;
                         }
 
-                        // Optimization: Skip parsing unselected cells
+                        // A repeated cell can span several selected columns.
                         $selectedInRange = false;
                         if ($selectionSchema !== null) {
                             if ($selectionIndicesMap === null) {
@@ -413,7 +413,8 @@ class OdsReader implements ReaderInterface
                             $selectedInRange = true;
                         }
 
-                        if (!$selectedInRange) {
+                        // Skip unselected cells once they cannot affect whether the source row is kept.
+                        if (!$selectedInRange && (!$this->skipEmptyLines || !$isEmpty)) {
                             if (!$reader->isEmptyElement) {
                                 $moved = $reader->next();
                             } else {
@@ -444,7 +445,7 @@ class OdsReader implements ReaderInterface
                             $value = $value === 'true' || $value === '1' ? '1' : '0';
                         }
 
-                        $textP = '';
+                        $paragraphs = [];
                         if (!$reader->isEmptyElement) {
                             $cellDepth = $reader->depth;
                             while ($reader->read() && $reader->depth > $cellDepth) {
@@ -454,10 +455,11 @@ class OdsReader implements ReaderInterface
                                     && $reader->namespaceURI === self::NS_TEXT
                                 ) {
                                     // readString() is much faster and uses less memory than expand()->textContent
-                                    $textP = $reader->readString();
+                                    $paragraphs[] = $reader->readString();
                                 }
                             }
                         }
+                        $textP = implode("\n", $paragraphs);
 
                         if ($this->stringifyValues) {
                             // Compatibility mode: preserve the raw ODF lexical value
@@ -468,11 +470,11 @@ class OdsReader implements ReaderInterface
                             $typed = $this->decodeTypedCell($value, $valueType, $textP, $timeStyles, $cellStyleName);
                         }
 
+                        if ($colRepeat > 0 && $typed !== null && $typed !== '') {
+                            $isEmpty = false;
+                        }
                         for ($ci = 0; $ci < $colRepeat; $ci++) {
-                            $rowTemplate[] = $typed;
-                            if ($typed !== null && $typed !== '') {
-                                $isEmpty = false;
-                            }
+                            $rowTemplate[] = $selectedInRange ? $typed : null;
                         }
                     }
                     $moved = $reader->read();
