@@ -6,6 +6,8 @@ All methods accept `iterable<array>` and yield arrays lazily, so you can chain t
 
 ## Trimming and Replacing
 
+Use ordinary method calls to chain transformations on PHP 8.1.2 and later.
+
 ```php
 use LeKoala\Baresheet\Transform;
 
@@ -21,13 +23,45 @@ $rows = Transform::boolAs($rows, 'Yes', 'No');
 
 ## Chaining with the Pipe Operator
 
-All methods return generators, so they compose with the PHP 8.5+ pipe operator:
+### PHP 8.5+
+
+The pipe operator passes the result of each stage to a callable. Use a first-class callable for `trim()` and parenthesized arrow functions to supply the replacement values. [PHP manual on the pipe operator](https://www.php.net/manual/en/language.operators.functional.php)
 
 ```php
 $clean = $reader->readFile('data.csv')
     |> Transform::trim(...)
-    |> Transform::nullAs(..., 'N/A')
-    |> Transform::boolAs(..., 'Yes', 'No');
+    |> (static fn(iterable $rows) => Transform::nullAs($rows, 'N/A'))
+    |> (static fn(iterable $rows) => Transform::boolAs($rows, 'Yes', 'No'));
+```
+
+### PHP 8.6+
+
+Partial function application lets you supply fixed arguments and use `?` for the input from the previous stage. [PHP manual on partial function application](https://www.php.net/manual/en/functions.partial-application.php)
+
+```php
+$clean = $reader->readFile('data.csv')
+    |> Transform::trim(...)
+    |> Transform::nullAs(?, 'N/A')
+    |> Transform::boolAs(?, 'Yes', 'No');
+```
+
+With associative rows, you can normalize headers, keep rows that have an `email` key, cast numeric columns, and process the results in batches. The generator produces each batch as you iterate.
+
+```php
+use LeKoala\Baresheet\CsvReader;
+use LeKoala\Baresheet\Options;
+use LeKoala\Baresheet\Transform;
+
+$reader = new CsvReader(new Options(assoc: true));
+$batches = $reader->readFile('data.csv')
+    |> Transform::trim(...)
+    |> Transform::mapRows(?, array_change_key_case(?))
+    |> Transform::filter(?, array_key_exists('email', ?))
+    |> Transform::cast(?, [
+        'qty' => 'int',
+        'price' => 'float',
+    ])
+    |> Transform::chunk(?, 1000);
 ```
 
 ## Casting Types
@@ -82,6 +116,19 @@ $rows = Transform::mapRows($rows, fn(array $row, int $i) => [...$row, 'position'
 
 // Filter rows
 $active = Transform::filter($rows, fn($row) => $row['active'] === 'Yes');
+```
+
+On PHP 8.6+, use `?` when your callback needs only the cell value or row. `map()` also passes the column key, and `mapRows()` and `filter()` also pass the row index. A partial callable with `?` and no `...` discards those extra arguments. With `trim(?)`, for example, the column key cannot reach `trim()` as its optional `$characters` argument.
+
+```php
+// Lowercase every cell when all cells contain strings
+$rows = Transform::map($rows, strtolower(?));
+
+// Lowercase column names
+$rows = Transform::mapRows($rows, array_change_key_case(?));
+
+// Keep rows that have an email key, including rows where the value is null
+$rows = Transform::filter($rows, array_key_exists('email', ?));
 ```
 
 ## Batching and Paging
