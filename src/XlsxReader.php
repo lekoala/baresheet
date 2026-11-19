@@ -86,6 +86,12 @@ class XlsxReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
+        yield from $this->readArchive($zip);
+    }
+
+    /** @return Generator<int, Row> */
+    private function readArchive(ZipArchive $zip): Generator
+    {
         try {
             $hasSharedStrings = $zip->locateName('xl/sharedStrings.xml') !== false;
 
@@ -670,6 +676,12 @@ class XlsxReader implements ReaderInterface
      */
     public function readString(string $contents): Generator
     {
+        // Keep delegating to readFile() in subclasses so their overrides still run.
+        if (static::class === self::class && ($zip = Spread::zipOpenString($contents)) !== null) {
+            yield from $this->readArchive($zip);
+            return;
+        }
+
         $filename = Spread::getTempFilename();
         try {
             file_put_contents($filename, $contents);

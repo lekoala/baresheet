@@ -90,6 +90,12 @@ class OdsReader implements ReaderInterface
             throw new InvalidDocumentException('Failed to open zip archive, code: ' . Spread::zipError((int) $result));
         }
 
+        yield from $this->readArchive($zip, $filename);
+    }
+
+    /** @return Generator<int, Row> */
+    private function readArchive(ZipArchive $zip, string $source): Generator
+    {
         try {
             if ($zip->locateName('content.xml') === false) {
                 throw new InvalidDocumentException('No content.xml found in ODS file');
@@ -107,7 +113,7 @@ class OdsReader implements ReaderInterface
             $reader = StrictXmlReader::openFile(
                 $contentTemp,
                 'Failed to parse content.xml (truncated or corrupt XML)',
-                "Failed to open content.xml in '{$filename}'",
+                "Failed to open content.xml in '{$source}'",
             );
 
             try {
@@ -629,6 +635,12 @@ class OdsReader implements ReaderInterface
      */
     public function readString(string $contents): Generator
     {
+        // Keep delegating to readFile() in subclasses so their overrides still run.
+        if (static::class === self::class && ($zip = Spread::zipOpenString($contents)) !== null) {
+            yield from $this->readArchive($zip, 'in-memory archive');
+            return;
+        }
+
         $filename = Spread::getTempFilename();
         try {
             file_put_contents($filename, $contents);

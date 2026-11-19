@@ -6,9 +6,11 @@ namespace LeKoala\Baresheet\Tests;
 
 use LeKoala\Baresheet\Baresheet;
 use LeKoala\Baresheet\CsvWriter;
+use LeKoala\Baresheet\Exception\InvalidDocumentException;
 use LeKoala\Baresheet\OdsWriter;
 use LeKoala\Baresheet\Options;
 use LeKoala\Baresheet\XlsxWriter;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class BaresheetTest extends TestCase
 {
@@ -65,6 +67,23 @@ class BaresheetTest extends TestCase
         $xlsxData = iterator_to_array(Baresheet::readString($xlsxContent));
         self::assertCount(1, $xlsxData);
         self::assertCount(3, $xlsxData[0]);
+    }
+
+    public static function invalidArchiveStrings(): iterable
+    {
+        yield 'corrupt XLSX' => ['xlsx', 'invalid ZIP data'];
+        yield 'corrupt ODS' => ['ods', 'invalid ZIP data'];
+        yield 'empty XLSX' => ['xlsx', ''];
+        yield 'empty ODS' => ['ods', ''];
+    }
+
+    #[DataProvider('invalidArchiveStrings')]
+    public function testReadStringRejectsInvalidSpreadsheetArchive(string $format, string $contents): void
+    {
+        $this->expectException(InvalidDocumentException::class);
+        $this->expectExceptionMessage('Failed to open zip archive');
+
+        iterator_to_array(Baresheet::readString($contents, $format));
     }
 
     public function testWriteCsv(): void

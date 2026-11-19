@@ -833,6 +833,30 @@ class Spread
 
     // -- Zip helpers --
 
+    /** @internal */
+    public static function zipOpenString(string $contents): ?ZipArchive
+    {
+        // openString('') creates a new archive, but an empty input is invalid for reading.
+        if ($contents === '') {
+            throw new InvalidDocumentException('Failed to open zip archive: empty input');
+        }
+
+        // Resolve the optional ext-zip method on PHP versions where it is available.
+        $archiveType = new \ReflectionClass(ZipArchive::class);
+        if (!$archiveType->hasMethod('openString')) {
+            return null;
+        }
+
+        $zip = new ZipArchive();
+        $result = $archiveType->getMethod('openString')->invoke($zip, $contents, ZipArchive::RDONLY);
+        if ($result !== true) {
+            $detail = is_int($result) ? ', code: ' . self::zipError($result) : '';
+            throw new InvalidDocumentException('Failed to open zip archive' . $detail);
+        }
+
+        return $zip;
+    }
+
     public static function zipError(int $code): string
     {
         return match ($code) {
